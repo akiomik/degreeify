@@ -1,0 +1,17 @@
+.popup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.note {
+  margin: 0;
+  color: var(--degreeify-muted);
+}

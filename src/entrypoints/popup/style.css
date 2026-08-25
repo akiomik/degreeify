@@ -1,0 +1,28 @@
+:root {
+  /* Let the native controls follow the OS theme (see the popup styling notes
+     in CONTRIBUTING.md: no component library, no CSS framework). */
+  color-scheme: light dark;
+
+  --degreeify-fg: #1a1a1a;
+  --degreeify-bg: #ffffff;
+  --degreeify-muted: #5a5a5a;
+
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--degreeify-fg);
+  background-color: var(--degreeify-bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --degreeify-fg: #e8e8e8;
+    --degreeify-bg: #1f1f1f;
+    --degreeify-muted: #a8a8a8;
+  }
+}
+
+body {
+  margin: 0;
+  min-width: 18rem;
+}
