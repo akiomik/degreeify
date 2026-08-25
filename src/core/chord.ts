@@ -30,31 +30,53 @@ export interface ChordSymbol {
  * Passing an unknown quality through is deliberate, but "unknown" has to stop
  * somewhere: a quality is a run of letters, digits and a handful of symbols,
  * never a full stop, a space or a word in another script. Rejecting the rest
- * is what keeps a directive such as `D.C.` or a section label such as `Aメロ`
+ * is what keeps a direction such as `D.C.` or a section label such as `Aメロ`
  * from being read as a chord on D or A. It also covers the multi-word
- * directives, `Da Capo` and `Dal Segno` among them, by way of the space.
+ * directions, `Da Capo` and `Dal Segno` among them, by way of the space.
+ *
+ * Where a symbol has look-alikes that get typed for it, all of them are here.
+ * A major seventh triangle is written `△` or `∆` more often than it is with
+ * the Greek delta, and a Japanese keyboard produces the full width `＃` and
+ * `－` as readily as the ASCII ones.
  */
-const QUALITY_CHARS = /^[A-Za-z0-9()#♯b♭+,°Δø/-]*$/u;
+const QUALITY_CHARS = /^[A-Za-z0-9()#＃♯b♭+,°øØ△∆Δ/−－-]*$/u;
 
 /**
- * Whole tokens that are chart directions rather than chords.
+ * Whole tokens that label a part of a chart rather than name a chord.
  *
  * Only the ones spelled with nothing but letters need to be listed. The rest
  * are already ruled out either by their first character not being a note
- * letter, as `N.C.` and `Segno` are, or by {@link QUALITY_CHARS}.
+ * letter, as `N.C.`, `Intro` and `Segno` are, or by {@link QUALITY_CHARS}.
  *
- * This is notation shared by every chart, not any one site's markup; labels
- * particular to a site belong in that site's adapter.
+ * A list is the only way to catch these. `Fine` is an F with a quality of
+ * `ine` in exactly the way `Gbim` is a G flat with a quality of `im`, and
+ * letting the second one through is the whole point of not interpreting the
+ * quality. So the list cannot be complete, and a label nobody thought of that
+ * starts with a note letter will still be read as a chord. That residual risk
+ * is accepted; the alternative is a whitelist of qualities, which would drop
+ * the typos this parser exists to tolerate.
+ *
+ * These are labels every chart shares. Anything particular to one site
+ * belongs in that site's adapter.
  */
-const CHART_DIRECTIVES = new Set([
+const PART_LABELS = new Set([
+  'ad-lib',
+  'adlib',
+  'bass',
   'break',
   'bridge',
+  'capo',
   'chorus',
   'coda',
+  'drums',
+  'encore',
   'end',
   'ending',
   'fade',
+  'fill',
   'fine',
+  'gtr',
+  'guitar',
 ]);
 
 /**
@@ -89,7 +111,7 @@ export function parseChord(raw: string): ChordSymbol | null {
   if (!unwrapped) return null;
 
   const { body, wrapper } = unwrapped;
-  if (CHART_DIRECTIVES.has(body.toLowerCase())) return null;
+  if (PART_LABELS.has(body.toLowerCase())) return null;
 
   const root = readNotePrefix(body);
   if (!root) return null;

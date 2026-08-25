@@ -66,6 +66,26 @@ describe('parseChord', () => {
       expect(parsed('CwhateverThisIs').quality).toBe('whateverThisIs');
     });
 
+    // A symbol that has more than one code point in circulation is accepted
+    // in every spelling, since which one a chart carries comes down to the
+    // keyboard it was typed on.
+    it('accepts the look-alikes of a symbol it already allows', () => {
+      const spellings = [
+        'C\u03947', // greek capital delta
+        'C\u25b37', // white up-pointing triangle
+        'C\u22067', // increment
+        'Cm7\u22125', // minus sign
+        'Cm7\uff0d5', // full width hyphen-minus
+        'C\uff037', // full width number sign
+        'C\u00d87', // capital o with stroke
+        'C\u00f87', // small o with stroke
+        'C\u00b07', // degree sign
+      ];
+      for (const input of spellings) {
+        expect(parseChord(input)).not.toBeNull();
+      }
+    });
+
     it('keeps parentheses that belong to the quality', () => {
       expect(shapeOf(parsed('FM7(#11)'))).toEqual({
         root: note('F'),
@@ -201,6 +221,15 @@ describe('parseChord', () => {
       'Bridge',
       'Chorus',
       'Ending',
+      'Encore',
+      'Fill',
+      'Bass',
+      'Drums',
+      'Guitar',
+      'Gtr',
+      'Capo',
+      'Adlib',
+      'Ad-lib',
       'Aメロ', // section label, as written on a Japanese chart
       'C  E', // two chords that were never split apart
     ];
