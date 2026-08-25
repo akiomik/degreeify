@@ -29,7 +29,15 @@ const NATURAL_PITCH_CLASSES: Record<Letter, number> = {
   B: 11,
 };
 
-const SHARP_CHARS = '#♯';
+/**
+ * Every character that raises a note, and every character that lowers one.
+ *
+ * These have to cover at least the accidentals a chord quality is allowed to
+ * contain. A character that is allowed in a quality but not recognised here
+ * would be read as the start of a quality when it turns up after the root,
+ * which relabels the chord rather than leaving it alone.
+ */
+const SHARP_CHARS = '#♯＃';
 const FLAT_CHARS = 'b♭';
 
 export function isLetter(value: string): value is Letter {

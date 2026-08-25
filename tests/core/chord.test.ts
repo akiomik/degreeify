@@ -69,21 +69,52 @@ describe('parseChord', () => {
     // A symbol that has more than one code point in circulation is accepted
     // in every spelling, since which one a chart carries comes down to the
     // keyboard it was typed on.
-    it('accepts the look-alikes of a symbol it already allows', () => {
-      const spellings = [
-        'C\u03947', // greek capital delta
-        'C\u25b37', // white up-pointing triangle
-        'C\u22067', // increment
-        'Cm7\u22125', // minus sign
-        'Cm7\uff0d5', // full width hyphen-minus
-        'C\uff037', // full width number sign
-        'C\u00d87', // capital o with stroke
-        'C\u00f87', // small o with stroke
-        'C\u00b07', // degree sign
+    describe('look-alikes of a symbol it already allows', () => {
+      // An accidental has to be read as one wherever it appears. Allowing a
+      // spelling in the quality but not in the root would turn a token that
+      // was safely passed through into a different chord.
+      const sharps = ['#', '\u266f', '\uff03'];
+
+      it.each(sharps)('reads %j after the root as a sharp', (sharp) => {
+        expect(shapeOf(parsed(`C${sharp}7`))).toEqual({
+          root: note('C', 1),
+          quality: '7',
+          bass: null,
+          wrapper: 'none',
+        });
+      });
+
+      it.each(sharps)('reads %j after the bass as a sharp', (sharp) => {
+        expect(parsed(`C${sharp}/G${sharp}`).bass).toEqual(note('G', 1));
+      });
+
+      it.each(sharps)('keeps %j inside a quality', (sharp) => {
+        expect(parsed(`CM7(${sharp}11)`).quality).toBe(`M7(${sharp}11)`);
+      });
+
+      // These cannot be confused with an accidental, so they only ever need
+      // to survive as part of the quality.
+      const inQuality: [string, string][] = [
+        ['C\u03947', '\u03947'], // greek capital delta
+        ['C\u25b37', '\u25b37'], // white up-pointing triangle
+        ['C\u25b27', '\u25b27'], // black up-pointing triangle
+        ['C\u22067', '\u22067'], // increment
+        ['C\u00d87', '\u00d87'], // capital o with stroke
+        ['C\u00f87', '\u00f87'], // small o with stroke
+        ['C\u00b07', '\u00b07'], // degree sign
+        ['Cm7\u22125', 'm7\u22125'], // minus sign
+        ['Cm7\uff0d5', 'm7\uff0d5'], // full width hyphen-minus
+        ['Cm7\u30fc5', 'm7\u30fc5'], // prolonged sound mark
       ];
-      for (const input of spellings) {
-        expect(parseChord(input)).not.toBeNull();
-      }
+
+      it.each(inQuality)('carries the quality of %j through as %j', (input, quality) => {
+        expect(shapeOf(parsed(input))).toEqual({
+          root: note('C'),
+          quality,
+          bass: null,
+          wrapper: 'none',
+        });
+      });
     });
 
     it('keeps parentheses that belong to the quality', () => {

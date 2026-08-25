@@ -34,12 +34,19 @@ export interface ChordSymbol {
  * from being read as a chord on D or A. It also covers the multi-word
  * directions, `Da Capo` and `Dal Segno` among them, by way of the space.
  *
- * Where a symbol has look-alikes that get typed for it, all of them are here.
- * A major seventh triangle is written `△` or `∆` more often than it is with
- * the Greek delta, and a Japanese keyboard produces the full width `＃` and
- * `－` as readily as the ASCII ones.
+ * Where a symbol has look-alikes that get typed for it, the ones that turn up
+ * in practice are here as well. A major seventh triangle is written `△` or
+ * `∆` more often than it is with the Greek delta, and a Japanese keyboard
+ * produces `＃`, `－` and `ー` as readily as the ASCII ones. The list will
+ * never be exhaustive, and a spelling missing from it costs only a chord left
+ * as it was.
+ *
+ * An accidental is the exception to that: one allowed here but not recognised
+ * by `pitch.ts` would be read as the start of a quality when it follows the
+ * root, relabelling the chord instead of leaving it alone. Every accidental
+ * in this set has to be an accidental there too.
  */
-const QUALITY_CHARS = /^[A-Za-z0-9()#＃♯b♭+,°øØ△∆Δ/−－-]*$/u;
+const QUALITY_CHARS = /^[A-Za-z0-9()#＃♯b♭+,°øØ△▲∆Δ/−－ー-]*$/u;
 
 /**
  * Whole tokens that label a part of a chart rather than name a chord.
