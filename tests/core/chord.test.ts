@@ -126,6 +126,11 @@ describe('parseChord', () => {
       });
     });
 
+    it('rejects a symbol whose quality starts with a slash, since the split went wrong', () => {
+      expect(parseChord('C/E/G')).toBeNull();
+      expect(parseChord('C/E/9')).toBeNull();
+    });
+
     it('does not mistake an "on" inside a quality for a bass separator', () => {
       expect(shapeOf(parsed('Con'))).toEqual({
         root: note('C'),
@@ -157,6 +162,56 @@ describe('parseChord', () => {
         bass: null,
         wrapper: 'parentheses',
       });
+    });
+
+    it('ignores whitespace inside the parentheses', () => {
+      const spaced = ['( Em7 )', '(Em7 )', '( Em7)'];
+      for (const input of spaced) {
+        expect(shapeOf(parsed(input))).toEqual({
+          root: note('E'),
+          quality: 'm7',
+          bass: null,
+          wrapper: 'parentheses',
+        });
+      }
+    });
+
+    it('rejects parentheses that do not balance, in either direction', () => {
+      expect(parseChord('(Em7')).toBeNull();
+      expect(parseChord('Em7)')).toBeNull();
+    });
+
+    it('does not unwrap when the opening parenthesis closes early', () => {
+      expect(parseChord('(Em7)(Am7)')).toBeNull();
+    });
+  });
+
+  // A quality is passed through whatever it says, but only within the
+  // character set a quality is written from. Without that limit, every chart
+  // direction and section label that happens to start with a note letter
+  // would be relabelled as a chord.
+  describe('tokens that start with a note letter but are not chords', () => {
+    const notChords = [
+      'D.C.', // da capo
+      'D.S.', // dal segno
+      'Da Capo',
+      'Dal Segno',
+      'Fine',
+      'Coda',
+      'Bridge',
+      'Chorus',
+      'Ending',
+      'Aメロ', // section label, as written on a Japanese chart
+      'C  E', // two chords that were never split apart
+    ];
+
+    it.each(notChords)('returns null for %j', (input) => {
+      expect(parseChord(input)).toBeNull();
+    });
+
+    it('still accepts a quality it has never seen', () => {
+      expect(parsed('CwhateverThisIs').quality).toBe('whateverThisIs');
+      expect(parsed('Gbim').quality).toBe('im');
     });
   });
 
@@ -216,7 +271,6 @@ describe('parseChord', () => {
       '()', // empty parentheses
       'N.C.', // no chord
       '%', // repeat
-      '(Em7', // unbalanced
     ];
 
     it.each(passedThrough)('returns null for %j', (input) => {

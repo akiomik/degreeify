@@ -14,4 +14,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Safari build target and a script that generates the wrapping Xcode project.
 - A chord symbol parser that reads a root, an opaque quality and an optional
   bass note, and reports anything else — bar lines, accents, rhythm notes,
-  `N.C.` — as not a chord so it can be left alone.
+  `N.C.`, chart directions, section labels — as not a chord so it can be left
+  alone.

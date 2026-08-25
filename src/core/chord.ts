@@ -25,11 +25,44 @@ export interface ChordSymbol {
 }
 
 /**
+ * Characters a chord quality is written from.
+ *
+ * Passing an unknown quality through is deliberate, but "unknown" has to stop
+ * somewhere: a quality is a run of letters, digits and a handful of symbols,
+ * never a full stop, a space or a word in another script. Rejecting the rest
+ * is what keeps a directive such as `D.C.` or a section label such as `Aメロ`
+ * from being read as a chord on D or A. It also covers the multi-word
+ * directives, `Da Capo` and `Dal Segno` among them, by way of the space.
+ */
+const QUALITY_CHARS = /^[A-Za-z0-9()#♯b♭+,°Δø/-]*$/u;
+
+/**
+ * Whole tokens that are chart directions rather than chords.
+ *
+ * Only the ones spelled with nothing but letters need to be listed. The rest
+ * are already ruled out either by their first character not being a note
+ * letter, as `N.C.` and `Segno` are, or by {@link QUALITY_CHARS}.
+ *
+ * This is notation shared by every chart, not any one site's markup; labels
+ * particular to a site belong in that site's adapter.
+ */
+const CHART_DIRECTIVES = new Set([
+  'break',
+  'bridge',
+  'chorus',
+  'coda',
+  'end',
+  'ending',
+  'fade',
+  'fine',
+]);
+
+/**
  * Parses a chord symbol, or returns null for anything that is not one.
  *
  * Returning null is the normal outcome for a lot of real input: chord charts
- * put bar lines, accents, rhythm notes and `N.C.` in the same place as chords.
- * Callers are expected to leave those untouched.
+ * put bar lines, accents, rhythm notes, `N.C.` and section labels in the same
+ * place as chords. Callers are expected to leave those untouched.
  *
  * ## Accidentals
  *
@@ -44,33 +77,67 @@ export interface ChordSymbol {
  *
  * ## Parentheses
  *
- * A symbol wrapped in parentheses, as optional chords are written, is
- * unwrapped and recorded in {@link ChordSymbol.wrapper} so callers can put the
- * parentheses back. Only a token that both starts and ends with a parenthesis
- * is unwrapped, which leaves a quality such as `M7(#11)` intact and lets a
- * rhythm note such as `(3連)` fail to parse and be passed through.
+ * Parentheses must balance, and a symbol is unwrapped only when the opening
+ * one closes at the very end of the token. One rule then covers every case
+ * seen in a chord slot: `(Em7)` unwraps and records its wrapper, a quality
+ * such as `M7(#11)` keeps its own parentheses, a rhythm note such as `(3連)`
+ * unwraps to something that is not a chord, and a stray `Em7)` is not a chord
+ * at all.
  */
 export function parseChord(raw: string): ChordSymbol | null {
-  const trimmed = raw.trim();
-  const wrapped = trimmed.length > 2 && trimmed.startsWith('(') && trimmed.endsWith(')');
-  const body = wrapped ? trimmed.slice(1, -1) : trimmed;
+  const unwrapped = unwrap(raw.trim());
+  if (!unwrapped) return null;
+
+  const { body, wrapper } = unwrapped;
+  if (CHART_DIRECTIVES.has(body.toLowerCase())) return null;
 
   const root = readNotePrefix(body);
   if (!root) return null;
 
   const { quality, bass } = splitBass(root.rest);
-  return {
-    root: root.note,
-    quality,
-    bass,
-    wrapper: wrapped ? 'parentheses' : 'none',
-    raw,
-  };
+  if (!QUALITY_CHARS.test(quality)) return null;
+  // A leading separator means the split landed on the wrong one, as in
+  // `C/E/G`. Better to leave the whole token alone than to relabel part of it.
+  if (quality.startsWith('/')) return null;
+
+  return { root: root.note, quality, bass, wrapper, raw };
+}
+
+/**
+ * Strips a pair of parentheses wrapping the whole token, and rejects tokens
+ * whose parentheses do not balance.
+ */
+function unwrap(token: string): { body: string; wrapper: Wrapper } | null {
+  let depth = 0;
+  let closeOfFirst = -1;
+  for (let index = 0; index < token.length; index++) {
+    const char = token.charAt(index);
+    if (char === '(') {
+      depth++;
+    } else if (char === ')') {
+      depth--;
+      if (depth < 0) return null;
+      if (depth === 0 && closeOfFirst < 0) closeOfFirst = index;
+    }
+  }
+  if (depth !== 0) return null;
+
+  const wrapped = token.startsWith('(') && closeOfFirst === token.length - 1;
+  return wrapped
+    ? { body: token.slice(1, -1).trim(), wrapper: 'parentheses' }
+    : { body: token, wrapper: 'none' };
 }
 
 const BASS_SEPARATORS = ['/', 'on'] as const;
 
-/** Splits the text after the root into a quality and, if one is spelled out, a bass note. */
+/**
+ * Splits the text after the root into a quality and, if one is spelled out, a
+ * bass note.
+ *
+ * Only the last occurrence of each separator is tried, and that is enough:
+ * the text after an earlier occurrence always contains the separator itself,
+ * and no note is spelled with a `/` or an `on` in it.
+ */
 function splitBass(rest: string): { quality: string; bass: Note | null } {
   for (const separator of BASS_SEPARATORS) {
     const at = rest.lastIndexOf(separator);
