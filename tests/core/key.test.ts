@@ -115,11 +115,14 @@ describe('inferKey', () => {
       expect(guessOf('Am', 'E7', 'G#dim', 'Am')).toBe('Am');
     });
 
-    // Opening and closing on `Am` is evidence for A minor and none at all for
-    // A major. Reading only the root would give the two of them the same
-    // points and let the parallel major hold its own.
-    it('does not credit the parallel major for a minor tonic chord', () => {
+    // The parallel major has the same tonic and, on a chart resting there,
+    // the same points for it. What settles them is that the minor key
+    // accounts for the raised sevenths as its own while the major key can
+    // make nothing of the plain ones — and, where even that comes out level,
+    // that the chart spells its tonic chord minor.
+    it('does not hand the chart to the parallel major', () => {
       expect(guessOf('Am', 'Dm', 'E7', 'G#dim', 'Am')).not.toBe('A');
+      expect(guessOf('Am', 'E7', 'G#dim', 'Am')).toBe('Am');
     });
   });
 
@@ -199,6 +202,21 @@ describe('inferKey', () => {
 
     it('declines on a chart made mostly of them', () => {
       expect(guessOf('C', 'F', 'G', 'Am', 'Dm', 'Caug', 'Faug', 'Gaug', 'C')).toBeNull();
+    });
+  });
+
+  // Coming to rest on the tonic is what the ends of a chart say, and a chart
+  // can rest on an altered tonic chord as readily as on the plain one.
+  // Requiring the triad to agree gives those endings nothing, while the very
+  // same chord still counts towards a rival key's chords.
+  describe('an ending on an altered tonic chord', () => {
+    it('still counts for a major key that finishes on a raised fifth', () => {
+      expect(guessOf('C', 'F', 'G', 'Caug')).toBe('C');
+    });
+
+    it('still counts for a minor key that finishes on a major tonic', () => {
+      expect(guessOf('Am', 'Dm', 'E7', 'A')).toBe('Am');
+      expect(guessOf('Am', 'Dm', 'E7', 'F', 'G', 'Am', 'A')).toBe('Am');
     });
   });
 

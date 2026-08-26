@@ -80,10 +80,9 @@ function hasFlatFifth(quality: string): boolean {
 }
 
 /**
- * How a quality can begin and still mean a minor third: `m`, `mi`, `min`, and
- * the dash of a jazz lead sheet, where `C-7` is what a chart elsewhere writes
- * as `Cm7`. A flattened fifth on top of any of them makes the triad
- * diminished.
+ * How a quality can begin and mean a minor third once the ones spelled as a
+ * word have been dealt with: an `m`, or the dash a jazz lead sheet writes
+ * `C-7` with where a chart elsewhere writes `Cm7`.
  */
 const MINOR_MARKS = ['m', ...DASH_MARKS];
 
@@ -109,7 +108,8 @@ function triadOf(quality: string): Triad | null {
   // equally and is evidence for none of them. `sus` is looked for anywhere in
   // the quality because `7sus4` is as common as `sus4`.
   if (word.includes('sus') || word.startsWith('5')) return null;
-  if (startsWithAny(word, ['mi', 'min'])) return hasFlatFifth(word) ? 'diminished' : 'minor';
+  // Covers `min` and `mi7` alike, all of them beginning the same way.
+  if (word.startsWith('mi')) return hasFlatFifth(word) ? 'diminished' : 'minor';
   if (word.startsWith('maj')) return 'major';
   // Lower-casing a triangle turns the Greek delta into a different letter, so
   // these are read as written — as `M` has to be in any case.
@@ -303,11 +303,17 @@ export function inferKey(chords: readonly ChordSymbol[]): KeyGuess | null {
     const modal = distinct.filter((sound) => isIn(MODAL[key.mode], sound, tonic)).length;
     const accounted = plain + modal * MODAL_WEIGHT;
     const bookends =
-      (isTonicChord(opening, key, tonic) ? BOOKEND_POINTS : 0) +
-      (isTonicChord(closing, key, tonic) ? BOOKEND_POINTS : 0);
-    return { key, fit: accounted / distinct.length, total: accounted + bookends };
+      (isTonicChord(opening, tonic) ? BOOKEND_POINTS : 0) +
+      (isTonicChord(closing, tonic) ? BOOKEND_POINTS : 0);
+    const spelled = agreesWithMode(opening, key, tonic) || agreesWithMode(closing, key, tonic);
+    return { key, fit: accounted / distinct.length, total: accounted + bookends, spelled };
   });
-  scored.sort((one, other) => other.total - one.total);
+  // Where two keys come out level, the one the chart spells its tonic chord
+  // as wins. That only ever separates a pair on the same tonic — anything
+  // else has already been settled by the chords.
+  scored.sort(
+    (one, other) => other.total - one.total || Number(other.spelled) - Number(one.spelled),
+  );
 
   // The runner-up is the best candidate that would name the chords
   // differently. Two keys on the same tonic disagree only about the mode,
@@ -346,18 +352,29 @@ function endOf(chords: readonly ChordSymbol[], index: number): Sound | null {
 }
 
 /**
- * Whether an end of the chart is the key's own tonic chord.
+ * Whether an end of the chart is rooted on the key's tonic.
  *
- * The triad has to agree, not only the root. A chart that opens and closes on
- * `Am` is evidence for A minor and none at all for A major, and reading the
- * root alone would hand both of them the same two points — enough for the
- * parallel major to hold its own on a chart that could not be more clearly
- * minor. A chord whose triad cannot be read still counts: it says where the
- * chart begins without contradicting anything.
+ * The root alone, because that is what coming to rest somewhere means. A
+ * chart that ends on `I+` or on the major chord a minor key finishes on is
+ * resting on its tonic every bit as much as one ending on the plain triad,
+ * and asking the triad to agree here would give those endings nothing while
+ * the very same chord still counts towards a rival key's chords.
  */
-function isTonicChord(end: Sound | null, key: Key, tonic: number): boolean {
-  if (!end || end.pitch !== tonic) return false;
-  return end.triad === null || end.triad === TONIC_TRIAD[key.mode];
+function isTonicChord(end: Sound | null, tonic: number): boolean {
+  return end !== null && end.pitch === tonic;
+}
+
+/**
+ * Whether an end of the chart is the key's tonic chord spelled as the key
+ * would spell it.
+ *
+ * Nothing is scored on this. It separates two keys on the same tonic that
+ * have come out level, where the chords cannot: a chart resting on `Am` is in
+ * A minor rather than A major, whatever else the two of them share. A chord
+ * whose triad cannot be read settles nothing either way.
+ */
+function agreesWithMode(end: Sound | null, key: Key, tonic: number): boolean {
+  return isTonicChord(end, tonic) && end?.triad === TONIC_TRIAD[key.mode];
 }
 
 function isIn(table: readonly Chord[], sound: Sound, tonic: number) {
