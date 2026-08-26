@@ -123,6 +123,25 @@ function withFifth(rest: string, third: 'major' | 'minor'): Triad | null {
 }
 
 /**
+ * Ways a quality says the chord has no third: something is suspended in place
+ * of one, or the third is struck out by name. A chord that states no third
+ * fits every key equally and is evidence for none of them.
+ *
+ * `no3` and `omit3` came out right before this was written down, by falling
+ * off the end of every branch and reaching the same answer by accident. In
+ * brackets, which is how they are usually written, they were read as plain
+ * major triads instead.
+ */
+const NO_THIRD_WORDS = ['sus', 'no3', 'omit3'];
+
+/**
+ * How a quality can say the chord is a bare fifth, in brackets or out of
+ * them. `(#5)` and `(b5)` are not this: those alter a fifth over a third
+ * rather than standing in for the whole chord.
+ */
+const BARE_FIFTHS = ['5', '(5)'];
+
+/**
  * How a quality can begin and mean a minor third once the ones spelled as a
  * word have been dealt with: an `m`, or the dash a jazz lead sheet writes
  * `C-7` with where a chart elsewhere writes `Cm7`.
@@ -168,9 +187,7 @@ function triadOf(quality: string): Triad | null {
   // for it to be a mark on; anywhere else it is a mark, and read as one.
   if (includesAny(word, ['dim', '°', 'ø'])) return 'diminished';
   if (word.includes('aug') || startsWithAny(quality, [...PLUS_MARKS])) return 'augmented';
-  // A suspended or a power chord states no third, so it fits every key
-  // equally and is evidence for none of them.
-  if (word.includes('sus') || word.startsWith('5')) return null;
+  if (includesAny(word, NO_THIRD_WORDS) || startsWithAny(word, BARE_FIFTHS)) return null;
 
   // An `m` in front of an `add` is a minor chord with something added, not
   // the `ma` that says major. Which it is comes down to the case of that one

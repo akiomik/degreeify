@@ -164,6 +164,25 @@ describe('inferKey', () => {
       expect(guessOf('C7sus4', 'F7sus4', 'G7sus4', 'C7sus4')).toBeNull();
     });
 
+    // A chord can say it has no third by striking it out by name, or by
+    // being nothing but a fifth. Both are usually written in brackets, and a
+    // bracket otherwise says a tension follows and the plain triad stands.
+    it.each(['no3', '(no3)', '7(no3)', 'omit3', '(omit3)', '5', '(5)'])(
+      'finds no third in %j either',
+      (quality) => {
+        expect(readingOf(quality)).toBe(readingOf('sus4'));
+      },
+    );
+
+    // What follows a bracket is usually a tension, which leaves the triad
+    // the root names standing. Those must not be swept up with the above.
+    it.each(['(9)', '(11)', '(#9)', 'add9'])(
+      'still reads %j as leaving the triad alone',
+      (quality) => {
+        expect(readingOf(quality)).toBe(readingOf('M7'));
+      },
+    );
+
     // Which chord opens and closes a chart is about its root alone, so a
     // chord whose triad cannot be read still counts at the ends.
     it('takes the ends of the chart from chords it cannot otherwise read', () => {
