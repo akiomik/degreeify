@@ -227,6 +227,21 @@ describe('inferKey', () => {
         expect(guessOf(`C${quality}`, `F${quality}`, `G${quality}`, `C${quality}`)).toBeNull();
       });
 
+      // A third and a fifth go together four ways, and the two that have no
+      // name have to be treated alike. Reading the raised fifth only under a
+      // major third leaves `m7#5` a plain minor chord while `M7#5` is
+      // augmented — the same mark taken two ways.
+      it.each(['m#5', 'm7#5', 'mi7#5', 'm7+5'])('has nothing to say about %j either', (quality) => {
+        expect(guessOf(`C${quality}`, `F${quality}`, `G${quality}`, `C${quality}`)).toBeNull();
+      });
+
+      // The two that do have a name keep it.
+      it('still reads a lowered fifth under a minor third as diminished', () => {
+        const plain = inferKey(chords('C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bdim', 'C'));
+        const guess = inferKey(chords('C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bm7-5', 'C'));
+        expect(guess?.confidence).toBe(plain?.confidence);
+      });
+
       // A fake book raises and lowers with a pair of marks, and a chart using
       // one of them uses the other. Handling the dash but not the plus would
       // read half such a chart as plain major triads.

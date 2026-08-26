@@ -92,22 +92,24 @@ function hasFifth(word: string, marks: string): boolean {
   return [...marks].some((mark) => word.includes(`${mark}5`));
 }
 
-const hasFlatFifth = (word: string) => hasFifth(word, FLATTENING_MARKS);
-
 /**
- * What a chord with a major third is, once its fifth is taken into account.
+ * What a chord is, once an altered fifth is taken into account.
  *
- * A raised fifth makes an augmented triad, whatever else the quality says, so
- * `M7#5` and `7(#5)` are augmented rather than major. A lowered one makes
- * nothing that has a name: no triad puts a major third under a diminished
- * fifth, and calling it diminished would let it stand in for a leading-tone
- * chord it sounds nothing like. There is nothing to say about it, so nothing
- * is said.
+ * A third and a fifth can be put together four ways and only two of them have
+ * a name: a major third under a raised fifth is an augmented triad, a minor
+ * third under a lowered one is diminished. The other two are not triads at
+ * all. Nothing is said about those, because the nearest name is a chord they
+ * sound nothing like — read `C(b5)` as diminished and it stands in for the
+ * leading-tone chord of two keys it has no business in.
+ *
+ * The fifth has to be looked at on both sides. Reading it only under a major
+ * third leaves `Cm7#5` as a plain minor chord while `CM7#5` is augmented,
+ * which is the same quality mark taken two different ways.
  */
-function majorOrAltered(word: string): Triad | null {
-  if (hasFifth(word, RAISING_MARKS)) return 'augmented';
-  if (hasFlatFifth(word)) return null;
-  return 'major';
+function withFifth(word: string, third: 'major' | 'minor'): Triad | null {
+  if (hasFifth(word, RAISING_MARKS)) return third === 'major' ? 'augmented' : null;
+  if (hasFifth(word, FLATTENING_MARKS)) return third === 'major' ? null : 'diminished';
+  return third;
 }
 
 /**
@@ -144,17 +146,15 @@ function triadOf(quality: string): Triad | null {
   // with, and before the `M` that says major on its own. `madd9` is not one
   // of them — that is a minor chord with an added ninth, and the `ma` it
   // opens with belongs to two different parts of the quality.
-  if (word.startsWith('mi')) return hasFlatFifth(word) ? 'diminished' : 'minor';
-  if (word.startsWith('ma') && !word.startsWith('madd')) return majorOrAltered(word);
+  if (word.startsWith('mi')) return withFifth(word, 'minor');
+  if (word.startsWith('ma') && !word.startsWith('madd')) return withFifth(word, 'major');
   // Lower-casing a triangle turns the Greek delta into a different letter, so
   // these are read as written — as `M` has to be in any case.
-  if (startsWithAny(quality, ['M', ...TRIANGLE_MARKS])) return majorOrAltered(word);
-  if (startsWithAny(quality, MINOR_MARKS)) {
-    return hasFlatFifth(word) ? 'diminished' : 'minor';
-  }
+  if (startsWithAny(quality, ['M', ...TRIANGLE_MARKS])) return withFifth(word, 'major');
+  if (startsWithAny(quality, MINOR_MARKS)) return withFifth(word, 'minor');
   // A quality that opens with a bracket says nothing before it, so the triad
   // is the plain one the root names: `C(9)` is a C major triad with a ninth.
-  if (startsWithAny(word, ['add', '(', '6', '7', '9', '11', '13'])) return majorOrAltered(word);
+  if (startsWithAny(word, ['add', '(', '6', '7', '9', '11', '13'])) return withFifth(word, 'major');
   return null;
 }
 
