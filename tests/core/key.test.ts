@@ -56,6 +56,20 @@ describe('inferKey', () => {
       expect(guessOf('C', 'F', 'G', 'C')).toBe('C');
     });
 
+    // One end of the chart, against a fit that leaves nothing unaccounted
+    // for, is the least evidence that still names a key.
+    it('settles for opening on the tonic when every chord fits', () => {
+      expect(guessOf('C', 'F', 'G', 'Am', 'Dm', 'Em')).toBe('C');
+    });
+
+    // A major key borrows a fifth from its relative minor's own scale as
+    // readily as the minor key uses it, so it must not cost the major key
+    // the chart. This is what a mode table holding chords its relative lacks
+    // would get wrong, every time.
+    it("keeps a major key that reaches for its relative minor's dominant", () => {
+      expect(guessOf('C', 'Dm', 'Em', 'F', 'G', 'Am', 'E7', 'C')).toBe('C');
+    });
+
     it('reports a confidence at or above the threshold it accepted on', () => {
       const guess = inferKey(chords('C', 'F', 'G', 'C'));
       expect(guess?.confidence).toBeGreaterThanOrEqual(MIN_CONFIDENCE);
@@ -71,9 +85,52 @@ describe('inferKey', () => {
     });
   });
 
+  // Every chord is read as it was written down, which means reading the
+  // spellings a chart actually uses rather than one canonical form of each.
+  describe('reading the chords', () => {
+    it('takes a flattened fifth however the chart spells it', () => {
+      const plain = inferKey(chords('C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bdim', 'C'));
+      const spellings = ['Bm7-5', 'Bm7b5', 'Bm7(b5)', 'Bm7(♭5)', 'Bm7−5', 'Bm7(－5)'];
+
+      for (const spelling of spellings) {
+        const guess = inferKey(chords('C', 'Dm', 'Em', 'F', 'G', 'Am', spelling, 'C'));
+        expect(guess?.confidence).toBe(plain?.confidence);
+      }
+    });
+
+    // `7sus4` is as common as `sus4`, and neither states a third.
+    it('finds no third in a suspension wherever it sits in the quality', () => {
+      expect(guessOf('C7sus4', 'F7sus4', 'G7sus4', 'C7sus4')).toBeNull();
+    });
+
+    // Which chord opens and closes a chart is about its root alone, so a
+    // chord whose triad cannot be read still counts at the ends.
+    it('takes the ends of the chart from chords it cannot otherwise read', () => {
+      expect(guessOf('Csus4', 'F', 'G', 'Am', 'Dm', 'C5')).toBe('C');
+    });
+  });
+
+  // An augmented chord belongs to no key's plain scale, so it counts against
+  // every candidate rather than being set aside. That costs confidence in
+  // proportion to how chromatic the chart is, which is the right direction.
+  describe('a chord in no key at all', () => {
+    it('still names a key that carries one or two in passing', () => {
+      expect(guessOf('C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bdim', 'Caug', 'C')).toBe('C');
+      expect(guessOf('C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bdim', 'Caug', 'Faug', 'C')).toBe('C');
+    });
+
+    it('declines on a chart made mostly of them', () => {
+      expect(guessOf('C', 'F', 'G', 'Am', 'Dm', 'Caug', 'Faug', 'Gaug', 'C')).toBeNull();
+    });
+  });
+
   describe('spelling the tonic', () => {
     it('follows the chart rather than a table', () => {
       expect(guessOf('F#', 'B', 'C#', 'D#m', 'F#')).toBe('F#');
+    });
+
+    it('follows the spelling the chart uses most, not the one it uses first', () => {
+      expect(guessOf('Gb', 'B', 'C#', 'D#m', 'F#', 'F#', 'F#')).toBe('F#');
     });
   });
 
@@ -83,10 +140,11 @@ describe('inferKey', () => {
     });
 
     // A key and its relative are built from the same chords and can never be
-    // separated by the chords alone. Opening and closing the chart is the
-    // only evidence for one tonic over the other, and here it points at both.
+    // separated by fit alone. This chart opens and closes on neither tonic
+    // and holds no chord that only one of the two modes has, so there is
+    // nothing at all to choose between them.
     it('declines when nothing chooses between a key and its relative', () => {
-      expect(guessOf('C', 'F', 'G', 'Am', 'Dm', 'Em')).toBeNull();
+      expect(guessOf('Dm', 'F', 'G', 'Am', 'Em', 'Dm')).toBeNull();
     });
 
     // The five different chords of a real chart that states no key. Two keys

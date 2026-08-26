@@ -62,17 +62,27 @@ export function formatKey(key: Key): string {
  */
 type Triad = 'major' | 'minor' | 'diminished' | 'augmented';
 
-const HALF_DIMINISHED = /^m(in)?7?[-b♭−]5/;
+/**
+ * A flattened fifth anywhere in a minor quality, which makes the triad
+ * diminished: `m7-5`, `m7b5`, `m7(b5)`. The alteration is not anchored to a
+ * position because the quality is carried through as the chart wrote it, and
+ * charts write all three, in any of the spellings of a flat.
+ */
+const FLAT_FIFTH = /[-b♭−－ー]\s*5/;
+
+/** A chord that states no third, wherever the word appears in the quality. */
+const NO_THIRD = /sus/;
 
 function triadOf(quality: string): Triad | null {
   if (quality === '') return 'major';
   if (startsWithAny(quality, ['dim', '°', 'ø', 'Ø'])) return 'diminished';
   if (startsWithAny(quality, ['aug', '+'])) return 'augmented';
   // A suspended or a power chord states no third, so it fits every key
-  // equally and is evidence for none of them.
-  if (startsWithAny(quality, ['sus', '5'])) return null;
+  // equally and is evidence for none of them. `sus` is looked for anywhere in
+  // the quality because `7sus4` is as common as `sus4`.
+  if (NO_THIRD.test(quality) || quality.startsWith('5')) return null;
   if (startsWithAny(quality, ['maj', 'M', 'Δ', '△', '∆'])) return 'major';
-  if (quality.startsWith('m')) return HALF_DIMINISHED.test(quality) ? 'diminished' : 'minor';
+  if (quality.startsWith('m')) return FLAT_FIFTH.test(quality) ? 'diminished' : 'minor';
   if (startsWithAny(quality, ['add', '6', '7', '9', '11', '13'])) return 'major';
   return null;
 }
@@ -81,8 +91,36 @@ function startsWithAny(text: string, prefixes: readonly string[]): boolean {
   return prefixes.some((prefix) => text.startsWith(prefix));
 }
 
-/** Semitones above the tonic paired with the triad built there. */
-const DIATONIC: Record<Mode, readonly (readonly [number, Triad])[]> = {
+/*
+ * An augmented chord is read rather than set aside, even though it belongs to
+ * no key's plain scale and so counts against every candidate.
+ *
+ * A quality that states no third, and one that cannot be read at all, are set
+ * aside because there is nothing to say about them. An augmented chord is not
+ * in that position: it is known, and known to be outside every scale, and a
+ * chart full of chords outside every scale really is a chart whose key its
+ * chords do not settle. Counting it lowers confidence rather than moving any
+ * candidate ahead of another, which is the right direction to fail in.
+ *
+ * The cost is bounded and the alternative is worse. A chart carrying one or
+ * two of them among its diatonic chords is still named; only one made mostly
+ * of them declines. Setting them aside instead makes the most chromatic chart
+ * to hand come back with the wrong tonic at a confidence that would have been
+ * acted on.
+ */
+
+type Chord = readonly [semitones: number, triad: Triad];
+
+/**
+ * Semitones above the tonic paired with the triad built there, in the plain
+ * scale of each mode.
+ *
+ * These two are the same seven chords read from different tonics, and they
+ * have to stay that way. A mode holding chords its relative does not would
+ * account for at least as much of every chart ever written, and so would win
+ * on chord fit against its relative every time, whatever the chart said.
+ */
+const DIATONIC: Record<Mode, readonly Chord[]> = {
   major: [
     [0, 'major'],
     [2, 'minor'],
@@ -92,19 +130,36 @@ const DIATONIC: Record<Mode, readonly (readonly [number, Triad])[]> = {
     [9, 'minor'],
     [11, 'diminished'],
   ],
-  // The natural minor, plus the two chords a minor key borrows from the
-  // harmonic minor often enough that leaving them out would misread most
-  // minor charts: the major fifth and the diminished seventh.
   minor: [
     [0, 'minor'],
     [2, 'diminished'],
     [3, 'major'],
     [5, 'minor'],
     [7, 'minor'],
-    [7, 'major'],
     [8, 'major'],
     [10, 'major'],
+  ],
+};
+
+/**
+ * Chords a mode has that its relative does not, which a chart borrows often
+ * enough to be worth noticing.
+ *
+ * A minor key raises its seventh degree far too often for the plain scale to
+ * recognise one: the major fifth, the diminished seventh and the augmented
+ * third all come from that. A major key borrows too, but nothing it borrows
+ * is unavailable to its relative minor, so there is nothing to list.
+ *
+ * These count as evidence for the mode rather than towards chord fit. Fit is
+ * what stays symmetrical between relatives; this is one of the two things
+ * that tells them apart.
+ */
+const MODAL: Record<Mode, readonly Chord[]> = {
+  major: [],
+  minor: [
+    [7, 'major'],
     [11, 'diminished'],
+    [3, 'augmented'],
   ],
 };
 
@@ -123,12 +178,23 @@ export interface KeyGuess {
  */
 const MIN_DISTINCT_CHORDS = 3;
 
+/** A point each for opening the chart on the key's tonic and for closing on it. */
+const BOOKEND_POINTS = 1;
+
+/**
+ * What a chord only one of two relatives has is worth. Half a chord: it says
+ * which of the pair a chart is in, but not on its own — a major fifth is as
+ * often a secondary dominant in the relative major as it is a real dominant
+ * in the minor.
+ */
+const MODAL_POINTS = 0.5;
+
 /**
  * The margin, in points, at which one key is taken to be clearly ahead of the
- * next. Being first and last in the chart is worth two points on its own, so
- * a key three points ahead is ahead on the chords as well as on that.
+ * next. Opening and closing on a tonic is worth two, so this is the point
+ * where the evidence for a tonic is unopposed.
  */
-const CLEAR_MARGIN = 3;
+const CLEAR_MARGIN = 2;
 
 /** Below this, {@link inferKey} declines rather than guessing. */
 export const MIN_CONFIDENCE = 0.5;
@@ -137,10 +203,10 @@ export const MIN_CONFIDENCE = 0.5;
  * Guesses which key a sequence of chords is in, or declines.
  *
  * Every one of the twenty-four keys is scored on how many of the chart's
- * distinct chords it accounts for, with two points for a chart that opens and
- * closes on the key's own tonic. That second part is what separates a key
- * from its relative, which share every chord and can never be told apart by
- * the chords alone.
+ * distinct chords it accounts for, with a point each for opening and closing
+ * the chart on the key's own tonic and a half for a chord only that mode has.
+ * Those last two are what separates a key from its relative, which share
+ * every chord of the plain scale and can never be told apart by fit alone.
  *
  * The confidence is how well the winning key accounts for the chart,
  * discounted by how close the runner-up came. Both matter: a key that
@@ -162,17 +228,28 @@ export function inferKey(chords: readonly ChordSymbol[]): KeyGuess | null {
     })
     .filter((sound) => sound !== null);
 
-  const distinct = new Map(sounds.map((sound) => [`${sound.pitch}:${sound.triad}`, sound]));
-  if (distinct.size < MIN_DISTINCT_CHORDS) return null;
+  const distinct = [
+    ...new Map(sounds.map((sound) => [`${sound.pitch}:${sound.triad}`, sound])).values(),
+  ];
+  if (distinct.length < MIN_DISTINCT_CHORDS) return null;
 
-  const opening = sounds.at(0)?.pitch;
-  const closing = sounds.at(-1)?.pitch;
+  // Which chord opens and closes the chart is about its root alone, so this
+  // reads every chord rather than only the ones whose triad could be made
+  // out. A chart opening on a power chord still opens where it opens.
+  const opening = firstPitch(chords);
+  const closing = firstPitch([...chords].reverse());
 
   const scored = candidates().map((key) => {
     const tonic = pitchClass(key.tonic);
-    const accounted = [...distinct.values()].filter((sound) => isDiatonic(sound, tonic, key.mode));
-    const bonus = (opening === tonic ? 1 : 0) + (closing === tonic ? 1 : 0);
-    return { key, fit: accounted.length / distinct.size, total: accounted.length + bonus };
+    const accounted = distinct.filter((sound) => isIn(DIATONIC[key.mode], sound, tonic));
+    const modal = distinct.some((sound) => isIn(MODAL[key.mode], sound, tonic));
+    const bookends =
+      (opening === tonic ? BOOKEND_POINTS : 0) + (closing === tonic ? BOOKEND_POINTS : 0);
+    return {
+      key,
+      fit: accounted.length / distinct.length,
+      total: accounted.length + bookends + (modal ? MODAL_POINTS : 0),
+    };
   });
   scored.sort((one, other) => other.total - one.total);
 
@@ -195,18 +272,36 @@ function candidates(): Key[] {
   });
 }
 
-function isDiatonic(sound: { pitch: number; triad: Triad }, tonic: number, mode: Mode): boolean {
+function firstPitch(chords: readonly ChordSymbol[]): number | undefined {
+  const chord = chords.at(0);
+  return chord && pitchClass(chord.root);
+}
+
+function isIn(table: readonly Chord[], sound: { pitch: number; triad: Triad }, tonic: number) {
   const semitones = (sound.pitch - tonic + 12) % 12;
-  return DIATONIC[mode].some(([step, triad]) => step === semitones && triad === sound.triad);
+  return table.some(([step, triad]) => step === semitones && triad === sound.triad);
 }
 
 /**
- * Spells the tonic the way the chart spells that pitch, falling back to the
- * canonical spelling when no chord names it. A chart full of `F#` should not
- * come back as being in G flat.
+ * Spells the tonic the way the chart spells that pitch most often, falling
+ * back to the canonical spelling when no chord names it. A chart full of `F#`
+ * should not come back as being in G flat, and one `Gb` among thirty `F#`
+ * should not decide it either.
  */
 function spellTonic(tonic: Note, chords: readonly ChordSymbol[]): Note {
   const pitch = pitchClass(tonic);
-  const named = chords.find((chord) => pitchClass(chord.root) === pitch);
-  return named ? named.root : tonic;
+  const spellings = new Map<string, { note: Note; count: number }>();
+  for (const chord of chords) {
+    if (pitchClass(chord.root) !== pitch) continue;
+    const name = formatNote(chord.root);
+    const seen = spellings.get(name);
+    if (seen) seen.count += 1;
+    else spellings.set(name, { note: chord.root, count: 1 });
+  }
+
+  const commonest = [...spellings.values()].reduce<{ note: Note; count: number } | null>(
+    (best, spelling) => (best && best.count >= spelling.count ? best : spelling),
+    null,
+  );
+  return commonest ? commonest.note : tonic;
 }
