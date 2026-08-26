@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   type Accidental,
+  FLAT_CHARS,
   formatNote,
   type Letter,
   letterIndex,
@@ -8,6 +9,7 @@ import {
   parseNote,
   pitchClass,
   readNotePrefix,
+  SHARP_CHARS,
 } from '@/core/pitch';
 
 const note = (letter: Letter, accidental: Accidental = 0): Note => ({ letter, accidental });
@@ -89,6 +91,18 @@ describe('parseNote', () => {
 
   it.each(rejected)('rejects %j', (input) => {
     expect(parseNote(input)).toBeNull();
+  });
+});
+
+// The two sets are the single source of truth for how an accidental may be
+// spelled, so the cases come from them rather than from a copy.
+describe('accidental spellings', () => {
+  it.each([...SHARP_CHARS])('reads %j as a sharp', (char) => {
+    expect(parseNote(`C${char}`)).toEqual(note('C', 1));
+  });
+
+  it.each([...FLAT_CHARS])('reads %j as a flat', (char) => {
+    expect(parseNote(`C${char}`)).toEqual(note('C', -1));
   });
 });
 

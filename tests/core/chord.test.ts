@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { type ChordSymbol, parseChord } from '@/core/chord';
 import type { Accidental, Letter, Note } from '@/core/pitch';
+import { ACCIDENTAL_CHARS, FLAT_CHARS, SHARP_CHARS } from '@/core/pitch';
 
 const note = (letter: Letter, accidental: Accidental = 0): Note => ({ letter, accidental });
 
@@ -70,12 +71,11 @@ describe('parseChord', () => {
     // in every spelling, since which one a chart carries comes down to the
     // keyboard it was typed on.
     describe('look-alikes of a symbol it already allows', () => {
-      // An accidental has to be read as one wherever it appears. Allowing a
-      // spelling in the quality but not in the root would turn a token that
-      // was safely passed through into a different chord.
-      const sharps = ['#', '\u266f', '\uff03'];
-
-      it.each(sharps)('reads %j after the root as a sharp', (sharp) => {
+      // An accidental has to be read as one wherever it appears. A spelling
+      // allowed in the quality but not known to the note reader would turn a
+      // token that was safely passed through into a different chord, so these
+      // cases come from the note reader's own sets rather than from a copy.
+      it.each([...SHARP_CHARS])('reads %j after the root as a sharp', (sharp) => {
         expect(shapeOf(parsed(`C${sharp}7`))).toEqual({
           root: note('C', 1),
           quality: '7',
@@ -84,12 +84,25 @@ describe('parseChord', () => {
         });
       });
 
-      it.each(sharps)('reads %j after the bass as a sharp', (sharp) => {
-        expect(parsed(`C${sharp}/G${sharp}`).bass).toEqual(note('G', 1));
+      it.each([...FLAT_CHARS])('reads %j after the root as a flat', (flat) => {
+        expect(shapeOf(parsed(`C${flat}7`))).toEqual({
+          root: note('C', -1),
+          quality: '7',
+          bass: null,
+          wrapper: 'none',
+        });
       });
 
-      it.each(sharps)('keeps %j inside a quality', (sharp) => {
-        expect(parsed(`CM7(${sharp}11)`).quality).toBe(`M7(${sharp}11)`);
+      it.each([...SHARP_CHARS])('reads %j after the bass as a sharp', (sharp) => {
+        expect(parsed(`C/G${sharp}`).bass).toEqual(note('G', 1));
+      });
+
+      it.each([...FLAT_CHARS])('reads %j after the bass as a flat', (flat) => {
+        expect(parsed(`C/G${flat}`).bass).toEqual(note('G', -1));
+      });
+
+      it.each([...ACCIDENTAL_CHARS])('keeps %j inside a quality', (accidental) => {
+        expect(parsed(`CM7(${accidental}11)`).quality).toBe(`M7(${accidental}11)`);
       });
 
       // These cannot be confused with an accidental, so they only ever need

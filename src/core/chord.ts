@@ -1,4 +1,4 @@
-import { type Note, parseNote, readNotePrefix } from './pitch';
+import { ACCIDENTAL_CHARS, type Note, parseNote, readNotePrefix } from './pitch';
 
 /**
  * Chord symbols, parsed only as far as this project needs them: a root, an
@@ -41,12 +41,16 @@ export interface ChordSymbol {
  * never be exhaustive, and a spelling missing from it costs only a chord left
  * as it was.
  *
- * An accidental is the exception to that: one allowed here but not recognised
- * by `pitch.ts` would be read as the start of a quality when it follows the
- * root, relabelling the chord instead of leaving it alone. Every accidental
- * in this set has to be an accidental there too.
+ * The accidentals are taken from `pitch.ts` rather than repeated here. One
+ * allowed in a quality but unknown there would be read as the start of a
+ * quality when it follows the root, relabelling the chord instead of leaving
+ * it alone, so the two lists must not be able to drift apart. A new spelling
+ * of an accidental belongs in {@link ACCIDENTAL_CHARS}, and reaches this set
+ * from there.
  */
-const QUALITY_CHARS = /^[A-Za-z0-9()#＃♯b♭+,°øØ△▲∆Δ/−－ー-]*$/u;
+const OTHER_QUALITY_CHARS = 'A-Za-z0-9()+,°øØ△▲∆Δ/−－ー-';
+
+const QUALITY_CHARS = new RegExp(`^[${ACCIDENTAL_CHARS}${OTHER_QUALITY_CHARS}]*$`, 'u');
 
 /**
  * Whole tokens that label a part of a chart rather than name a chord.

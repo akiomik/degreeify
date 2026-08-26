@@ -30,15 +30,25 @@ const NATURAL_PITCH_CLASSES: Record<Letter, number> = {
 };
 
 /**
- * Every character that raises a note, and every character that lowers one.
+ * Every character that raises a note by a semitone.
  *
- * These have to cover at least the accidentals a chord quality is allowed to
- * contain. A character that is allowed in a quality but not recognised here
- * would be read as the start of a quality when it turns up after the root,
- * which relabels the chord rather than leaving it alone.
+ * More than one spelling is in circulation for most of these, and which one a
+ * chart carries comes down to the keyboard it was typed on.
  */
-const SHARP_CHARS = '#♯＃';
-const FLAT_CHARS = 'b♭';
+export const SHARP_CHARS = '#♯＃';
+
+/** Every character that lowers a note by a semitone. */
+export const FLAT_CHARS = 'b♭';
+
+/**
+ * Every character that spells an accidental.
+ *
+ * A chord quality is allowed to contain these, and only these, out of the
+ * characters that could be mistaken for one. Anything readable as an
+ * accidental that this does not cover would be read as the start of a quality
+ * when it follows a root, relabelling the chord rather than leaving it alone.
+ */
+export const ACCIDENTAL_CHARS = SHARP_CHARS + FLAT_CHARS;
 
 export function isLetter(value: string): value is Letter {
   return (LETTERS as readonly string[]).includes(value);
