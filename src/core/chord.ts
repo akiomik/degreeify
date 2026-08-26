@@ -43,6 +43,19 @@ export const DASH_LOOKALIKES = 'ー';
 export const DASH_MARKS = '−－-';
 
 /**
+ * Escapes a run of characters for use inside a regular expression class.
+ *
+ * Done here rather than by arranging the lists so that they happen to be safe
+ * where they are put. A hyphen sitting between two other characters opens a
+ * range, and a rule about which constant may be written last is a rule
+ * waiting to be broken by whoever adds the next one.
+ */
+const forCharClass = (chars: string) => chars.replace(/[\\\]^-]/g, '\\$&');
+
+/** Characters a quality may hold besides the letters and the digits. */
+const OTHER_QUALITY_CHARS = `${PLUS_MARKS}${TRIANGLE_MARKS}${DASH_MARKS}${DASH_LOOKALIKES}()°øØ,/`;
+
+/**
  * Characters a chord quality is written from.
  *
  * Passing an unknown quality through is deliberate, but "unknown" has to stop
@@ -66,19 +79,6 @@ export const DASH_MARKS = '−－-';
  * of an accidental belongs in {@link ACCIDENTAL_CHARS}, and reaches this set
  * from there.
  */
-/**
- * Escapes a run of characters for use inside a regular expression class.
- *
- * Done here rather than by arranging the lists so that they happen to be safe
- * where they are put. A hyphen sitting between two other characters opens a
- * range, and a rule about which constant may be written last is a rule
- * waiting to be broken by whoever adds the next one.
- */
-const forCharClass = (chars: string) => chars.replace(/[\\\]^-]/g, '\\$&');
-
-/** Characters a quality may hold besides the letters and the digits. */
-const OTHER_QUALITY_CHARS = PLUS_MARKS + TRIANGLE_MARKS + DASH_MARKS + DASH_LOOKALIKES + '()°øØ,/';
-
 const QUALITY_CHARS = new RegExp(
   `^[A-Za-z0-9${forCharClass(ACCIDENTAL_CHARS + OTHER_QUALITY_CHARS)}]*$`,
   'u',

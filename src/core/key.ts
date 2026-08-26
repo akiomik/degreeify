@@ -486,7 +486,7 @@ export function inferKey(chords: readonly ChordSymbol[]): KeyGuess | null {
   const confidence = best.fit * margin;
   if (confidence < MIN_CONFIDENCE) return null;
 
-  return { key: { ...best.key, tonic: spellTonic(best.key.tonic, chords) }, confidence };
+  return { key: { ...best.key, tonic: spellTonic(best.key.tonic, played) }, confidence };
 }
 
 function candidates(): Key[] {
@@ -540,16 +540,26 @@ function isIn(table: readonly Chord[], sound: Sound, tonic: number) {
 }
 
 /**
+ * How many accidentals a note may carry and still name a key.
+ *
+ * One. A chart spelling a pitch with two is spelling a chord that passes
+ * through it, and no key is named that way — nobody is in E double sharp.
+ */
+const MOST_ACCIDENTALS_IN_A_KEY_NAME = 1;
+
+/**
  * Spells the tonic the way the chart spells that pitch most often, falling
- * back to the canonical spelling when no chord names it. A chart full of `F#`
- * should not come back as being in G flat, and one `Gb` among thirty `F#`
- * should not decide it either.
+ * back to the canonical spelling when no chord names it that way. A chart
+ * full of `F#` should not come back as being in G flat, one `Gb` among thirty
+ * `F#` should not decide it either, and a passing `E##` should not name the
+ * key at all.
  */
 function spellTonic(tonic: Note, chords: readonly ChordSymbol[]): Note {
   const pitch = pitchClass(tonic);
   const spellings = new Map<string, { note: Note; count: number }>();
   for (const chord of chords) {
     if (pitchClass(chord.root) !== pitch) continue;
+    if (Math.abs(chord.root.accidental) > MOST_ACCIDENTALS_IN_A_KEY_NAME) continue;
     const name = formatNote(chord.root);
     const seen = spellings.get(name);
     if (seen) seen.count += 1;

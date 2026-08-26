@@ -443,6 +443,21 @@ describe('inferKey', () => {
     it('follows the spelling the chart uses most, not the one it uses first', () => {
       expect(guessOf('Gb', 'B', 'C#', 'D#m', 'F#', 'F#', 'F#')).toBe('F#');
     });
+
+    // A chord that may never be played does not get to name the key either,
+    // any more than it gets to end the chart or to be counted among its
+    // chords.
+    it('does not count a chord that is only offered towards the spelling', () => {
+      expect(guessOf('(Gb)', '(Gb)', '(Gb)', 'F#', 'B', 'C#', 'D#m', 'F#')).toBe('F#');
+    });
+
+    // Following the chart stops at what can name a key. A pitch spelled with
+    // two accidentals is a chord passing through it, and nobody is in E
+    // double sharp.
+    it('falls back rather than naming a key with a double accidental', () => {
+      expect(guessOf('E##', 'B', 'C#', 'D#m', 'E##', 'E##', 'E##')).toBe('Gb');
+      expect(guessOf('Gb', 'B', 'C#', 'D#m', 'Gb', 'Gb', 'Gb')).toBe('Gb');
+    });
   });
 
   describe('declining', () => {
