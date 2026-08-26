@@ -28,13 +28,16 @@ export interface Key {
 export type KeySource = 'page' | 'inferred' | 'manual';
 
 /**
- * A key and everything after it, up to the next one.
+ * A key, and where it came from.
  *
  * A chart is not in one key: a chord chart can state a new key part way
- * through, and several of them do. Keys are therefore a sequence in document
- * order rather than a single value, and a chart that states one key or none
- * is the same sequence with one entry or none. Nothing builds these yet; the
- * site adapter and the content script will.
+ * through, and several of them do. What follows one of these, up to the next,
+ * is in the key it names — but that is a fact about the sequence it is read
+ * from rather than about this, which says nothing about where in a chart it
+ * sits. It is the reader's job to keep them in document order and to know
+ * which chords fell between which two.
+ *
+ * Nothing builds these yet; the site adapter and the content script will.
  */
 export interface KeyRegion {
   readonly key: Key;
@@ -105,10 +108,17 @@ function hasFifth(word: string, marks: string): boolean {
  * The fifth has to be looked at on both sides. Reading it only under a major
  * third leaves `Cm7#5` as a plain minor chord while `CM7#5` is augmented,
  * which is the same quality mark taken two different ways.
+ *
+ * What is passed in is the quality after the mark naming the third, so that a
+ * mark cannot be read twice. The dash of `C-5` says minor and is then gone;
+ * left in, it would be found again against the five and make a diminished
+ * triad out of a chord that says no such thing.
  */
-function withFifth(word: string, third: 'major' | 'minor'): Triad | null {
-  if (hasFifth(word, RAISING_MARKS)) return third === 'major' ? 'augmented' : null;
-  if (hasFifth(word, FLATTENING_MARKS)) return third === 'major' ? null : 'diminished';
+function withFifth(rest: string, third: 'major' | 'minor'): Triad | null {
+  if (hasFifth(rest, RAISING_MARKS) || endsWithPlus(rest)) {
+    return third === 'major' ? 'augmented' : null;
+  }
+  if (hasFifth(rest, FLATTENING_MARKS)) return third === 'major' ? null : 'diminished';
   return third;
 }
 
@@ -126,12 +136,13 @@ function withFifth(word: string, third: 'major' | 'minor'): Triad | null {
 const MINOR_MARKS = ['m', ...DASH_MARKS];
 
 /**
- * A plus standing for a raised fifth on its own rather than raising something
- * written after it: `C+`, `C+7`, `C7+`. A plus against a number raises that
- * number, so `7+9` is a raised ninth and no business of this.
+ * A plus with nothing after it, which raises the fifth: `C7+`. Against a
+ * number it raises that number, so `7+9` is a raised ninth and no business of
+ * this, and at the front of a quality it is the augmented sign rather than a
+ * mark on anything.
  */
-function hasBarePlus(quality: string): boolean {
-  return [...PLUS_MARKS].some((plus) => quality.startsWith(plus) || quality.endsWith(plus));
+function endsWithPlus(quality: string): boolean {
+  return [...PLUS_MARKS].some((plus) => quality.endsWith(plus));
 }
 
 /**
@@ -152,9 +163,11 @@ function triadOf(quality: string): Triad | null {
   const word = quality.toLowerCase();
 
   // A word naming the triad says so wherever it sits in the quality: `7sus4`
-  // is as common as `sus4`, and `7aug` as `aug7`.
+  // is as common as `sus4`, and `7aug` as `aug7`. The augmented sign counts
+  // as one of those words when it stands at the front, where there is nothing
+  // for it to be a mark on; anywhere else it is a mark, and read as one.
   if (includesAny(word, ['dim', '°', 'ø'])) return 'diminished';
-  if (word.includes('aug') || hasBarePlus(quality)) return 'augmented';
+  if (word.includes('aug') || startsWithAny(quality, [...PLUS_MARKS])) return 'augmented';
   // A suspended or a power chord states no third, so it fits every key
   // equally and is evidence for none of them.
   if (word.includes('sus') || word.startsWith('5')) return null;
@@ -163,19 +176,20 @@ function triadOf(quality: string): Triad | null {
   // the `ma` that says major. Which it is comes down to the case of that one
   // letter, so a quality shouted in capitals cannot say.
   if (word.startsWith('madd')) {
-    if (quality.startsWith('m')) return withFifth(word, 'minor');
-    return quality.startsWith('Madd') ? withFifth(word, 'major') : null;
+    if (quality.startsWith('m')) return withFifth(word.slice(1), 'minor');
+    return quality.startsWith('Madd') ? withFifth(word.slice(1), 'major') : null;
   }
 
   // `mi` covers `min` and `mi7` alike, and `ma` covers `maj7` and the fake
   // book's `ma7`. Both are settled before the bare `m` that they all begin
   // with, and before the `M` that says major on its own.
-  if (word.startsWith('mi')) return withFifth(word, 'minor');
-  if (word.startsWith('ma')) return withFifth(word, 'major');
+  if (word.startsWith('mi')) return withFifth(word.slice(2), 'minor');
+  if (word.startsWith('ma')) return withFifth(word.slice(2), 'major');
   // Lower-casing a triangle turns the Greek delta into a different letter, so
   // these are read as written — as `M` has to be in any case.
-  if (startsWithAny(quality, ['M', ...TRIANGLE_MARKS])) return withFifth(word, 'major');
-  if (startsWithAny(quality, MINOR_MARKS)) return withFifth(word, 'minor');
+  if (startsWithAny(quality, ['M', ...TRIANGLE_MARKS])) return withFifth(word.slice(1), 'major');
+  const minorMark = MINOR_MARKS.find((mark) => quality.startsWith(mark));
+  if (minorMark) return withFifth(word.slice(minorMark.length), 'minor');
   // A quality that opens with a bracket says nothing before it, so the triad
   // is the plain one the root names: `C(9)` is a C major triad with a ninth.
   if (startsWithAny(word, ['add', '(', '6', '7', '9', '11', '13'])) return withFifth(word, 'major');
@@ -278,7 +292,16 @@ const CANONICAL_TONIC = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', '
 
 export interface KeyGuess {
   readonly key: Key;
-  /** Zero to one. See {@link inferKey} for what it is measuring. */
+  /**
+   * Zero to one, and about the tonic rather than the whole key.
+   *
+   * A degree name is drawn from the tonic alone, so that is what {@link
+   * inferKey} weighs and what this reports. The mode is the better-supported
+   * of the two readings on that tonic and no more: it changes nothing about
+   * the names a chart is given, but {@link formatKey} does render it, and a
+   * caller putting the key in front of someone is showing them something this
+   * number does not vouch for.
+   */
   readonly confidence: number;
 }
 
@@ -334,7 +357,9 @@ const TONIC_TRIAD: Record<Mode, Triad> = { major: 'major', minor: 'minor' };
  * matter: a key that explains half the chords is a poor guess however far
  * ahead it is, and a key that explains all of them is still a guess if
  * another key explains them just as well. Only a different tonic counts as
- * another key here, since a degree name is drawn from the tonic alone.
+ * another key here, since a degree name is drawn from the tonic alone — which
+ * is also why the confidence says nothing about the mode. See
+ * {@link KeyGuess.confidence}.
  *
  * **Declining is a normal outcome, not a failure.** A chart that offers no
  * way to choose between three keys really does not say which it is in, and a

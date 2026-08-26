@@ -22,6 +22,19 @@ const guessOf = (...symbols: string[]): string | null => {
   return guess && formatKey(guess.key);
 };
 
+/**
+ * How a quality is read, seen through the key it leads to.
+ *
+ * In C major the seventh degree is a diminished triad on B, so putting a
+ * chord on B into an otherwise plain chart and reading off the confidence
+ * says what its triad was taken for: full marks when it is that chord or is
+ * set aside as saying nothing, less when it is read as something in no scale.
+ */
+const readingOf = (quality: string): string => {
+  const guess = inferKey(chords('C', 'Dm', 'Em', 'F', 'G', 'Am', `B${quality}`, 'C'));
+  return guess ? guess.confidence.toFixed(4) : 'declined';
+};
+
 describe('parseKey', () => {
   const accepted: [string, string][] = [
     ['C', 'C'],
@@ -163,6 +176,14 @@ describe('inferKey', () => {
       expect(guessOf(`C${dash}7`, `F${dash}7`, `G${dash}7`, `C${dash}7`)).toBe('Cm');
     });
 
+    // A mark that has already said which third the chord has is spent, and
+    // must not be found again against the fifth. `C-5` says minor and then
+    // says five; it does not say a diminished triad.
+    it.each([...DASH_MARKS])('does not read %j as the third and the fifth at once', (dash) => {
+      expect(readingOf(`${dash}5`)).toBe(readingOf('m5'));
+      expect(readingOf(`${dash}5`)).not.toBe(readingOf('m-5'));
+    });
+
     // A quality is allowed to hold what a Japanese keyboard puts where a dash
     // would go, which is not the same as that character saying something on
     // its own. It reads as a dash where what surrounds it says so, and says
@@ -278,13 +299,20 @@ describe('inferKey', () => {
         expect(guessOf(`C7${plus}5`, `F7${plus}5`, `G7${plus}5`, `C7${plus}5`)).toBeNull();
       });
 
-      // A plus with nothing after it is the raised fifth on its own, wherever
-      // in the quality it sits. Against a number it raises that number, and
-      // says nothing about the fifth.
+      // A plus with nothing after it is the raised fifth, wherever in the
+      // quality it sits. Against a number it raises that number, and says
+      // nothing about the fifth.
       it.each([...PLUS_MARKS])('reads %j on its own as augmented', (plus) => {
         for (const quality of [plus, `${plus}7`, `7${plus}`]) {
           expect(guessOf(`C${quality}`, `F${quality}`, `G${quality}`, `C${quality}`)).toBeNull();
         }
+      });
+
+      // Where it is a mark rather than the sign for the whole chord, it is
+      // read with the third the way every other mark is. `m7+` is `m7#5`.
+      it.each([...PLUS_MARKS])('reads a third under %j as it does under a sharp', (plus) => {
+        expect(readingOf(`m7${plus}`)).toBe(readingOf('m7#5'));
+        expect(readingOf(`M7${plus}`)).toBe(readingOf('M7#5'));
       });
 
       it.each([...PLUS_MARKS])('leaves a ninth raised with %j a major chord', (plus) => {
