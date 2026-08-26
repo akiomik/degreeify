@@ -111,6 +111,22 @@ describe('inferKey', () => {
       expect(guessOf('Am', 'F', 'G', 'Dm', 'Em', 'C')).toBe('C');
     });
 
+    // Where a chart ends says a great deal, but not more than what the chart
+    // is made of. Ends heavy enough to outweigh a chord give this one up:
+    // F major closes it, and C major accounts for every chord in it.
+    it('weighs what a chart is made of above where it ends', () => {
+      expect(guessOf('C', 'F', 'G', 'Am', 'F')).toBe('C');
+    });
+
+    // Which mode is the one thing the chords cannot settle between a pair on
+    // one tonic, so the ends settle it — and they are weighed against each
+    // other there too. Taking either as enough leaves a chart that opens on
+    // one and closes on the other tied all over again.
+    it('takes the mode a chart ends in when the two ends disagree', () => {
+      expect(guessOf('C', 'Dm', 'Em', 'Eb', 'Ab', 'Cm')).toBe('Cm');
+      expect(guessOf('Cm', 'Eb', 'Ab', 'Dm', 'Em', 'C')).toBe('C');
+    });
+
     // One end of the chart, against a fit that leaves nothing unaccounted
     // for, is the least evidence that still names a key — and it lands
     // exactly on the threshold, which is what the threshold is defined as.

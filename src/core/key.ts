@@ -362,17 +362,22 @@ export interface KeyGuess {
 const MIN_DISTINCT_CHORDS = 3;
 
 /**
- * What each end of the chart is worth when it rests on the key's tonic.
+ * What each end of the chart is worth when it rests on the key's tonic,
+ * counted in chords — the same unit everything else on the scoreboard is in,
+ * so that the two can be weighed against each other.
  *
- * Closing there counts for more than opening there, because that is how much
- * more it says. A chart is in the key it arrives at; where it sets out from
- * is a weaker claim on the same question. Worth the same, the two cancel on a
- * chart that opens on one relative's tonic and closes on the other's, leaving
- * the pair level and the chart given up on when the ending had already
- * answered it.
+ * Closing on the tonic is worth about as much as one more chord accounted
+ * for; opening on it, about half that. A chart is in the key it arrives at,
+ * and where it sets out from is a weaker claim on the same question.
+ *
+ * Both were once worth twice this, which made the ends of a chart heavy
+ * enough to outweigh the chords: `C - F - G - Am - F` was given up on,
+ * because F major closing the chart beat C major accounting for every chord
+ * in it. Where a chart ends says a great deal, but not more than what the
+ * chart is made of.
  */
-const OPENING_POINTS = 1;
-const CLOSING_POINTS = 2;
+const OPENING_POINTS = 0.5;
+const CLOSING_POINTS = 1;
 
 /**
  * What a chord only one of two relatives has counts for, as a fraction of a
@@ -383,20 +388,21 @@ const CLOSING_POINTS = 2;
 const MODAL_WEIGHT = 0.5;
 
 /**
- * The margin, in points, at which one key is taken to be clearly ahead of the
- * next. Two, which is what closing the chart on a tonic is worth: the point
- * where the strongest single piece of evidence for one stands unopposed.
+ * The margin, in chords, at which one key is taken to be clearly ahead of the
+ * next. One: the point where the strongest single piece of evidence for a key
+ * — a chord it accounts for and the other does not, or the ending of the
+ * chart — stands unopposed.
  */
-const CLEAR_MARGIN = 2;
+const CLEAR_MARGIN = 1;
 
 /**
  * Below this, {@link inferKey} declines rather than guessing.
  *
- * The value is a description rather than a dial: at a {@link CLEAR_MARGIN} of
- * two, a half is exactly the opening of the chart landing on the tonic
- * against a fit that leaves nothing unaccounted for. That is the least
- * evidence worth naming a key on, and it is meant to be included rather than
- * excluded.
+ * The value is a description rather than a dial: against a {@link
+ * CLEAR_MARGIN} of one chord, a half is exactly the opening of the chart
+ * landing on the tonic with a fit that leaves nothing unaccounted for. That
+ * is the least evidence worth naming a key on, and it is meant to be included
+ * rather than excluded.
  */
 export const MIN_CONFIDENCE = 0.5;
 
@@ -461,16 +467,14 @@ export function inferKey(chords: readonly ChordSymbol[]): KeyGuess | null {
     const bookends =
       (isTonicChord(opening, tonic) ? OPENING_POINTS : 0) +
       (isTonicChord(closing, tonic) ? CLOSING_POINTS : 0);
-    const spelled = agreesWithMode(opening, key, tonic) || agreesWithMode(closing, key, tonic);
+    const spelled = modeAgreement(opening, closing, key, tonic);
     return { key, fit: accounted / distinct.length, total: accounted + bookends, spelled };
   });
   // Where two keys come out level, the one the chart spells its tonic chord
   // as goes first. It is only ever a pair on the same tonic that this decides
   // anything for: two keys on different tonics coming out level is a margin
   // of nothing, and the chart is given up on whichever of them is put first.
-  scored.sort(
-    (one, other) => other.total - one.total || Number(other.spelled) - Number(one.spelled),
-  );
+  scored.sort((one, other) => other.total - one.total || other.spelled - one.spelled);
 
   // The runner-up is the best candidate that would name the chords
   // differently. Two keys on the same tonic disagree only about the mode,
@@ -480,6 +484,9 @@ export function inferKey(chords: readonly ChordSymbol[]): KeyGuess | null {
   if (!best) return null;
   const bestTonic = pitchClass(best.key.tonic);
   const runnerUp = scored.find((other) => pitchClass(other.key.tonic) !== bestTonic);
+  // Unreachable: the candidates span all twelve tonics, so one of them always
+  // differs from the winner's. It is here because the type says otherwise,
+  // and the alternative is asserting it away.
   if (!runnerUp) return null;
 
   const margin = Math.min(1, (best.total - runnerUp.total) / CLEAR_MARGIN);
@@ -522,16 +529,22 @@ function isTonicChord(end: Sound | null, tonic: number): boolean {
 }
 
 /**
- * Whether an end of the chart is the key's tonic chord spelled as the key
- * would spell it.
+ * How far the ends of the chart agree that the key is in the mode it claims.
  *
  * Nothing is scored on this. It separates two keys on the same tonic that
  * have come out level, where the chords cannot: a chart resting on `Am` is in
  * A minor rather than A major, whatever else the two of them share. A chord
  * whose triad cannot be read settles nothing either way.
+ *
+ * The two ends are weighed against each other rather than taken together,
+ * for the same reason they are worth different amounts elsewhere. A chart
+ * opening on `C` and closing on `Cm` speaks for both modes, and taking either
+ * as enough leaves the pair tied again, which is what this exists to break.
  */
-function agreesWithMode(end: Sound | null, key: Key, tonic: number): boolean {
-  return isTonicChord(end, tonic) && end?.triad === TONIC_TRIAD[key.mode];
+function modeAgreement(opening: Sound | null, closing: Sound | null, key: Key, tonic: number) {
+  const agrees = (end: Sound | null) =>
+    isTonicChord(end, tonic) && end?.triad === TONIC_TRIAD[key.mode];
+  return (agrees(closing) ? CLOSING_POINTS : 0) + (agrees(opening) ? OPENING_POINTS : 0);
 }
 
 function isIn(table: readonly Chord[], sound: Sound, tonic: number) {
