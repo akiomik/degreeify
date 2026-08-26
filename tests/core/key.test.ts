@@ -76,6 +76,15 @@ describe('inferKey', () => {
       expect(guessOf('C', 'F', 'G', 'C')).toBe('C');
     });
 
+    // A chart is in the key it arrives at more than the key it sets out
+    // from. Worth the same, the two ends cancel here and leave the pair
+    // level, and a chart whose ending had already answered the question is
+    // given up on.
+    it('takes the key a chart ends in over the one it opens in', () => {
+      expect(guessOf('C', 'F', 'G', 'Dm', 'Em', 'Am')).toBe('Am');
+      expect(guessOf('Am', 'F', 'G', 'Dm', 'Em', 'C')).toBe('C');
+    });
+
     // One end of the chart, against a fit that leaves nothing unaccounted
     // for, is the least evidence that still names a key — and it lands
     // exactly on the threshold, which is what the threshold is defined as.
@@ -283,9 +292,17 @@ describe('inferKey', () => {
     // and a lowered one under a major third makes nothing that has a name.
     // Neither is the plain major triad they were being read as.
     describe('an altered fifth', () => {
-      // A word naming the triad says so wherever it sits: `7aug` is `aug7`.
+      // The word names the whole triad from the front of a quality, where
+      // there is no third in front of it. Further in it is a mark on the
+      // fifth like any other, and read with the third: `m7aug` is the same
+      // nameless thing as `m7#5`, not an augmented chord.
       it.each(['aug', 'aug7', '7aug'])('reads %j as augmented', (quality) => {
         expect(guessOf(`C${quality}`, `F${quality}`, `G${quality}`, `C${quality}`)).toBeNull();
+      });
+
+      it('reads a third under the word the way it reads one under a sharp', () => {
+        expect(readingOf('m7aug')).toBe(readingOf('m7#5'));
+        expect(readingOf('M7aug')).toBe(readingOf('M7#5'));
       });
 
       it.each(['(#5)', '7#5', 'M7#5', '7(#5)'])('reads %j as augmented', (quality) => {
@@ -355,8 +372,18 @@ describe('inferKey', () => {
       expect(guessOf('C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bdim', 'Caug', 'Faug', 'C')).toBe('C');
     });
 
-    it('declines on a chart made mostly of them', () => {
-      expect(guessOf('C', 'F', 'G', 'Am', 'Dm', 'Caug', 'Faug', 'Gaug', 'C')).toBeNull();
+    // What the policy says is that they cost a chart confidence in its own
+    // key, in proportion to how much of it they are. Pinned that way rather
+    // than by where the counting happens to cross the threshold, which is a
+    // consequence and not the rule.
+    it('costs a chart confidence in proportion to how many it carries', () => {
+      const confidenceOf = (...symbols: string[]) => inferKey(chords(...symbols))?.confidence ?? 0;
+      const none = confidenceOf('C', 'F', 'G', 'Am', 'Dm', 'C');
+      const some = confidenceOf('C', 'F', 'G', 'Am', 'Dm', 'Caug', 'C');
+      const mostly = confidenceOf('C', 'F', 'G', 'Am', 'Dm', 'Caug', 'Faug', 'Gaug', 'C');
+
+      expect(some).toBeLessThan(none);
+      expect(mostly).toBeLessThan(some);
     });
   });
 

@@ -115,9 +115,7 @@ function hasFifth(word: string, marks: string): boolean {
  * triad out of a chord that says no such thing.
  */
 function withFifth(rest: string, third: 'major' | 'minor'): Triad | null {
-  if (hasFifth(rest, RAISING_MARKS) || endsWithPlus(rest)) {
-    return third === 'major' ? 'augmented' : null;
-  }
+  if (raisesFifth(rest)) return third === 'major' ? 'augmented' : null;
   if (hasFifth(rest, FLATTENING_MARKS)) return third === 'major' ? null : 'diminished';
   return third;
 }
@@ -155,13 +153,20 @@ const BARE_FIFTHS = ['5', '(5)'];
 const MINOR_MARKS = ['m', ...DASH_MARKS];
 
 /**
- * A plus with nothing after it, which raises the fifth: `C7+`. Against a
- * number it raises that number, so `7+9` is a raised ninth and no business of
- * this, and at the front of a quality it is the augmented sign rather than a
- * mark on anything.
+ * Whether what follows the mark naming the third raises the fifth.
+ *
+ * A plus with nothing after it does: `C7+`. Against a number it raises that
+ * number, so `7+9` is a raised ninth and no business of this. So does the
+ * word, which is how `C7aug` says what `C7#5` says — at the front of a
+ * quality that word names the whole triad, but here there is already a third
+ * for it to be read against.
  */
-function endsWithPlus(quality: string): boolean {
-  return [...PLUS_MARKS].some((plus) => quality.endsWith(plus));
+function raisesFifth(rest: string): boolean {
+  return (
+    hasFifth(rest, RAISING_MARKS) ||
+    rest.includes('aug') ||
+    [...PLUS_MARKS].some((plus) => rest.endsWith(plus))
+  );
 }
 
 /**
@@ -181,12 +186,13 @@ function triadOf(quality: string): Triad | null {
 
   const word = quality.toLowerCase();
 
-  // A word naming the triad says so wherever it sits in the quality: `7sus4`
-  // is as common as `sus4`, and `7aug` as `aug7`. The augmented sign counts
-  // as one of those words when it stands at the front, where there is nothing
-  // for it to be a mark on; anywhere else it is a mark, and read as one.
+  // A word naming the whole triad says so from the front, where there is no
+  // third in front of it to be read against. Further in, `aug` and the plus
+  // are marks on the fifth like any other, and {@link withFifth} reads them
+  // with the third — so `7aug` is augmented and `m7aug` is the nameless thing
+  // `m7#5` is.
   if (includesAny(word, ['dim', '°', 'ø'])) return 'diminished';
-  if (word.includes('aug') || startsWithAny(quality, [...PLUS_MARKS])) return 'augmented';
+  if (startsWithAny(word, ['aug', ...PLUS_MARKS])) return 'augmented';
   if (includesAny(word, NO_THIRD_WORDS) || startsWithAny(word, BARE_FIFTHS)) return null;
 
   // An `m` in front of an `add` is a minor chord with something added, not
@@ -328,8 +334,18 @@ export interface KeyGuess {
  */
 const MIN_DISTINCT_CHORDS = 3;
 
-/** A point each for opening the chart on the key's tonic and for closing on it. */
-const BOOKEND_POINTS = 1;
+/**
+ * What each end of the chart is worth when it rests on the key's tonic.
+ *
+ * Closing there counts for more than opening there, because that is how much
+ * more it says. A chart is in the key it arrives at; where it sets out from
+ * is a weaker claim on the same question. Worth the same, the two cancel on a
+ * chart that opens on one relative's tonic and closes on the other's, leaving
+ * the pair level and the chart given up on when the ending had already
+ * answered it.
+ */
+const OPENING_POINTS = 1;
+const CLOSING_POINTS = 2;
 
 /**
  * What a chord only one of two relatives has counts for, as a fraction of a
@@ -341,8 +357,8 @@ const MODAL_WEIGHT = 0.5;
 
 /**
  * The margin, in points, at which one key is taken to be clearly ahead of the
- * next. Opening and closing on a tonic is worth two, so this is the point
- * where the evidence for a tonic is unopposed.
+ * next. Two, which is what closing the chart on a tonic is worth: the point
+ * where the strongest single piece of evidence for one stands unopposed.
  */
 const CLEAR_MARGIN = 2;
 
@@ -350,9 +366,10 @@ const CLEAR_MARGIN = 2;
  * Below this, {@link inferKey} declines rather than guessing.
  *
  * The value is a description rather than a dial: at a {@link CLEAR_MARGIN} of
- * two, a half is exactly one end of the chart landing on the tonic against a
- * fit that leaves nothing unaccounted for. That is the least evidence worth
- * naming a key on, and it is meant to be included rather than excluded.
+ * two, a half is exactly the opening of the chart landing on the tonic
+ * against a fit that leaves nothing unaccounted for. That is the least
+ * evidence worth naming a key on, and it is meant to be included rather than
+ * excluded.
  */
 export const MIN_CONFIDENCE = 0.5;
 
@@ -408,14 +425,15 @@ export function inferKey(chords: readonly ChordSymbol[]): KeyGuess | null {
     const modal = distinct.filter((sound) => isIn(MODAL[key.mode], sound, tonic)).length;
     const accounted = plain + modal * MODAL_WEIGHT;
     const bookends =
-      (isTonicChord(opening, tonic) ? BOOKEND_POINTS : 0) +
-      (isTonicChord(closing, tonic) ? BOOKEND_POINTS : 0);
+      (isTonicChord(opening, tonic) ? OPENING_POINTS : 0) +
+      (isTonicChord(closing, tonic) ? CLOSING_POINTS : 0);
     const spelled = agreesWithMode(opening, key, tonic) || agreesWithMode(closing, key, tonic);
     return { key, fit: accounted / distinct.length, total: accounted + bookends, spelled };
   });
   // Where two keys come out level, the one the chart spells its tonic chord
-  // as wins. That only ever separates a pair on the same tonic — anything
-  // else has already been settled by the chords.
+  // as goes first. It is only ever a pair on the same tonic that this decides
+  // anything for: two keys on different tonics coming out level is a margin
+  // of nothing, and the chart is given up on whichever of them is put first.
   scored.sort(
     (one, other) => other.total - one.total || Number(other.spelled) - Number(one.spelled),
   );
