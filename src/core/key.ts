@@ -403,8 +403,20 @@ const MODAL: Record<Mode, readonly Chord[]> = {
   ],
 };
 
-/** Flat-preferring spelling per pitch class, for when the chart offers none. */
-const CANONICAL_TONIC = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+/**
+ * What to call each pitch when the chart offers no spelling of its own.
+ *
+ * One list per mode, because the two do not name the same pitches the same
+ * way. A flat-preferring name works throughout the major keys, but D flat and
+ * G flat name no minor key at all — those are C sharp minor and F sharp minor,
+ * and a signature of eight or nine flats is not one anybody writes. Every name
+ * here is the one its key is called by, which is to say the one with the
+ * fewest accidentals in it.
+ */
+const CANONICAL_TONIC: Record<Mode, readonly string[]> = {
+  major: ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'],
+  minor: ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'G#', 'A', 'Bb', 'B'],
+};
 
 export interface KeyGuess {
   readonly key: Key;
@@ -479,11 +491,15 @@ const TONIC_TRIAD: Record<Mode, Triad> = { major: 'major', minor: 'minor' };
  * Guesses which key a sequence of chords is in, or declines.
  *
  * Every one of the twenty-four keys is scored on how many of the chart's
- * distinct chords it accounts for, with a point each for opening and closing
- * the chart on the key's own tonic chord. A chord only one of two relatives
- * has counts for part of one, which along with the ends of the chart is all
- * that separates relatives: they share every chord of the plain scale and can
- * never be told apart by fit alone.
+ * distinct chords it accounts for, with a chord's worth again for the chart
+ * closing on the key's tonic and half of one for opening there. A chord only
+ * one of two relatives has counts for part of one, which along with the ends
+ * of the chart is all that separates relatives: they share every chord of the
+ * plain scale and can never be told apart by fit alone.
+ *
+ * The ends are read from the root a chord is built on and not from the chord,
+ * so a chart that finishes on the tonic finishes there whether it says a
+ * major chord, a minor one or a bare fifth.
  *
  * The confidence is how well the winning key accounts for the chart,
  * discounted by how close the nearest key on a different tonic came. Both
@@ -569,11 +585,13 @@ export function inferKey(chords: readonly ChordSymbol[]): KeyGuess | null {
 
 function candidates(): Key[] {
   const modes: Mode[] = ['major', 'minor'];
-  return CANONICAL_TONIC.flatMap((name, pitch) => {
-    const tonic = parseNote(name);
-    if (!tonic) throw new Error(`${name} at pitch class ${pitch} is not a note`);
-    return modes.map((mode) => ({ tonic, mode }));
-  });
+  return modes.flatMap((mode) =>
+    CANONICAL_TONIC[mode].map((name, pitch) => {
+      const tonic = parseNote(name);
+      if (!tonic) throw new Error(`${name} at pitch class ${pitch} is not a note`);
+      return { tonic, mode };
+    }),
+  );
 }
 
 interface Sound {

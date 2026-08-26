@@ -533,6 +533,67 @@ describe('inferKey', () => {
       expect(guessOf('Gb', 'B', 'C#', 'D#m', 'Gb', 'Gb', 'Gb')).toBe('Gb');
     });
 
+    // Where no chord names the tonic's pitch the name comes from a table,
+    // and the two modes do not name the same pitches the same way. D flat and
+    // G flat name no minor key — those are C sharp minor and F sharp minor —
+    // so a minor chart spelled in flats cannot be named out of the list the
+    // major keys use.
+    it('names a minor key on a pitch the major keys spell flat', () => {
+      expect(guessOf('Dbm', 'Gbm', 'Ab7', 'Dbm')).toBe('C#m');
+      expect(guessOf('Gbm', 'Bm', 'Db7', 'Gbm')).toBe('F#m');
+    });
+
+    it('still names the major keys on those pitches with flats', () => {
+      expect(guessOf('Db', 'Gb', 'Ab7', 'Db')).toBe('Db');
+      expect(guessOf('Gb', 'B', 'Db7', 'Gb')).toBe('Gb');
+    });
+
+    // Whatever comes back has to be a name this module would take back. The
+    // two paths are held to one rule; this says so from the outside.
+    it('never names a key it could not read back', () => {
+      const vocabulary = [
+        'C',
+        'Cm',
+        'C#m',
+        'Db',
+        'D',
+        'Dm',
+        'Eb',
+        'Em',
+        'E7',
+        'F',
+        'Fm',
+        'F#m',
+        'Gb',
+        'Gbm',
+        'Dbm',
+        'G',
+        'Gm',
+        'G#m',
+        'Ab',
+        'Am',
+        'A7',
+        'Bb',
+        'Bm',
+        'B',
+        'Bdim',
+        'D#dim',
+      ];
+      let seed = 1;
+      const next = (n: number) => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff), seed % n);
+
+      for (let attempt = 0; attempt < 2000; attempt++) {
+        const symbols = Array.from(
+          { length: 3 + next(5) },
+          () => vocabulary[next(vocabulary.length)] ?? 'C',
+        );
+        const guess = inferKey(chords(...symbols));
+        if (!guess) continue;
+        const name = formatKey(guess.key);
+        expect(parseKey(name), `${symbols.join(' ')} was named ${name}`).not.toBeNull();
+      }
+    });
+
     // The same rule as the one a name read off a chart is held to, and it
     // depends on the mode: a chart spelling its tonic `G#` is in G sharp
     // minor if it is minor, and in A flat if it is major.
