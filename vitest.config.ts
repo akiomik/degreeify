@@ -8,7 +8,5 @@ export default defineConfig({
     // with `// @vitest-environment happy-dom`.
     environment: 'node',
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
-    // TODO: drop once the first suite lands, so a broken glob fails CI.
-    passWithNoTests: true,
   },
 });
