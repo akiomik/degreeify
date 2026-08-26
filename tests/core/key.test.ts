@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type ChordSymbol, parseChord, TRIANGLE_MARKS } from '@/core/chord';
+import { type ChordSymbol, DASH_MARKS, parseChord, TRIANGLE_MARKS } from '@/core/chord';
 import { formatKey, inferKey, MIN_CONFIDENCE, parseKey } from '@/core/key';
 
 const chords = (...symbols: string[]): ChordSymbol[] =>
@@ -75,6 +75,16 @@ describe('inferKey', () => {
       expect(guessOf('C', 'Dm', 'Em', 'F', 'G', 'Am', 'E7', 'C')).toBe('C');
     });
 
+    // C major and C minor share almost none of their chords, but a tonic
+    // chord with no third in it hands both of them the ends of the chart, so
+    // the two can end up leading together. They disagree only about the mode,
+    // and no degree name is drawn from the mode, so whichever of them is
+    // taken the chart reads the same. Declining over that gives up an answer
+    // for a difference that makes none.
+    it('does not treat a key on the same tonic as a rival', () => {
+      expect(guessOf('C5', 'Dm', 'Fm', 'G', 'Bdim', 'C5')).toBe('C');
+    });
+
     it('reports a confidence at or above the threshold it accepted on', () => {
       const guess = inferKey(chords('C', 'F', 'G', 'C'));
       expect(guess?.confidence).toBeGreaterThanOrEqual(MIN_CONFIDENCE);
@@ -99,11 +109,10 @@ describe('inferKey', () => {
 
     // Each of them is worth the same. Crediting the mode once however many it
     // finds, while every one still takes up a slot of the fit, makes a chart
-    // worse evidence for its own key the more of them it holds.
+    // worse evidence for its own key the more of them it holds — and this
+    // one, which is two thirds raised sevenths, would be given up on.
     it('counts every one of them, not just the first', () => {
-      const one = inferKey(chords('Am', 'Dm', 'E7', 'Am'));
-      const two = inferKey(chords('Am', 'Dm', 'E7', 'G#dim', 'Am'));
-      expect(two?.confidence).toBeGreaterThanOrEqual((one?.confidence ?? 1) * 0.9);
+      expect(guessOf('Am', 'E7', 'G#dim', 'Am')).toBe('Am');
     });
 
     // Opening and closing on `Am` is evidence for A minor and none at all for
@@ -139,10 +148,30 @@ describe('inferKey', () => {
     });
 
     // A jazz lead sheet writes with a dash what a chart elsewhere writes with
-    // an `m`, and the parser accepts both.
-    it('reads a dash as a minor third', () => {
-      expect(guessOf('C-7', 'F-7', 'G-7', 'C-7')).toBe('Cm');
-      expect(guessOf('C', 'D-7', 'E-7', 'F', 'G', 'A-7', 'C')).toBe('C');
+    // an `m`, and the parser accepts every spelling of a dash.
+    it.each([...DASH_MARKS])('reads %j as a minor third', (dash) => {
+      expect(guessOf(`C${dash}7`, `F${dash}7`, `G${dash}7`, `C${dash}7`)).toBe('Cm');
+    });
+
+    it.each([...DASH_MARKS])('reads a fifth flattened with %j', (dash) => {
+      const plain = inferKey(chords('C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bdim', 'C'));
+      const guess = inferKey(chords('C', 'Dm', 'Em', 'F', 'G', 'Am', `Bm7${dash}5`, 'C'));
+      expect(guess?.confidence).toBe(plain?.confidence);
+    });
+
+    // Case says which of `M` and `m` is meant and nothing else, so a quality
+    // spelled out as a word has to read the same however it is capitalised.
+    // A suspension read as a major chord is the opposite of what it says.
+    const capitalised: [string, string[], string | null][] = [
+      ['a suspension', ['C7SUS4', 'F7SUS4', 'G7SUS4', 'C7SUS4'], null],
+      ['a minor', ['CMI7', 'FMI7', 'GMI7', 'CMI7'], 'Cm'],
+      ['a spelled-out minor', ['CMin7', 'FMin7', 'GMin7', 'CMin7'], 'Cm'],
+      ['a major seventh', ['CMAJ7', 'Dm7', 'FMAJ7', 'G7', 'CMAJ7'], 'C'],
+      ['a diminished', ['C', 'Dm', 'Em', 'F', 'G', 'Am', 'BDIM', 'C'], 'C'],
+    ];
+
+    it.each(capitalised)('reads %s written in capitals', (_what, symbols, expected) => {
+      expect(guessOf(...symbols)).toBe(expected);
     });
 
     // A quality that opens with a bracket says nothing before it, so the
@@ -189,9 +218,11 @@ describe('inferKey', () => {
     });
 
     // A key and its relative are built from the same chords and can never be
-    // separated by fit alone. This chart opens and closes on neither tonic
-    // and holds no chord that only one of the two modes has, so there is
-    // nothing at all to choose between them.
+    // separated by fit alone. Here C major and A minor account for all six
+    // and neither end of the chart is on either tonic, so nothing at all
+    // chooses between them — and D minor, which does hold both ends, cannot
+    // account for enough of the chords to pull ahead of either. Three keys
+    // level, and no reading of the chart settles it.
     it('declines when nothing chooses between a key and its relative', () => {
       expect(guessOf('Dm', 'F', 'G', 'Am', 'Em', 'Dm')).toBeNull();
     });

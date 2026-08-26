@@ -1,5 +1,5 @@
-import { type ChordSymbol, TRIANGLE_MARKS } from './chord';
-import { formatNote, type Note, parseNote, pitchClass, readNotePrefix } from './pitch';
+import { type ChordSymbol, DASH_MARKS, TRIANGLE_MARKS } from './chord';
+import { FLAT_CHARS, formatNote, type Note, parseNote, pitchClass, readNotePrefix } from './pitch';
 
 export type Mode = 'major' | 'minor';
 
@@ -63,38 +63,63 @@ export function formatKey(key: Key): string {
 type Triad = 'major' | 'minor' | 'diminished' | 'augmented';
 
 /**
- * A flattened fifth anywhere in a minor quality, which makes the triad
- * diminished: `m7-5`, `m7b5`, `m7(b5)`. The alteration is not anchored to a
- * position because the quality is carried through as the chart wrote it, and
- * charts write all three, in any of the spellings of a flat.
+ * The marks that lower a fifth, taken from the two lists that already say
+ * what a flat and a dash may be written as, so that a spelling the parser
+ * accepts cannot be one this file fails to read.
  */
-const FLAT_FIFTH = /[-b♭−－ー]\s*5/;
-
-/** A chord that states no third, wherever the word appears in the quality. */
-const NO_THIRD = /sus/;
+const FLATTENING_MARKS = DASH_MARKS + FLAT_CHARS;
 
 /**
- * How a quality can begin and still mean a minor third: `m`, `min`, and the
- * dash of a jazz lead sheet, where `C-7` is what a chart elsewhere writes as
- * `Cm7`. A flattened fifth on top of any of them makes the triad diminished.
+ * A flattened fifth anywhere in a minor quality, which makes the triad
+ * diminished: `m7-5`, `m7b5`, `m7(b5)`. It is not looked for at a fixed
+ * position because the quality comes through as the chart wrote it, and
+ * charts write all three.
  */
-const MINOR_MARKS = ['m', '-'];
+function hasFlatFifth(quality: string): boolean {
+  return [...FLATTENING_MARKS].some((mark) => quality.includes(`${mark}5`));
+}
 
+/**
+ * How a quality can begin and still mean a minor third: `m`, `mi`, `min`, and
+ * the dash of a jazz lead sheet, where `C-7` is what a chart elsewhere writes
+ * as `Cm7`. A flattened fifth on top of any of them makes the triad
+ * diminished.
+ */
+const MINOR_MARKS = ['m', ...DASH_MARKS];
+
+/**
+ * Reads the triad a quality describes.
+ *
+ * Case carries meaning in exactly one place, `M` against `m`, so everything
+ * spelled as a word is matched against a lower-cased copy and only those two
+ * are matched as written. Without that, `C7SUS4` counts as evidence for a
+ * major key — the opposite of what a suspension is — and `CMI7` reads as a
+ * major seventh rather than as a minor chord.
+ *
+ * `mi` and `min` are settled before `maj` and `M` for the same reason: they
+ * all begin with the same letter, and whichever is tested first wins.
+ */
 function triadOf(quality: string): Triad | null {
   if (quality === '') return 'major';
-  if (startsWithAny(quality, ['dim', '°', 'ø', 'Ø'])) return 'diminished';
-  if (startsWithAny(quality, ['aug', '+'])) return 'augmented';
+
+  const word = quality.toLowerCase();
+  if (startsWithAny(word, ['dim', '°', 'ø'])) return 'diminished';
+  if (startsWithAny(word, ['aug', '+'])) return 'augmented';
   // A suspended or a power chord states no third, so it fits every key
   // equally and is evidence for none of them. `sus` is looked for anywhere in
   // the quality because `7sus4` is as common as `sus4`.
-  if (NO_THIRD.test(quality) || quality.startsWith('5')) return null;
-  if (startsWithAny(quality, ['maj', 'M', ...TRIANGLE_MARKS])) return 'major';
+  if (word.includes('sus') || word.startsWith('5')) return null;
+  if (startsWithAny(word, ['mi', 'min'])) return hasFlatFifth(word) ? 'diminished' : 'minor';
+  if (word.startsWith('maj')) return 'major';
+  // Lower-casing a triangle turns the Greek delta into a different letter, so
+  // these are read as written — as `M` has to be in any case.
+  if (startsWithAny(quality, ['M', ...TRIANGLE_MARKS])) return 'major';
   if (startsWithAny(quality, MINOR_MARKS)) {
-    return FLAT_FIFTH.test(quality.slice(1)) ? 'diminished' : 'minor';
+    return hasFlatFifth(quality.slice(1)) ? 'diminished' : 'minor';
   }
   // A quality that opens with a bracket says nothing before it, so the triad
   // is the plain one the root names: `C(9)` is a C major triad with a ninth.
-  if (startsWithAny(quality, ['add', '(', '6', '7', '9', '11', '13'])) return 'major';
+  if (startsWithAny(word, ['add', '(', '6', '7', '9', '11', '13'])) return 'major';
   return null;
 }
 
@@ -158,8 +183,16 @@ const DIATONIC: Record<Mode, readonly Chord[]> = {
  *
  * A minor key raises its seventh degree far too often for the plain scale to
  * recognise one: the major fifth, the diminished seventh and the augmented
- * third all come from that. A major key borrows too, but nothing it borrows
- * is unavailable to its relative minor, so there is nothing to list.
+ * third all come from that.
+ *
+ * A major key borrows as well, and what it borrows from the parallel minor —
+ * a major third, sixth and seventh, and a minor fourth — is likewise beyond
+ * its relative minor's reach. Those are left off deliberately rather than
+ * because they do not exist. Listing them widens what a single major key can
+ * account for far enough that a chart with no single key is explained by one:
+ * the chart to hand that changes key seven times comes back as G major, at a
+ * confidence that would have been acted on. Leaving them off costs confidence
+ * on a chart that borrows, which is the safe direction to be wrong in.
  *
  * These are accounted for, at {@link MODAL_WEIGHT} of a chord each. Counting
  * them in full would put a mode back to accounting for everything its
@@ -234,10 +267,11 @@ const TONIC_TRIAD: Record<Mode, Triad> = { major: 'major', minor: 'minor' };
  * never be told apart by fit alone.
  *
  * The confidence is how well the winning key accounts for the chart,
- * discounted by how close the runner-up came. Both matter: a key that
- * explains half the chords is a poor guess however far ahead it is, and a key
- * that explains all of them is still a guess if another key explains them
- * just as well.
+ * discounted by how close the nearest key on a different tonic came. Both
+ * matter: a key that explains half the chords is a poor guess however far
+ * ahead it is, and a key that explains all of them is still a guess if
+ * another key explains them just as well. Only a different tonic counts as
+ * another key here, since a degree name is drawn from the tonic alone.
  *
  * **Declining is a normal outcome, not a failure.** A chart that offers no
  * way to choose between three keys really does not say which it is in, and a
@@ -275,8 +309,15 @@ export function inferKey(chords: readonly ChordSymbol[]): KeyGuess | null {
   });
   scored.sort((one, other) => other.total - one.total);
 
-  const [best, runnerUp] = scored;
-  if (!best || !runnerUp) return null;
+  // The runner-up is the best candidate that would name the chords
+  // differently. Two keys on the same tonic disagree only about the mode,
+  // which no degree name is drawn from, so one of them beating the other by a
+  // hair is not a reason to leave the chart alone.
+  const [best] = scored;
+  if (!best) return null;
+  const bestTonic = pitchClass(best.key.tonic);
+  const runnerUp = scored.find((other) => pitchClass(other.key.tonic) !== bestTonic);
+  if (!runnerUp) return null;
 
   const margin = Math.min(1, (best.total - runnerUp.total) / CLEAR_MARGIN);
   const confidence = best.fit * margin;
