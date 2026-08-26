@@ -1,0 +1,66 @@
+<!doctype html>
+<!--
+  Hand-written. See chordwiki-basic.html for what these fixtures are and are
+  not; the same applies here.
+
+  A chord slot is not the same thing as a chord. This one holds every kind of
+  token that turns up in one and is not a chord — bar lines, accents in both
+  widths, rhythm notes, no-chord marks, empty slots — alongside the chords
+  that are easy to mistake for them: one in brackets because it is optional,
+  a power chord over a bass, and a quality with brackets of its own.
+
+  The rhythm notes are the site's own text, kept as written. CONTRIBUTING.md
+  allows that for test data, and there is no other way to show that the parser
+  passes them through.
+-->
+<html lang="ja">
+  <head>
+    <title>Test Song - Test Artist</title>
+    <link rel="canonical" href="https://ja.chordwiki.org/wiki/Test%20Song" />
+  </head>
+  <body>
+    <div id="key">
+      <form action="/wiki.cgi" method="get">
+        <input type="hidden" name="c" value="view" />
+        <input type="hidden" name="t" value="Test Song" />
+        <select size="1" name="key" onchange="this.form.submit();">
+          <option value="0" selected="">0</option>
+        </select>
+      </form>
+    </div>
+
+    <div class="main">
+      <h1 class="title">Test Song</h1>
+      <h2 class="subtitle">Test Artist</h2>
+      <div>
+        <p class="key">Key: C</p>
+        <p class="line">
+          <span class="wordtop">|</span>
+          <span class="chord">|</span>
+          <span class="word">---- |</span>
+          <span class="chord">&gt;</span>
+          <span class="word">---- |</span>
+          <span class="chord">＞</span>
+          <span class="word">---- |</span>
+          <span class="chord">(3連)</span>
+          <span class="word">---- |</span>
+          <span class="chord">(2拍3連)</span>
+          <span class="word">---- |</span>
+        </p>
+        <p class="line">
+          <span class="wordtop">|</span>
+          <span class="chord">N.C.</span>
+          <span class="word">---- |</span>
+          <span class="chord"></span>
+          <span class="word">---- |</span>
+          <span class="chord">(Em7)</span>
+          <span class="word">---- |</span>
+          <span class="chord">A5/E</span>
+          <span class="word">---- |</span>
+          <span class="chord">FM7(#11)</span>
+          <span class="word">---- |</span>
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

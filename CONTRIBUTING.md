@@ -60,6 +60,12 @@ When writing a fixture:
 - Open the file with an English comment stating that it is a hand-written
   reproduction and not a copy of a real page.
 
+The HTML fixtures are excluded from Biome. They reproduce another site's
+markup, faults and all — inline handlers on elements that take no keyboard,
+among others — and being told about those is being told about the site rather
+than about this project. Formatting them would obscure what they reproduce.
+`transposition-pairs.ts` is ours and is linted like anything else.
+
 ### Non-English test data
 
 As an explicit exception to the English-only rule, test data may hold real

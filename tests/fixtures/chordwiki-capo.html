@@ -1,0 +1,51 @@
+<!doctype html>
+<!--
+  Hand-written. See chordwiki-basic.html for what these fixtures are and are
+  not; the same applies here.
+
+  This one is transposed downwards, which the site offers as a capo position
+  and writes as a third shape of the key line — three fields where the other
+  two shapes have one and two. The capo is where to put a capo, and is no
+  business of a degree name.
+-->
+<html lang="ja">
+  <head>
+    <title>Test Song - Test Artist</title>
+    <link rel="canonical" href="https://ja.chordwiki.org/wiki/Test%20Song" />
+  </head>
+  <body>
+    <div id="key">
+      <form action="/wiki.cgi" method="get">
+        <input type="hidden" name="c" value="view" />
+        <input type="hidden" name="t" value="Test Song" />
+        <select size="1" name="key" onchange="this.form.submit();">
+          <option value="6">+6</option>
+          <option value="0">0</option>
+          <option value="-5" selected="">-5</option>
+        </select>
+      </form>
+    </div>
+
+    <div class="main">
+      <h1 class="title">Test Song</h1>
+      <h2 class="subtitle">Test Artist</h2>
+      <div>
+        <p class="key">Original Key: Am / Capo: 5 / Play: Em</p>
+        <p class="line">
+          <span class="wordtop">|</span>
+          <span class="chord">Em</span>
+          <span class="word">---- ---- |</span>
+          <span class="chord">Am7</span>
+          <span class="word">---- ---- |</span>
+        </p>
+        <p class="line">
+          <span class="wordtop">|</span>
+          <span class="chord">B7</span>
+          <span class="word">---- ---- |</span>
+          <span class="chord">Em</span>
+          <span class="word">---- ---- |</span>
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

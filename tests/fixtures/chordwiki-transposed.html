@@ -1,0 +1,53 @@
+<!doctype html>
+<!--
+  Hand-written. See chordwiki-basic.html for what these fixtures are and are
+  not; the same applies here.
+
+  This one is the same chart transposed up six semitones. Two things about it
+  matter. The stated key line changes shape and now holds two keys, the one
+  the chart was written in and the one on the page — and reading the first of
+  them would name every chord against a tonic that is not there. And the
+  address the site gives for the chart does not move, so a reader's settings
+  do not move either.
+-->
+<html lang="ja">
+  <head>
+    <title>Test Song - Test Artist</title>
+    <link rel="canonical" href="https://ja.chordwiki.org/wiki/Test%20Song" />
+  </head>
+  <body>
+    <div id="key">
+      <form action="/wiki.cgi" method="get">
+        <input type="hidden" name="c" value="view" />
+        <input type="hidden" name="t" value="Test Song" />
+        <select size="1" name="key" onchange="this.form.submit();">
+          <option value="6" selected="">+6</option>
+          <option value="0">0</option>
+          <option value="-5">-5</option>
+        </select>
+      </form>
+    </div>
+
+    <div class="main">
+      <h1 class="title">Test Song</h1>
+      <h2 class="subtitle">Test Artist</h2>
+      <div>
+        <p class="key">Original Key: C / Play: F#</p>
+        <p class="line">
+          <span class="wordtop">|</span>
+          <span class="chord">F#</span>
+          <span class="word">---- ---- |</span>
+          <span class="chord">D#m7</span>
+          <span class="word">---- ---- |</span>
+        </p>
+        <p class="line">
+          <span class="wordtop">|</span>
+          <span class="chord">BM7(#11)</span>
+          <span class="word">---- ---- |</span>
+          <span class="chord">C#7-9</span>
+          <span class="word">---- ---- |</span>
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

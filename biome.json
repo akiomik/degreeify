@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/.wxt", "!**/.output", "!**/safari"]
+    "includes": ["**", "!**/.wxt", "!**/.output", "!**/safari", "!tests/fixtures/**/*.html"]
   },
   "formatter": {
     "enabled": true,
@@ -27,7 +27,12 @@
         "noNonNullAssertion": "error"
       },
       "suspicious": {
-        "noConsole": { "level": "error", "options": { "allow": ["warn", "error"] } }
+        "noConsole": {
+          "level": "error",
+          "options": {
+            "allow": ["warn", "error"]
+          }
+        }
       }
     }
   },

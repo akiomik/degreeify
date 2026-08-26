@@ -1,0 +1,85 @@
+<!doctype html>
+<!--
+  Hand-written. See chordwiki-basic.html for what these fixtures are and are
+  not; the same applies here.
+
+  This one changes key part way through, twice, which is why the keys and the
+  chords have to be read as one sequence in document order: a stated key
+  governs the chords after it and up to the next one. The third section is
+  written in the capo shape as well, so that a chart mixing the shapes is
+  covered rather than assumed not to happen.
+
+  There is also a chord before any key is stated. A chart that opens that way
+  has said nothing about what that chord is, and the fixture exists to pin
+  what happens to it.
+-->
+<html lang="ja">
+  <head>
+    <title>Test Song - Test Artist</title>
+    <link rel="canonical" href="https://ja.chordwiki.org/wiki/Test%20Song" />
+  </head>
+  <body>
+    <div id="key">
+      <form action="/wiki.cgi" method="get">
+        <input type="hidden" name="c" value="view" />
+        <input type="hidden" name="t" value="Test Song" />
+        <select size="1" name="key" onchange="this.form.submit();">
+          <option value="0" selected="">0</option>
+        </select>
+      </form>
+    </div>
+
+    <div class="main">
+      <h1 class="title">Test Song</h1>
+      <h2 class="subtitle">Test Artist</h2>
+      <div>
+        <p class="line">
+          <span class="wordtop">|</span>
+          <span class="chord">Gm</span>
+          <span class="word">---- ---- |</span>
+        </p>
+
+        <p class="key">Key: Gm</p>
+        <p class="line">
+          <span class="wordtop">|</span>
+          <span class="chord">Gm</span>
+          <span class="word">---- ---- |</span>
+          <span class="chord">Cm7</span>
+          <span class="word">---- ---- |</span>
+        </p>
+        <p class="line">
+          <span class="wordtop">|</span>
+          <span class="chord">Eb</span>
+          <span class="word">---- ---- |</span>
+          <span class="chord">D7</span>
+          <span class="word">---- ---- |</span>
+        </p>
+
+        <p class="key">Key: Em</p>
+        <p class="line">
+          <span class="wordtop">|</span>
+          <span class="chord">Em7</span>
+          <span class="word">---- ---- |</span>
+          <span class="chord">Am7</span>
+          <span class="word">---- ---- |</span>
+        </p>
+        <p class="line">
+          <span class="wordtop">|</span>
+          <span class="chord">CM7</span>
+          <span class="word">---- ---- |</span>
+          <span class="chord">B7</span>
+          <span class="word">---- ---- |</span>
+        </p>
+
+        <p class="key">Original Key: Am / Capo: 5 / Play: Em</p>
+        <p class="line">
+          <span class="wordtop">|</span>
+          <span class="chord">Em</span>
+          <span class="word">---- ---- |</span>
+          <span class="chord">D</span>
+          <span class="word">---- ---- |</span>
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

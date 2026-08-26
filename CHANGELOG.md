@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as a single character for when a name has to fit a narrower column. Whether
   it is in fact narrower is still to be measured on a real page; see
   `src/core/notation.ts` for the widths it actually renders at.
+- A reader for ChordWiki charts, and the shape every later site fits: the
+  chords in document order together with the keys they are read in, so that
+  which chords fall under which key needs no reconstructing. It reads the key
+  the page is being played in rather than the one the chart was written in,
+  which on a transposed chart are different and stated in the same line, and
+  it gives a chart the same name whether or not it has been transposed, so
+  that transposing one does not lose the settings kept against it.
 - Key inference, for charts that state no key. Every key is scored on how many
   of the chart's chords it accounts for, on whether the chart opens and closes
   on its tonic, and on whether it holds a chord only one of two relative keys
