@@ -22,5 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   transposition of a chart it is found on. The chart's own spelling can be
   kept instead where it is one of the conventional pair.
 - Two notations for a degree name: `roman-ascii` by default, since a chart is
-  laid out in a monospaced font, and `roman-unicode` for when a name has to
-  fit a narrower column.
+  laid out in a monospaced font, and `roman-unicode`, which spells a numeral
+  as a single character for when a name has to fit a narrower column. Whether
+  it is in fact narrower is still to be measured on a real page; see
+  `src/core/notation.ts` for the widths it actually renders at.
