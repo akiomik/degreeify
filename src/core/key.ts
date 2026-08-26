@@ -1,4 +1,4 @@
-import { type ChordSymbol, DASH_MARKS, PLUS_MARKS, TRIANGLE_MARKS } from './chord';
+import { type ChordSymbol, DASH_LOOKALIKES, DASH_MARKS, PLUS_MARKS, TRIANGLE_MARKS } from './chord';
 import {
   FLAT_CHARS,
   formatNote,
@@ -75,7 +75,7 @@ type Triad = 'major' | 'minor' | 'diminished' | 'augmented';
  * say what a flat, a sharp and a dash may be written as, so that a spelling
  * the parser accepts cannot be one this file fails to read.
  */
-const FLATTENING_MARKS = DASH_MARKS + FLAT_CHARS;
+const FLATTENING_MARKS = DASH_MARKS + DASH_LOOKALIKES + FLAT_CHARS;
 const RAISING_MARKS = PLUS_MARKS + SHARP_CHARS;
 
 /**
@@ -116,8 +116,23 @@ function withFifth(word: string, third: 'major' | 'minor'): Triad | null {
  * How a quality can begin and mean a minor third once the ones spelled as a
  * word have been dealt with: an `m`, or the dash a jazz lead sheet writes
  * `C-7` with where a chart elsewhere writes `Cm7`.
+ *
+ * The dashes proper only. A quality is allowed to hold what a Japanese
+ * keyboard puts where a dash would go, and `m7ー5` reads as a flattened fifth
+ * because everything around it says so — but a chord opening with one has
+ * nothing saying that, and a character permitted as a look-alike does not get
+ * to mean a minor third on its own.
  */
 const MINOR_MARKS = ['m', ...DASH_MARKS];
+
+/**
+ * A plus standing for a raised fifth on its own rather than raising something
+ * written after it: `C+`, `C+7`, `C7+`. A plus against a number raises that
+ * number, so `7+9` is a raised ninth and no business of this.
+ */
+function hasBarePlus(quality: string): boolean {
+  return [...PLUS_MARKS].some((plus) => quality.startsWith(plus) || quality.endsWith(plus));
+}
 
 /**
  * Reads the triad a quality describes.
@@ -135,19 +150,28 @@ function triadOf(quality: string): Triad | null {
   if (quality === '') return 'major';
 
   const word = quality.toLowerCase();
-  if (startsWithAny(word, ['dim', '°', 'ø'])) return 'diminished';
-  if (startsWithAny(word, ['aug', ...PLUS_MARKS])) return 'augmented';
+
+  // A word naming the triad says so wherever it sits in the quality: `7sus4`
+  // is as common as `sus4`, and `7aug` as `aug7`.
+  if (includesAny(word, ['dim', '°', 'ø'])) return 'diminished';
+  if (word.includes('aug') || hasBarePlus(quality)) return 'augmented';
   // A suspended or a power chord states no third, so it fits every key
-  // equally and is evidence for none of them. `sus` is looked for anywhere in
-  // the quality because `7sus4` is as common as `sus4`.
+  // equally and is evidence for none of them.
   if (word.includes('sus') || word.startsWith('5')) return null;
+
+  // An `m` in front of an `add` is a minor chord with something added, not
+  // the `ma` that says major. Which it is comes down to the case of that one
+  // letter, so a quality shouted in capitals cannot say.
+  if (word.startsWith('madd')) {
+    if (quality.startsWith('m')) return withFifth(word, 'minor');
+    return quality.startsWith('Madd') ? withFifth(word, 'major') : null;
+  }
+
   // `mi` covers `min` and `mi7` alike, and `ma` covers `maj7` and the fake
   // book's `ma7`. Both are settled before the bare `m` that they all begin
-  // with, and before the `M` that says major on its own. `madd9` is not one
-  // of them — that is a minor chord with an added ninth, and the `ma` it
-  // opens with belongs to two different parts of the quality.
+  // with, and before the `M` that says major on its own.
   if (word.startsWith('mi')) return withFifth(word, 'minor');
-  if (word.startsWith('ma') && !word.startsWith('madd')) return withFifth(word, 'major');
+  if (word.startsWith('ma')) return withFifth(word, 'major');
   // Lower-casing a triangle turns the Greek delta into a different letter, so
   // these are read as written — as `M` has to be in any case.
   if (startsWithAny(quality, ['M', ...TRIANGLE_MARKS])) return withFifth(word, 'major');
@@ -160,6 +184,10 @@ function triadOf(quality: string): Triad | null {
 
 function startsWithAny(text: string, prefixes: readonly string[]): boolean {
   return prefixes.some((prefix) => text.startsWith(prefix));
+}
+
+function includesAny(text: string, parts: readonly string[]): boolean {
+  return parts.some((part) => text.includes(part));
 }
 
 /*

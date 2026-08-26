@@ -31,12 +31,20 @@ export interface ChordSymbol {
  * `key.ts`, and the lists drifting apart would mean a chord the parser
  * accepts and the scorer cannot read.
  *
+ * `DASH_LOOKALIKES` is kept apart from the dashes proper. A Japanese keyboard
+ * puts the prolonged sound mark where a dash would go, so a quality reads the
+ * same with it — but it is a letter rather than a dash, and it says nothing
+ * on its own the way `C-7` does. Permitting a character and taking it to mean
+ * something are different things.
+ *
  * `DASH_MARKS` keeps the ASCII hyphen last so that it can be dropped straight
- * into a character class without opening a range.
+ * into a character class without opening a range, which means it has to be
+ * interpolated last as well.
  */
 export const TRIANGLE_MARKS = '△▲∆Δ';
 export const PLUS_MARKS = '+＋';
-export const DASH_MARKS = '−－ー-';
+export const DASH_LOOKALIKES = 'ー';
+export const DASH_MARKS = '−－-';
 
 /**
  * Characters a chord quality is written from.
@@ -62,7 +70,7 @@ export const DASH_MARKS = '−－ー-';
  * of an accidental belongs in {@link ACCIDENTAL_CHARS}, and reaches this set
  * from there.
  */
-const OTHER_QUALITY_CHARS = `A-Za-z0-9()${PLUS_MARKS},°øØ${TRIANGLE_MARKS}/${DASH_MARKS}`;
+const OTHER_QUALITY_CHARS = `A-Za-z0-9()${PLUS_MARKS},°øØ${TRIANGLE_MARKS}/${DASH_LOOKALIKES}${DASH_MARKS}`;
 
 const QUALITY_CHARS = new RegExp(`^[${ACCIDENTAL_CHARS}${OTHER_QUALITY_CHARS}]*$`, 'u');
 

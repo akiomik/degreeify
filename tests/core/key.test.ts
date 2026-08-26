@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { type ChordSymbol, DASH_MARKS, PLUS_MARKS, parseChord, TRIANGLE_MARKS } from '@/core/chord';
+import {
+  type ChordSymbol,
+  DASH_LOOKALIKES,
+  DASH_MARKS,
+  PLUS_MARKS,
+  parseChord,
+  TRIANGLE_MARKS,
+} from '@/core/chord';
 import { formatKey, inferKey, MIN_CONFIDENCE, parseKey } from '@/core/key';
 
 const chords = (...symbols: string[]): ChordSymbol[] =>
@@ -156,6 +163,14 @@ describe('inferKey', () => {
       expect(guessOf(`C${dash}7`, `F${dash}7`, `G${dash}7`, `C${dash}7`)).toBe('Cm');
     });
 
+    // A quality is allowed to hold what a Japanese keyboard puts where a dash
+    // would go, which is not the same as that character saying something on
+    // its own. It reads as a dash where what surrounds it says so, and says
+    // nothing at the front of a quality, where nothing does.
+    it.each([...DASH_LOOKALIKES])('does not take %j at the front for a minor third', (mark) => {
+      expect(guessOf(`C${mark}7`, `F${mark}7`, `G${mark}7`, `C${mark}7`)).toBeNull();
+    });
+
     // Case matters for `M` against `m` and nowhere else, a flattened fifth
     // included: `m7B5` has to read the same as `m7b5`.
     it.each(['b5', 'B5', '-5', '♭5'])('reads a fifth flattened with %j', (flat) => {
@@ -164,7 +179,10 @@ describe('inferKey', () => {
       expect(guess?.confidence).toBe(plain?.confidence);
     });
 
-    it.each([...DASH_MARKS])('reads a fifth flattened with %j', (dash) => {
+    // Everything a quality may hold where a dash would go reads as one here,
+    // the look-alikes included: what surrounds it says what it is standing
+    // for.
+    it.each([...DASH_MARKS, ...DASH_LOOKALIKES])('reads a fifth flattened with %j', (dash) => {
       const plain = inferKey(chords('C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bdim', 'C'));
       const guess = inferKey(chords('C', 'Dm', 'Em', 'F', 'G', 'Am', `Bm7${dash}5`, 'C'));
       expect(guess?.confidence).toBe(plain?.confidence);
@@ -215,10 +233,21 @@ describe('inferKey', () => {
       expect(guessOf('Cadd9', 'F', 'G', 'Cadd9')).toBe('C');
     });
 
+    // Which of the two it is comes down to the case of one letter, so a
+    // quality shouted in capitals is not evidence for either.
+    it('has nothing to say about an addition written in capitals', () => {
+      expect(guessOf('CMADD9', 'FMADD9', 'GMADD9', 'CMADD9')).toBeNull();
+    });
+
     // A raised fifth makes an augmented triad whatever else the quality says,
     // and a lowered one under a major third makes nothing that has a name.
     // Neither is the plain major triad they were being read as.
     describe('an altered fifth', () => {
+      // A word naming the triad says so wherever it sits: `7aug` is `aug7`.
+      it.each(['aug', 'aug7', '7aug'])('reads %j as augmented', (quality) => {
+        expect(guessOf(`C${quality}`, `F${quality}`, `G${quality}`, `C${quality}`)).toBeNull();
+      });
+
       it.each(['(#5)', '7#5', 'M7#5', '7(#5)'])('reads %j as augmented', (quality) => {
         expect(guessOf(`C${quality}`, `F${quality}`, `G${quality}`, `C${quality}`)).toBeNull();
       });
@@ -249,8 +278,17 @@ describe('inferKey', () => {
         expect(guessOf(`C7${plus}5`, `F7${plus}5`, `G7${plus}5`, `C7${plus}5`)).toBeNull();
       });
 
+      // A plus with nothing after it is the raised fifth on its own, wherever
+      // in the quality it sits. Against a number it raises that number, and
+      // says nothing about the fifth.
       it.each([...PLUS_MARKS])('reads %j on its own as augmented', (plus) => {
-        expect(guessOf(`C${plus}`, `F${plus}`, `G${plus}`, `C${plus}`)).toBeNull();
+        for (const quality of [plus, `${plus}7`, `7${plus}`]) {
+          expect(guessOf(`C${quality}`, `F${quality}`, `G${quality}`, `C${quality}`)).toBeNull();
+        }
+      });
+
+      it.each([...PLUS_MARKS])('leaves a ninth raised with %j a major chord', (plus) => {
+        expect(guessOf(`C7${plus}9`, 'Dm7', `F7${plus}9`, 'G7', `C7${plus}9`)).toBe('C');
       });
 
       // The five is what the mark has to be against. An altered eleventh is
