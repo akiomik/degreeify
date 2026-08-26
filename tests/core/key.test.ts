@@ -35,6 +35,17 @@ const readingOf = (quality: string): string => {
   return guess ? guess.confidence.toFixed(4) : 'declined';
 };
 
+/**
+ * Which third a quality is read as, seen the same way.
+ *
+ * In C major the sixth degree is a minor triad on A. A chord there read as
+ * minor leaves the fit whole; one read as major, or set aside, does not.
+ */
+const thirdOf = (quality: string): string => {
+  const guess = inferKey(chords('C', 'Dm', 'Em', 'F', 'G', `A${quality}`, 'Bdim', 'C'));
+  return guess ? guess.confidence.toFixed(4) : 'declined';
+};
+
 describe('parseKey', () => {
   const accepted: [string, string][] = [
     ['C', 'C'],
@@ -335,6 +346,21 @@ describe('inferKey', () => {
     // quality shouted in capitals is not evidence for either.
     it('has nothing to say about an addition written in capitals', () => {
       expect(guessOf('CMADD9', 'FMADD9', 'GMADD9', 'CMADD9')).toBeNull();
+    });
+
+    // That one letter, and nothing after it. In C major the sixth degree is
+    // a minor triad on A, so a chord there read as minor leaves the fit whole
+    // and one read as major does not — which is what says how each of these
+    // was taken. The `add` is not part of the question, however it is
+    // written, and testing it as though it were dropped `MAdd9` on the floor.
+    describe.each(['add9', 'Add9', 'add11'])('an addition written %j', (addition) => {
+      it('is minor after a small m', () => {
+        expect(thirdOf(`m${addition}`)).toBe(thirdOf('m'));
+      });
+
+      it('is major after a capital M', () => {
+        expect(thirdOf(`M${addition}`)).toBe(thirdOf('M7'));
+      });
     });
 
     // A raised fifth makes an augmented triad whatever else the quality says,

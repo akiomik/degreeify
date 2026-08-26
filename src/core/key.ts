@@ -210,21 +210,25 @@ function triadOf(quality: string): Triad | null {
   // the `ma` that says major. Which it is comes down to the case of that one
   // letter, so a quality shouted in capitals cannot say.
   if (word.startsWith(`${MINOR_MARK_LETTER}add`)) {
-    if (quality.startsWith(MINOR_MARK_LETTER)) return withFifth(word.slice(1), 'minor');
-    return quality.startsWith('Madd') ? withFifth(word.slice(1), 'major') : null;
+    // Which of the two it is rests on the case of that one letter and on
+    // nothing after it, so a quality with no lower case left anywhere in it
+    // has had the answer shouted away.
+    if (quality === quality.toUpperCase()) return null;
+    const third = quality.startsWith(MINOR_MARK_LETTER) ? 'minor' : 'major';
+    return withFifth(after(quality, MINOR_MARK_LETTER), third);
   }
 
   // `mi` covers `min` and `mi7` alike, and `ma` covers `maj7` and the fake
   // book's `ma7`. Both are settled before the bare `m` that they all begin
   // with, and before the `M` that says major on its own.
-  if (word.startsWith(MINOR_WORD)) return withFifth(word.slice(MINOR_WORD.length), 'minor');
-  if (word.startsWith(MAJOR_WORD)) return withFifth(word.slice(MAJOR_WORD.length), 'major');
+  if (word.startsWith(MINOR_WORD)) return withFifth(after(word, MINOR_WORD), 'minor');
+  if (word.startsWith(MAJOR_WORD)) return withFifth(after(word, MAJOR_WORD), 'major');
   // Lower-casing a triangle turns the Greek delta into a different letter, so
   // these are read as written — as `M` has to be in any case.
   const majorMark = leadingMark(quality, MAJOR_MARKS);
-  if (majorMark) return withFifth(word.slice(majorMark.length), 'major');
+  if (majorMark) return withFifth(after(quality, majorMark), 'major');
   const minorMark = leadingMark(quality, MINOR_MARKS);
-  if (minorMark) return withFifth(word.slice(minorMark.length), 'minor');
+  if (minorMark) return withFifth(after(quality, minorMark), 'minor');
   // A quality that opens with a bracket says nothing before it, so the triad
   // is the plain one the root names: `C(9)` is a C major triad with a ninth.
   if (startsWithAny(word, ['add', '(', '6', '7', '9', '11', '13'])) return withFifth(word, 'major');
@@ -246,6 +250,18 @@ function startsWithAny(text: string, prefixes: readonly string[]): boolean {
  */
 function leadingMark(text: string, marks: readonly string[]): string | undefined {
   return marks.find((mark) => text.startsWith(mark));
+}
+
+/**
+ * What follows a mark at the front of `text`, lower-cased for reading.
+ *
+ * The mark is taken off the string it was found in rather than off a copy of
+ * it, because lower-casing is not obliged to leave a string the same length —
+ * and a mark measured against one string and removed from another only works
+ * while none of them changes size.
+ */
+function after(text: string, mark: string): string {
+  return text.slice(mark.length).toLowerCase();
 }
 
 function includesAny(text: string, parts: readonly string[]): boolean {
