@@ -1,4 +1,4 @@
-import type { ChordSymbol } from './chord';
+import { type ChordSymbol, TRIANGLE_MARKS } from './chord';
 import { formatNote, type Note, parseNote, pitchClass, readNotePrefix } from './pitch';
 
 export type Mode = 'major' | 'minor';
@@ -73,6 +73,13 @@ const FLAT_FIFTH = /[-b♭−－ー]\s*5/;
 /** A chord that states no third, wherever the word appears in the quality. */
 const NO_THIRD = /sus/;
 
+/**
+ * How a quality can begin and still mean a minor third: `m`, `min`, and the
+ * dash of a jazz lead sheet, where `C-7` is what a chart elsewhere writes as
+ * `Cm7`. A flattened fifth on top of any of them makes the triad diminished.
+ */
+const MINOR_MARKS = ['m', '-'];
+
 function triadOf(quality: string): Triad | null {
   if (quality === '') return 'major';
   if (startsWithAny(quality, ['dim', '°', 'ø', 'Ø'])) return 'diminished';
@@ -81,9 +88,13 @@ function triadOf(quality: string): Triad | null {
   // equally and is evidence for none of them. `sus` is looked for anywhere in
   // the quality because `7sus4` is as common as `sus4`.
   if (NO_THIRD.test(quality) || quality.startsWith('5')) return null;
-  if (startsWithAny(quality, ['maj', 'M', 'Δ', '△', '∆'])) return 'major';
-  if (quality.startsWith('m')) return FLAT_FIFTH.test(quality) ? 'diminished' : 'minor';
-  if (startsWithAny(quality, ['add', '6', '7', '9', '11', '13'])) return 'major';
+  if (startsWithAny(quality, ['maj', 'M', ...TRIANGLE_MARKS])) return 'major';
+  if (startsWithAny(quality, MINOR_MARKS)) {
+    return FLAT_FIFTH.test(quality.slice(1)) ? 'diminished' : 'minor';
+  }
+  // A quality that opens with a bracket says nothing before it, so the triad
+  // is the plain one the root names: `C(9)` is a C major triad with a ninth.
+  if (startsWithAny(quality, ['add', '(', '6', '7', '9', '11', '13'])) return 'major';
   return null;
 }
 
@@ -150,9 +161,12 @@ const DIATONIC: Record<Mode, readonly Chord[]> = {
  * third all come from that. A major key borrows too, but nothing it borrows
  * is unavailable to its relative minor, so there is nothing to list.
  *
- * These count as evidence for the mode rather than towards chord fit. Fit is
- * what stays symmetrical between relatives; this is one of the two things
- * that tells them apart.
+ * These are accounted for, at {@link MODAL_WEIGHT} of a chord each. Counting
+ * them in full would put a mode back to accounting for everything its
+ * relative does and more, which is the arrangement {@link DIATONIC} exists to
+ * avoid; not counting them at all would mean a minor key failing to explain
+ * its own dominant, dragging its fit down and handing the chart to the
+ * parallel major, where those same chords are plain scale.
  */
 const MODAL: Record<Mode, readonly Chord[]> = {
   major: [],
@@ -182,12 +196,12 @@ const MIN_DISTINCT_CHORDS = 3;
 const BOOKEND_POINTS = 1;
 
 /**
- * What a chord only one of two relatives has is worth. Half a chord: it says
- * which of the pair a chart is in, but not on its own — a major fifth is as
- * often a secondary dominant in the relative major as it is a real dominant
- * in the minor.
+ * What a chord only one of two relatives has counts for, as a fraction of a
+ * chord. Half: it says which of the pair a chart is in, but not on its own —
+ * a major fifth is as often a secondary dominant in the relative major as it
+ * is a real dominant in the minor.
  */
-const MODAL_POINTS = 0.5;
+const MODAL_WEIGHT = 0.5;
 
 /**
  * The margin, in points, at which one key is taken to be clearly ahead of the
@@ -196,17 +210,28 @@ const MODAL_POINTS = 0.5;
  */
 const CLEAR_MARGIN = 2;
 
-/** Below this, {@link inferKey} declines rather than guessing. */
+/**
+ * Below this, {@link inferKey} declines rather than guessing.
+ *
+ * The value is a description rather than a dial: at a {@link CLEAR_MARGIN} of
+ * two, a half is exactly one end of the chart landing on the tonic against a
+ * fit that leaves nothing unaccounted for. That is the least evidence worth
+ * naming a key on, and it is meant to be included rather than excluded.
+ */
 export const MIN_CONFIDENCE = 0.5;
+
+/** The triad a key is named after, which is what its tonic chord sounds like. */
+const TONIC_TRIAD: Record<Mode, Triad> = { major: 'major', minor: 'minor' };
 
 /**
  * Guesses which key a sequence of chords is in, or declines.
  *
  * Every one of the twenty-four keys is scored on how many of the chart's
  * distinct chords it accounts for, with a point each for opening and closing
- * the chart on the key's own tonic and a half for a chord only that mode has.
- * Those last two are what separates a key from its relative, which share
- * every chord of the plain scale and can never be told apart by fit alone.
+ * the chart on the key's own tonic chord. A chord only one of two relatives
+ * has counts for part of one, which along with the ends of the chart is all
+ * that separates relatives: they share every chord of the plain scale and can
+ * never be told apart by fit alone.
  *
  * The confidence is how well the winning key accounts for the chart,
  * discounted by how close the runner-up came. Both matter: a key that
@@ -233,23 +258,20 @@ export function inferKey(chords: readonly ChordSymbol[]): KeyGuess | null {
   ];
   if (distinct.length < MIN_DISTINCT_CHORDS) return null;
 
-  // Which chord opens and closes the chart is about its root alone, so this
-  // reads every chord rather than only the ones whose triad could be made
-  // out. A chart opening on a power chord still opens where it opens.
-  const opening = firstPitch(chords);
-  const closing = firstPitch([...chords].reverse());
+  // Read from every chord rather than only the ones whose triad could be made
+  // out: a chart opening on a power chord still opens where it opens.
+  const opening = endOf(chords, 0);
+  const closing = endOf(chords, -1);
 
   const scored = candidates().map((key) => {
     const tonic = pitchClass(key.tonic);
-    const accounted = distinct.filter((sound) => isIn(DIATONIC[key.mode], sound, tonic));
-    const modal = distinct.some((sound) => isIn(MODAL[key.mode], sound, tonic));
+    const plain = distinct.filter((sound) => isIn(DIATONIC[key.mode], sound, tonic)).length;
+    const modal = distinct.filter((sound) => isIn(MODAL[key.mode], sound, tonic)).length;
+    const accounted = plain + modal * MODAL_WEIGHT;
     const bookends =
-      (opening === tonic ? BOOKEND_POINTS : 0) + (closing === tonic ? BOOKEND_POINTS : 0);
-    return {
-      key,
-      fit: accounted.length / distinct.length,
-      total: accounted.length + bookends + (modal ? MODAL_POINTS : 0),
-    };
+      (isTonicChord(opening, key, tonic) ? BOOKEND_POINTS : 0) +
+      (isTonicChord(closing, key, tonic) ? BOOKEND_POINTS : 0);
+    return { key, fit: accounted / distinct.length, total: accounted + bookends };
   });
   scored.sort((one, other) => other.total - one.total);
 
@@ -272,12 +294,32 @@ function candidates(): Key[] {
   });
 }
 
-function firstPitch(chords: readonly ChordSymbol[]): number | undefined {
-  const chord = chords.at(0);
-  return chord && pitchClass(chord.root);
+interface Sound {
+  readonly pitch: number;
+  readonly triad: Triad | null;
 }
 
-function isIn(table: readonly Chord[], sound: { pitch: number; triad: Triad }, tonic: number) {
+function endOf(chords: readonly ChordSymbol[], index: number): Sound | null {
+  const chord = chords.at(index);
+  return chord ? { pitch: pitchClass(chord.root), triad: triadOf(chord.quality) } : null;
+}
+
+/**
+ * Whether an end of the chart is the key's own tonic chord.
+ *
+ * The triad has to agree, not only the root. A chart that opens and closes on
+ * `Am` is evidence for A minor and none at all for A major, and reading the
+ * root alone would hand both of them the same two points — enough for the
+ * parallel major to hold its own on a chart that could not be more clearly
+ * minor. A chord whose triad cannot be read still counts: it says where the
+ * chart begins without contradicting anything.
+ */
+function isTonicChord(end: Sound | null, key: Key, tonic: number): boolean {
+  if (!end || end.pitch !== tonic) return false;
+  return end.triad === null || end.triad === TONIC_TRIAD[key.mode];
+}
+
+function isIn(table: readonly Chord[], sound: Sound, tonic: number) {
   const semitones = (sound.pitch - tonic + 12) % 12;
   return table.some(([step, triad]) => step === semitones && triad === sound.triad);
 }

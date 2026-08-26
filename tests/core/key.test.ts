@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type ChordSymbol, parseChord } from '@/core/chord';
+import { type ChordSymbol, parseChord, TRIANGLE_MARKS } from '@/core/chord';
 import { formatKey, inferKey, MIN_CONFIDENCE, parseKey } from '@/core/key';
 
 const chords = (...symbols: string[]): ChordSymbol[] =>
@@ -57,9 +57,14 @@ describe('inferKey', () => {
     });
 
     // One end of the chart, against a fit that leaves nothing unaccounted
-    // for, is the least evidence that still names a key.
+    // for, is the least evidence that still names a key — and it lands
+    // exactly on the threshold, which is what the threshold is defined as.
+    // Pinned because a great many ordinary charts sit on this line, and
+    // whether they are named at all turns on the comparison being strict.
     it('settles for opening on the tonic when every chord fits', () => {
-      expect(guessOf('C', 'F', 'G', 'Am', 'Dm', 'Em')).toBe('C');
+      const guess = inferKey(chords('C', 'F', 'G', 'Am', 'Dm', 'Em'));
+      expect(guess?.confidence).toBe(MIN_CONFIDENCE);
+      expect(guess && formatKey(guess.key)).toBe('C');
     });
 
     // A major key borrows a fifth from its relative minor's own scale as
@@ -79,9 +84,33 @@ describe('inferKey', () => {
 
   // A minor key borrows its dominant from the harmonic minor far too often
   // for the natural minor alone to recognise one.
-  describe('a minor key with a major fifth', () => {
+  describe('a minor key that raises its seventh', () => {
     it('prefers the minor key over its relative major', () => {
       expect(guessOf('Am', 'Dm', 'E7', 'Am')).toBe('Am');
+    });
+
+    // The chords it raises the seventh for are the minor key's own. A minor
+    // key that failed to explain them would drag its own fit down and hand
+    // the chart to the parallel major, where the very same chords are plain
+    // scale — on a chart that could hardly be more clearly minor.
+    it('accounts for them rather than letting them count against it', () => {
+      expect(guessOf('Am', 'Dm', 'E7', 'G#dim', 'Am')).toBe('Am');
+    });
+
+    // Each of them is worth the same. Crediting the mode once however many it
+    // finds, while every one still takes up a slot of the fit, makes a chart
+    // worse evidence for its own key the more of them it holds.
+    it('counts every one of them, not just the first', () => {
+      const one = inferKey(chords('Am', 'Dm', 'E7', 'Am'));
+      const two = inferKey(chords('Am', 'Dm', 'E7', 'G#dim', 'Am'));
+      expect(two?.confidence).toBeGreaterThanOrEqual((one?.confidence ?? 1) * 0.9);
+    });
+
+    // Opening and closing on `Am` is evidence for A minor and none at all for
+    // A major. Reading only the root would give the two of them the same
+    // points and let the parallel major hold its own.
+    it('does not credit the parallel major for a minor tonic chord', () => {
+      expect(guessOf('Am', 'Dm', 'E7', 'G#dim', 'Am')).not.toBe('A');
     });
   });
 
@@ -107,6 +136,26 @@ describe('inferKey', () => {
     // chord whose triad cannot be read still counts at the ends.
     it('takes the ends of the chart from chords it cannot otherwise read', () => {
       expect(guessOf('Csus4', 'F', 'G', 'Am', 'Dm', 'C5')).toBe('C');
+    });
+
+    // A jazz lead sheet writes with a dash what a chart elsewhere writes with
+    // an `m`, and the parser accepts both.
+    it('reads a dash as a minor third', () => {
+      expect(guessOf('C-7', 'F-7', 'G-7', 'C-7')).toBe('Cm');
+      expect(guessOf('C', 'D-7', 'E-7', 'F', 'G', 'A-7', 'C')).toBe('C');
+    });
+
+    // A quality that opens with a bracket says nothing before it, so the
+    // triad is the plain one the root names.
+    it('reads a bare triad under a parenthesised extension', () => {
+      expect(guessOf('C(9)', 'F(9)', 'G(9)', 'C(9)')).toBe('C');
+    });
+
+    // The parser accepts every spelling of the triangle, so every spelling
+    // has to mean a major third here. Driven off the parser's own list so the
+    // two cannot drift apart.
+    it.each([...TRIANGLE_MARKS])('reads %j as a major seventh', (mark) => {
+      expect(guessOf(`C${mark}7`, 'Dm7', `F${mark}7`, 'G7', `C${mark}7`)).toBe('C');
     });
   });
 

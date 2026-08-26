@@ -48,7 +48,15 @@ export interface ChordSymbol {
  * of an accidental belongs in {@link ACCIDENTAL_CHARS}, and reaches this set
  * from there.
  */
-const OTHER_QUALITY_CHARS = 'A-Za-z0-9()+,°øØ△▲∆Δ/−－ー-';
+/**
+ * The spellings of the triangle that stands for a major seventh. Named
+ * because a quality has to be allowed to contain them here and understood to
+ * mean a major third in `key.ts`, and the two lists drifting apart would mean
+ * a chord the parser accepted and the scorer could not read.
+ */
+export const TRIANGLE_MARKS = '△▲∆Δ';
+
+const OTHER_QUALITY_CHARS = `A-Za-z0-9()+,°øØ${TRIANGLE_MARKS}/−－ー-`;
 
 const QUALITY_CHARS = new RegExp(`^[${ACCIDENTAL_CHARS}${OTHER_QUALITY_CHARS}]*$`, 'u');
 
