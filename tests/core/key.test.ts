@@ -156,6 +156,14 @@ describe('inferKey', () => {
       expect(guessOf(`C${dash}7`, `F${dash}7`, `G${dash}7`, `C${dash}7`)).toBe('Cm');
     });
 
+    // Case matters for `M` against `m` and nowhere else, a flattened fifth
+    // included: `m7B5` has to read the same as `m7b5`.
+    it.each(['b5', 'B5', '-5', '♭5'])('reads a fifth flattened with %j', (flat) => {
+      const plain = inferKey(chords('C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bdim', 'C'));
+      const guess = inferKey(chords('C', 'Dm', 'Em', 'F', 'G', 'Am', `Bm7${flat}`, 'C'));
+      expect(guess?.confidence).toBe(plain?.confidence);
+    });
+
     it.each([...DASH_MARKS])('reads a fifth flattened with %j', (dash) => {
       const plain = inferKey(chords('C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bdim', 'C'));
       const guess = inferKey(chords('C', 'Dm', 'Em', 'F', 'G', 'Am', `Bm7${dash}5`, 'C'));
@@ -188,6 +196,31 @@ describe('inferKey', () => {
     // two cannot drift apart.
     it.each([...TRIANGLE_MARKS])('reads %j as a major seventh', (mark) => {
       expect(guessOf(`C${mark}7`, 'Dm7', `F${mark}7`, 'G7', `C${mark}7`)).toBe('C');
+    });
+
+    // A fake book abbreviates a major seventh to `ma7`, which begins the way
+    // both the minor spellings do and has to be settled before them.
+    it.each(['maj7', 'ma7', 'MA7', 'Maj7'])('reads %j as a major seventh', (quality) => {
+      expect(guessOf(`C${quality}`, 'Dm7', `F${quality}`, 'G7', `C${quality}`)).toBe('C');
+    });
+
+    // A raised fifth makes an augmented triad whatever else the quality says,
+    // and a lowered one under a major third makes nothing that has a name.
+    // Neither is the plain major triad they were being read as.
+    describe('an altered fifth', () => {
+      it.each(['(#5)', '7#5', 'M7#5', '7(#5)'])('reads %j as augmented', (quality) => {
+        expect(guessOf(`C${quality}`, `F${quality}`, `G${quality}`, `C${quality}`)).toBeNull();
+      });
+
+      it.each(['(b5)', '7-5', '7b5'])('has nothing to say about %j', (quality) => {
+        expect(guessOf(`C${quality}`, `F${quality}`, `G${quality}`, `C${quality}`)).toBeNull();
+      });
+
+      // The five is what the mark has to be against. An altered eleventh is
+      // not an altered fifth.
+      it('leaves an altered eleventh alone', () => {
+        expect(guessOf('CM7(#11)', 'Dm7', 'FM7(#11)', 'G7', 'CM7(#11)')).toBe('C');
+      });
     });
   });
 

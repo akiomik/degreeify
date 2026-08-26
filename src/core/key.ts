@@ -1,5 +1,13 @@
 import { type ChordSymbol, DASH_MARKS, TRIANGLE_MARKS } from './chord';
-import { FLAT_CHARS, formatNote, type Note, parseNote, pitchClass, readNotePrefix } from './pitch';
+import {
+  FLAT_CHARS,
+  formatNote,
+  type Note,
+  parseNote,
+  pitchClass,
+  readNotePrefix,
+  SHARP_CHARS,
+} from './pitch';
 
 export type Mode = 'major' | 'minor';
 
@@ -63,20 +71,43 @@ export function formatKey(key: Key): string {
 type Triad = 'major' | 'minor' | 'diminished' | 'augmented';
 
 /**
- * The marks that lower a fifth, taken from the two lists that already say
- * what a flat and a dash may be written as, so that a spelling the parser
- * accepts cannot be one this file fails to read.
+ * The marks that lower and raise a note, taken from the lists that already
+ * say what a flat, a sharp and a dash may be written as, so that a spelling
+ * the parser accepts cannot be one this file fails to read.
  */
 const FLATTENING_MARKS = DASH_MARKS + FLAT_CHARS;
+const RAISING_MARKS = SHARP_CHARS;
 
 /**
- * A flattened fifth anywhere in a minor quality, which makes the triad
- * diminished: `m7-5`, `m7b5`, `m7(b5)`. It is not looked for at a fixed
- * position because the quality comes through as the chart wrote it, and
- * charts write all three.
+ * Whether a quality alters its fifth: `7-5`, `m7b5`, `m7(b5)`, `7#5`. The
+ * mark is looked for against the five it belongs to, and nowhere in
+ * particular otherwise, since the quality comes through as the chart wrote it
+ * and charts put it in several places. Tying it to the five is also what
+ * keeps an altered eleventh, `M7(#11)`, from being read as one.
+ *
+ * The quality must already be lower-cased. A flat is written `b` as often as
+ * `♭`, and a chart that shouts its chord names would otherwise slip past.
  */
-function hasFlatFifth(quality: string): boolean {
-  return [...FLATTENING_MARKS].some((mark) => quality.includes(`${mark}5`));
+function hasFifth(word: string, marks: string): boolean {
+  return [...marks].some((mark) => word.includes(`${mark}5`));
+}
+
+const hasFlatFifth = (word: string) => hasFifth(word, FLATTENING_MARKS);
+
+/**
+ * What a chord with a major third is, once its fifth is taken into account.
+ *
+ * A raised fifth makes an augmented triad, whatever else the quality says, so
+ * `M7#5` and `7(#5)` are augmented rather than major. A lowered one makes
+ * nothing that has a name: no triad puts a major third under a diminished
+ * fifth, and calling it diminished would let it stand in for a leading-tone
+ * chord it sounds nothing like. There is nothing to say about it, so nothing
+ * is said.
+ */
+function majorOrAltered(word: string): Triad | null {
+  if (hasFifth(word, RAISING_MARKS)) return 'augmented';
+  if (hasFlatFifth(word)) return null;
+  return 'major';
 }
 
 /**
@@ -108,18 +139,20 @@ function triadOf(quality: string): Triad | null {
   // equally and is evidence for none of them. `sus` is looked for anywhere in
   // the quality because `7sus4` is as common as `sus4`.
   if (word.includes('sus') || word.startsWith('5')) return null;
-  // Covers `min` and `mi7` alike, all of them beginning the same way.
+  // `mi` covers `min` and `mi7` alike, and `ma` covers `maj7` and the fake
+  // book's `ma7`. Both are settled before the bare `m` that they all begin
+  // with, and before the `M` that says major on its own.
   if (word.startsWith('mi')) return hasFlatFifth(word) ? 'diminished' : 'minor';
-  if (word.startsWith('maj')) return 'major';
+  if (word.startsWith('ma')) return majorOrAltered(word);
   // Lower-casing a triangle turns the Greek delta into a different letter, so
   // these are read as written — as `M` has to be in any case.
-  if (startsWithAny(quality, ['M', ...TRIANGLE_MARKS])) return 'major';
+  if (startsWithAny(quality, ['M', ...TRIANGLE_MARKS])) return majorOrAltered(word);
   if (startsWithAny(quality, MINOR_MARKS)) {
-    return hasFlatFifth(quality.slice(1)) ? 'diminished' : 'minor';
+    return hasFlatFifth(word) ? 'diminished' : 'minor';
   }
   // A quality that opens with a bracket says nothing before it, so the triad
   // is the plain one the root names: `C(9)` is a C major triad with a ninth.
-  if (startsWithAny(word, ['add', '(', '6', '7', '9', '11', '13'])) return 'major';
+  if (startsWithAny(word, ['add', '(', '6', '7', '9', '11', '13'])) return majorOrAltered(word);
   return null;
 }
 
