@@ -2,6 +2,7 @@ import { type ChordSymbol, DASH_LOOKALIKES, DASH_MARKS, PLUS_MARKS, TRIANGLE_MAR
 import {
   FLAT_CHARS,
   formatNote,
+  type Letter,
   type Note,
   parseNote,
   pitchClass,
@@ -44,6 +45,40 @@ export interface KeyRegion {
   readonly source: KeySource;
 }
 
+/** Where a note sits on the circle of fifths: F is -1, C is 0, G is 1. */
+const LETTER_FIFTHS: Record<Letter, number> = { F: -1, C: 0, G: 1, D: 2, A: 3, E: 4, B: 5 };
+
+/** How many fifths an accidental moves a note. */
+const FIFTHS_PER_ACCIDENTAL = 7;
+
+/** How many sharps or flats a key signature can be written with. */
+const MOST_ACCIDENTALS_IN_A_KEY_SIGNATURE = 7;
+
+/** How far a minor key sits from the major key it shares a signature with. */
+const FIFTHS_TO_RELATIVE_MAJOR = 3;
+
+function fifths(note: Note): number {
+  return LETTER_FIFTHS[note.letter] + note.accidental * FIFTHS_PER_ACCIDENTAL;
+}
+
+/**
+ * Whether a key of this name exists to be in.
+ *
+ * A key signature holds at most seven sharps or seven flats, and every key is
+ * named after where its signature falls: C sharp major has seven sharps and C
+ * flat major seven flats, while B sharp major would need twelve of them and
+ * is nothing anyone is in. The mode comes into it because a minor key is
+ * named three fifths from the signature it shares with its relative — G sharp
+ * major is not a key and G sharp minor is.
+ *
+ * This is the one place that settles what may name a key, for a name read off
+ * a chart and for one worked out from its chords alike.
+ */
+function namesAKey(key: Key): boolean {
+  const signature = fifths(key.tonic) - (key.mode === 'minor' ? FIFTHS_TO_RELATIVE_MAJOR : 0);
+  return Math.abs(signature) <= MOST_ACCIDENTALS_IN_A_KEY_SIGNATURE;
+}
+
 /**
  * Parses a key as a chart names one: a note, and an `m` for a minor key.
  *
@@ -53,9 +88,12 @@ export interface KeyRegion {
 export function parseKey(text: string): Key | null {
   const read = readNotePrefix(text.trim());
   if (!read) return null;
-  if (read.rest === '') return { tonic: read.note, mode: 'major' };
-  if (read.rest === 'm') return { tonic: read.note, mode: 'minor' };
-  return null;
+
+  const mode: Mode | null = read.rest === '' ? 'major' : read.rest === 'm' ? 'minor' : null;
+  if (!mode) return null;
+
+  const key: Key = { tonic: read.note, mode };
+  return namesAKey(key) ? key : null;
 }
 
 export function formatKey(key: Key): string {
@@ -72,6 +110,18 @@ export function formatKey(key: Key): string {
  * knowing the rest.
  */
 type Triad = 'major' | 'minor' | 'diminished' | 'augmented';
+
+/**
+ * What a quality says the chord is built on: one of the four triads, or that
+ * there is no third to speak of.
+ *
+ * The two are not the same as each other and neither is the same as not
+ * knowing. A suspension states that it has no third, which is a thing the
+ * quality says; a quality nothing can be made of says nothing at all, and a
+ * token that carries one may not even be a chord.
+ */
+const NO_THIRD = 'no third';
+type Reading = Triad | typeof NO_THIRD;
 
 /**
  * The marks that lower and raise a note, taken from the lists that already
@@ -192,7 +242,7 @@ function raisesFifth(rest: string): boolean {
  * `mi` and `min` are settled before `maj` and `M` for the same reason: they
  * all begin with the same letter, and whichever is tested first wins.
  */
-function triadOf(quality: string): Triad | null {
+function readQuality(quality: string): Reading | null {
   if (quality === '') return 'major';
 
   const word = quality.toLowerCase();
@@ -204,7 +254,7 @@ function triadOf(quality: string): Triad | null {
   // `m7#5` is.
   if (includesAny(word, ['dim', '°', 'ø'])) return 'diminished';
   if (startsWithAny(word, ['aug', ...PLUS_MARKS])) return 'augmented';
-  if (includesAny(word, NO_THIRD_WORDS) || startsWithAny(word, BARE_FIFTHS)) return null;
+  if (includesAny(word, NO_THIRD_WORDS) || startsWithAny(word, BARE_FIFTHS)) return NO_THIRD;
 
   // An `m` in front of an `add` is a minor chord with something added, not
   // the `ma` that says major. Which it is comes down to the case of that one
@@ -460,8 +510,13 @@ export function inferKey(chords: readonly ChordSymbol[]): KeyGuess | null {
 
   const sounds = played
     .map((chord) => {
-      const triad = triadOf(chord.quality);
-      return triad ? { pitch: pitchClass(chord.root), triad } : null;
+      const reading = readQuality(chord.quality);
+      // A chord with no third fits every key equally and is evidence for
+      // none, and one that cannot be read is evidence for nothing at all.
+      // Neither belongs among the chords a key is scored against.
+      return reading && reading !== NO_THIRD
+        ? { pitch: pitchClass(chord.root), triad: reading }
+        : null;
     })
     .filter((sound) => sound !== null);
 
@@ -509,7 +564,7 @@ export function inferKey(chords: readonly ChordSymbol[]): KeyGuess | null {
   const confidence = best.fit * margin;
   if (confidence < MIN_CONFIDENCE) return null;
 
-  return { key: { ...best.key, tonic: spellTonic(best.key.tonic, played) }, confidence };
+  return { key: { ...best.key, tonic: spellTonic(best.key, played) }, confidence };
 }
 
 function candidates(): Key[] {
@@ -528,7 +583,20 @@ interface Sound {
 
 function endOf(chords: readonly ChordSymbol[], index: number): Sound | null {
   const chord = chords.at(index);
-  return chord ? { pitch: pitchClass(chord.root), triad: triadOf(chord.quality) } : null;
+  if (!chord) return null;
+
+  // A chord that states no third still rests where it rests, and a chart
+  // ending on a power chord ends where it ends. One whose quality nothing can
+  // be made of is different: it may not be a chord at all, and coming to rest
+  // on a tonic is the heaviest thing on the scoreboard to hand to a token
+  // that cannot be read.
+  const reading = readQuality(chord.quality);
+  if (reading === null) return null;
+
+  return {
+    pitch: pitchClass(chord.root),
+    triad: reading === NO_THIRD ? null : reading,
+  };
 }
 
 /**
@@ -569,26 +637,21 @@ function isIn(table: readonly Chord[], sound: Sound, tonic: number) {
 }
 
 /**
- * How many accidentals a note may carry and still name a key.
- *
- * One. A chart spelling a pitch with two is spelling a chord that passes
- * through it, and no key is named that way — nobody is in E double sharp.
- */
-const MOST_ACCIDENTALS_IN_A_KEY_NAME = 1;
-
-/**
  * Spells the tonic the way the chart spells that pitch most often, falling
- * back to the canonical spelling when no chord names it that way. A chart
- * full of `F#` should not come back as being in G flat, one `Gb` among thirty
- * `F#` should not decide it either, and a passing `E##` should not name the
- * key at all.
+ * back to the canonical spelling when no chord names it that way.
+ *
+ * A chart full of `F#` should not come back as being in G flat, and one `Gb`
+ * among thirty `F#` should not decide it either. Following the chart stops at
+ * {@link namesAKey}: a passing `E##`, or a `G#` in what turns out to be a
+ * major key, is a chord spelled for where it is going rather than a name the
+ * key has.
  */
-function spellTonic(tonic: Note, chords: readonly ChordSymbol[]): Note {
-  const pitch = pitchClass(tonic);
+function spellTonic(key: Key, chords: readonly ChordSymbol[]): Note {
+  const pitch = pitchClass(key.tonic);
   const spellings = new Map<string, { note: Note; count: number }>();
   for (const chord of chords) {
     if (pitchClass(chord.root) !== pitch) continue;
-    if (Math.abs(chord.root.accidental) > MOST_ACCIDENTALS_IN_A_KEY_NAME) continue;
+    if (!namesAKey({ ...key, tonic: chord.root })) continue;
     const name = formatNote(chord.root);
     const seen = spellings.get(name);
     if (seen) seen.count += 1;
@@ -599,5 +662,5 @@ function spellTonic(tonic: Note, chords: readonly ChordSymbol[]): Note {
     (best, spelling) => (best && best.count >= spelling.count ? best : spelling),
     null,
   );
-  return commonest ? commonest.note : tonic;
+  return commonest ? commonest.note : key.tonic;
 }

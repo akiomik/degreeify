@@ -67,6 +67,21 @@ describe('parseKey', () => {
     expect(parseKey(input)).toBeNull();
   });
 
+  // A key signature holds at most seven sharps or seven flats, and a name
+  // needing more than that is not a key anyone is in. The mode comes into it:
+  // a minor key is named three fifths from the signature it shares with its
+  // relative, so G sharp minor is a key where G sharp major is not.
+  describe('names no key is in', () => {
+    it.each(['Cbb', 'F##', 'B#', 'E#', 'Fb', 'G#', 'D#', 'Fbm'])('rejects %j', (input) => {
+      expect(parseKey(input)).toBeNull();
+    });
+
+    it.each(['Cb', 'C#', 'Ab', 'Gb', 'G#m', 'A#m', 'Abm', 'Ebm', 'D#m'])('accepts %j', (input) => {
+      const key = parseKey(input);
+      expect(key && formatKey(key)).toBe(input);
+    });
+  });
+
   it('reads the m as the mode rather than as a chord quality', () => {
     expect(parseKey('Gm')?.mode).toBe('minor');
     expect(parseKey('G')?.mode).toBe('major');
@@ -245,10 +260,27 @@ describe('inferKey', () => {
       },
     );
 
-    // Which chord opens and closes a chart is about its root alone, so a
-    // chord whose triad cannot be read still counts at the ends.
-    it('takes the ends of the chart from chords it cannot otherwise read', () => {
+    // Which chord opens and closes a chart is about its root, so a chord
+    // that says it has no third still rests where it rests.
+    it('takes the ends of the chart from chords that state no third', () => {
       expect(guessOf('Csus4', 'F', 'G', 'Am', 'Dm', 'C5')).toBe('C');
+    });
+
+    // A quality nothing can be made of is a different case. It says nothing,
+    // the token carrying it may not be a chord at all, and coming to rest on
+    // a tonic is the heaviest thing on the scoreboard to hand to something
+    // unread. The chart is left with one end rather than two.
+    describe('an ending nothing can be made of', () => {
+      const chart = ['C', 'F', 'G', 'Dm', 'Em', 'Am'];
+      const confidenceOf = (last: string) => inferKey(chords(...chart, last))?.confidence ?? 0;
+
+      it.each(['C5', 'Csus4'])('still ends the chart on %j', (last) => {
+        expect(confidenceOf(last)).toBe(confidenceOf('C'));
+      });
+
+      it.each(['Cim', 'Cwhatever'])('does not end the chart on %j', (last) => {
+        expect(confidenceOf(last)).toBeLessThan(confidenceOf('C'));
+      });
     });
 
     // A jazz lead sheet writes with a dash what a chart elsewhere writes with
@@ -499,6 +531,14 @@ describe('inferKey', () => {
     it('falls back rather than naming a key with a double accidental', () => {
       expect(guessOf('E##', 'B', 'C#', 'D#m', 'E##', 'E##', 'E##')).toBe('Gb');
       expect(guessOf('Gb', 'B', 'C#', 'D#m', 'Gb', 'Gb', 'Gb')).toBe('Gb');
+    });
+
+    // The same rule as the one a name read off a chart is held to, and it
+    // depends on the mode: a chart spelling its tonic `G#` is in G sharp
+    // minor if it is minor, and in A flat if it is major.
+    it('follows the chart only as far as a key of that name exists', () => {
+      expect(guessOf('G#m', 'C#m', 'D#m', 'B', 'G#m')).toBe('G#m');
+      expect(guessOf('G#', 'C#', 'D#', 'Fm', 'G#')).toBe('Ab');
     });
   });
 
