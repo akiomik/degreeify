@@ -1,4 +1,4 @@
-import { type ChordSymbol, DASH_MARKS, TRIANGLE_MARKS } from './chord';
+import { type ChordSymbol, DASH_MARKS, PLUS_MARKS, TRIANGLE_MARKS } from './chord';
 import {
   FLAT_CHARS,
   formatNote,
@@ -76,7 +76,7 @@ type Triad = 'major' | 'minor' | 'diminished' | 'augmented';
  * the parser accepts cannot be one this file fails to read.
  */
 const FLATTENING_MARKS = DASH_MARKS + FLAT_CHARS;
-const RAISING_MARKS = SHARP_CHARS;
+const RAISING_MARKS = PLUS_MARKS + SHARP_CHARS;
 
 /**
  * Whether a quality alters its fifth: `7-5`, `m7b5`, `m7(b5)`, `7#5`. The
@@ -134,16 +134,18 @@ function triadOf(quality: string): Triad | null {
 
   const word = quality.toLowerCase();
   if (startsWithAny(word, ['dim', '°', 'ø'])) return 'diminished';
-  if (startsWithAny(word, ['aug', '+'])) return 'augmented';
+  if (startsWithAny(word, ['aug', ...PLUS_MARKS])) return 'augmented';
   // A suspended or a power chord states no third, so it fits every key
   // equally and is evidence for none of them. `sus` is looked for anywhere in
   // the quality because `7sus4` is as common as `sus4`.
   if (word.includes('sus') || word.startsWith('5')) return null;
   // `mi` covers `min` and `mi7` alike, and `ma` covers `maj7` and the fake
   // book's `ma7`. Both are settled before the bare `m` that they all begin
-  // with, and before the `M` that says major on its own.
+  // with, and before the `M` that says major on its own. `madd9` is not one
+  // of them — that is a minor chord with an added ninth, and the `ma` it
+  // opens with belongs to two different parts of the quality.
   if (word.startsWith('mi')) return hasFlatFifth(word) ? 'diminished' : 'minor';
-  if (word.startsWith('ma')) return majorOrAltered(word);
+  if (word.startsWith('ma') && !word.startsWith('madd')) return majorOrAltered(word);
   // Lower-casing a triangle turns the Greek delta into a different letter, so
   // these are read as written — as `M` has to be in any case.
   if (startsWithAny(quality, ['M', ...TRIANGLE_MARKS])) return majorOrAltered(word);

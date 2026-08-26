@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type ChordSymbol, DASH_MARKS, parseChord, TRIANGLE_MARKS } from '@/core/chord';
+import { type ChordSymbol, DASH_MARKS, PLUS_MARKS, parseChord, TRIANGLE_MARKS } from '@/core/chord';
 import { formatKey, inferKey, MIN_CONFIDENCE, parseKey } from '@/core/key';
 
 const chords = (...symbols: string[]): ChordSymbol[] =>
@@ -204,6 +204,17 @@ describe('inferKey', () => {
       expect(guessOf(`C${quality}`, 'Dm7', `F${quality}`, 'G7', `C${quality}`)).toBe('C');
     });
 
+    // A minor chord with an added ninth opens `ma` without any of it being
+    // the `ma` that says major.
+    it.each(['madd9', 'madd11'])('reads %j as a minor chord', (quality) => {
+      expect(guessOf(`C${quality}`, `F${quality}`, `G${quality}`, `C${quality}`)).toBe('Cm');
+    });
+
+    it('still reads the same addition on a major chord as major', () => {
+      expect(guessOf('CMadd9', 'F', 'G', 'CMadd9')).toBe('C');
+      expect(guessOf('Cadd9', 'F', 'G', 'Cadd9')).toBe('C');
+    });
+
     // A raised fifth makes an augmented triad whatever else the quality says,
     // and a lowered one under a major third makes nothing that has a name.
     // Neither is the plain major triad they were being read as.
@@ -214,6 +225,17 @@ describe('inferKey', () => {
 
       it.each(['(b5)', '7-5', '7b5'])('has nothing to say about %j', (quality) => {
         expect(guessOf(`C${quality}`, `F${quality}`, `G${quality}`, `C${quality}`)).toBeNull();
+      });
+
+      // A fake book raises and lowers with a pair of marks, and a chart using
+      // one of them uses the other. Handling the dash but not the plus would
+      // read half such a chart as plain major triads.
+      it.each([...PLUS_MARKS])('reads a fifth raised with %j as augmented', (plus) => {
+        expect(guessOf(`C7${plus}5`, `F7${plus}5`, `G7${plus}5`, `C7${plus}5`)).toBeNull();
+      });
+
+      it.each([...PLUS_MARKS])('reads %j on its own as augmented', (plus) => {
+        expect(guessOf(`C${plus}`, `F${plus}`, `G${plus}`, `C${plus}`)).toBeNull();
       });
 
       // The five is what the mark has to be against. An altered eleventh is

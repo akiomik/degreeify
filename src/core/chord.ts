@@ -26,14 +26,16 @@ export interface ChordSymbol {
 
 /**
  * The spellings of the triangle that stands for a major seventh, and of the
- * dash. Named because a quality has to be allowed to contain them here and
- * understood in `key.ts`, and the two lists drifting apart would mean a chord
- * the parser accepts and the scorer cannot read.
+ * dash and plus that a fake book raises and lowers a note with. Named because
+ * a quality has to be allowed to contain them here and understood in
+ * `key.ts`, and the lists drifting apart would mean a chord the parser
+ * accepts and the scorer cannot read.
  *
  * `DASH_MARKS` keeps the ASCII hyphen last so that it can be dropped straight
  * into a character class without opening a range.
  */
 export const TRIANGLE_MARKS = '△▲∆Δ';
+export const PLUS_MARKS = '+＋';
 export const DASH_MARKS = '−－ー-';
 
 /**
@@ -60,7 +62,7 @@ export const DASH_MARKS = '−－ー-';
  * of an accidental belongs in {@link ACCIDENTAL_CHARS}, and reaches this set
  * from there.
  */
-const OTHER_QUALITY_CHARS = `A-Za-z0-9()+,°øØ${TRIANGLE_MARKS}/${DASH_MARKS}`;
+const OTHER_QUALITY_CHARS = `A-Za-z0-9()${PLUS_MARKS},°øØ${TRIANGLE_MARKS}/${DASH_MARKS}`;
 
 const QUALITY_CHARS = new RegExp(`^[${ACCIDENTAL_CHARS}${OTHER_QUALITY_CHARS}]*$`, 'u');
 
