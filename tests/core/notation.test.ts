@@ -73,16 +73,21 @@ describe('formatDegreeChord', () => {
   });
 
   // A quality that starts with a roman numeral letter runs into the numeral
-  // in front of it. Both of these are mistyped in the chart to begin with,
-  // and nothing tells such a quality from a real one, so they are left to
-  // read oddly rather than guessed at. Pinned so the behaviour is a decision
-  // rather than an accident.
+  // in front of it. Nothing tells such a quality from a real one, so these
+  // are left to read oddly rather than guessed at, and pinned here so that
+  // stays a decision rather than an accident.
   describe('a quality that reads as part of the numeral', () => {
+    // Observed on a real chart, where it follows a `G#dim`: a mis-keyed
+    // diminished chord that lost the `d`. The site cannot tell either, and
+    // transposes it as a root and a quality like any other chord.
     it('leaves a mistyped Gbim reading as a second in ascii', () => {
       expect(nameOf('Gbim', key('F#'))).toBe('Iim');
       expect(nameOf('Gbim', key('F#'), 'roman-unicode')).toBe('Ⅰim');
     });
 
+    // Made up rather than observed. `Iim` still reads as a numeral and a
+    // quality; `Iv` reads as a different numeral outright, which is the worse
+    // half of the problem and worth having a case for.
     it('leaves Cv reading as a fourth in ascii', () => {
       expect(nameOf('Cv', key('C'))).toBe('Iv');
       expect(nameOf('Cv', key('C'), 'roman-unicode')).toBe('Ⅰv');

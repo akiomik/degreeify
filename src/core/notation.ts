@@ -32,9 +32,10 @@ export function formatDegree(degree: Degree, notation: Notation = 'roman-ascii')
  * The quality goes through as it came in, which is worth knowing about: a
  * quality that starts with a roman numeral letter reads as part of the
  * numeral. A mistyped `Gbim` in F sharp comes out as `Iim`, which looks like
- * a second rather than a first. It is wrong in the chart to begin with, and
- * there is no way to tell such a quality from a real one, so it is left to
- * read oddly rather than guessed at.
+ * a second rather than a first, and a quality starting with a `v` would read
+ * as a different numeral outright. Such a quality is wrong in the chart to
+ * begin with, and nothing tells it from a real one, so it is left to read
+ * oddly rather than guessed at.
  */
 export function formatDegreeChord(chord: DegreeChord, notation: Notation = 'roman-ascii'): string {
   const root = formatDegree(chord.root, notation);
