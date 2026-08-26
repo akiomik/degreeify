@@ -140,6 +140,16 @@ const NO_THIRD_WORDS = ['sus', 'no3', 'omit3'];
 const BARE_FIFTHS = ['5', '(5)'];
 
 /**
+ * How a quality spells a third as a word: `mi`, `min` and `mi7` all begin the
+ * one way, `ma`, `maj7` and the fake book's `ma7` the other.
+ */
+const MINOR_WORD = 'mi';
+const MAJOR_WORD = 'ma';
+
+/** How a quality names a major third with a mark rather than a word. */
+const MAJOR_MARKS = ['M', ...TRIANGLE_MARKS];
+
+/**
  * How a quality can begin and mean a minor third once the ones spelled as a
  * word have been dealt with: an `m`, or the dash a jazz lead sheet writes
  * `C-7` with where a chart elsewhere writes `Cm7`.
@@ -150,7 +160,8 @@ const BARE_FIFTHS = ['5', '(5)'];
  * nothing saying that, and a character permitted as a look-alike does not get
  * to mean a minor third on its own.
  */
-const MINOR_MARKS = ['m', ...DASH_MARKS];
+const MINOR_MARK_LETTER = 'm';
+const MINOR_MARKS = [MINOR_MARK_LETTER, ...DASH_MARKS];
 
 /**
  * Whether what follows the mark naming the third raises the fifth.
@@ -198,20 +209,21 @@ function triadOf(quality: string): Triad | null {
   // An `m` in front of an `add` is a minor chord with something added, not
   // the `ma` that says major. Which it is comes down to the case of that one
   // letter, so a quality shouted in capitals cannot say.
-  if (word.startsWith('madd')) {
-    if (quality.startsWith('m')) return withFifth(word.slice(1), 'minor');
+  if (word.startsWith(`${MINOR_MARK_LETTER}add`)) {
+    if (quality.startsWith(MINOR_MARK_LETTER)) return withFifth(word.slice(1), 'minor');
     return quality.startsWith('Madd') ? withFifth(word.slice(1), 'major') : null;
   }
 
   // `mi` covers `min` and `mi7` alike, and `ma` covers `maj7` and the fake
   // book's `ma7`. Both are settled before the bare `m` that they all begin
   // with, and before the `M` that says major on its own.
-  if (word.startsWith('mi')) return withFifth(word.slice(2), 'minor');
-  if (word.startsWith('ma')) return withFifth(word.slice(2), 'major');
+  if (word.startsWith(MINOR_WORD)) return withFifth(word.slice(MINOR_WORD.length), 'minor');
+  if (word.startsWith(MAJOR_WORD)) return withFifth(word.slice(MAJOR_WORD.length), 'major');
   // Lower-casing a triangle turns the Greek delta into a different letter, so
   // these are read as written — as `M` has to be in any case.
-  if (startsWithAny(quality, ['M', ...TRIANGLE_MARKS])) return withFifth(word.slice(1), 'major');
-  const minorMark = MINOR_MARKS.find((mark) => quality.startsWith(mark));
+  const majorMark = leadingMark(quality, MAJOR_MARKS);
+  if (majorMark) return withFifth(word.slice(majorMark.length), 'major');
+  const minorMark = leadingMark(quality, MINOR_MARKS);
   if (minorMark) return withFifth(word.slice(minorMark.length), 'minor');
   // A quality that opens with a bracket says nothing before it, so the triad
   // is the plain one the root names: `C(9)` is a C major triad with a ninth.
@@ -221,6 +233,19 @@ function triadOf(quality: string): Triad | null {
 
 function startsWithAny(text: string, prefixes: readonly string[]): boolean {
   return prefixes.some((prefix) => text.startsWith(prefix));
+}
+
+/**
+ * The first of `marks` that `text` begins with.
+ *
+ * What is returned is the mark itself rather than a yes, so that a caller
+ * reading what comes after it can take that many characters off instead of
+ * assuming a length. The lists these come from are shared with the parser and
+ * meant to grow, and one grown by a mark written with a surrogate pair would
+ * be cut in half by a fixed count.
+ */
+function leadingMark(text: string, marks: readonly string[]): string | undefined {
+  return marks.find((mark) => text.startsWith(mark));
 }
 
 function includesAny(text: string, parts: readonly string[]): boolean {
@@ -415,9 +440,13 @@ export function inferKey(chords: readonly ChordSymbol[]): KeyGuess | null {
   if (distinct.length < MIN_DISTINCT_CHORDS) return null;
 
   // Read from every chord rather than only the ones whose triad could be made
-  // out: a chart opening on a power chord still opens where it opens.
-  const opening = endOf(chords, 0);
-  const closing = endOf(chords, -1);
+  // out: a chart opening on a power chord still opens where it opens. A chord
+  // in brackets is left out, though — that is one offered rather than one the
+  // chart rests on, and an optional chord written after the real ending would
+  // otherwise take the ending's word for what key the chart is in.
+  const played = chords.filter((chord) => chord.wrapper === 'none');
+  const opening = endOf(played, 0);
+  const closing = endOf(played, -1);
 
   const scored = candidates().map((key) => {
     const tonic = pitchClass(key.tonic);

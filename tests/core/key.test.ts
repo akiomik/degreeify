@@ -76,6 +76,21 @@ describe('inferKey', () => {
       expect(guessOf('C', 'F', 'G', 'C')).toBe('C');
     });
 
+    // A chord in brackets is one offered rather than one the chart rests on,
+    // so it is not where the chart begins or ends. Written after the real
+    // ending it would otherwise take the ending's word for the whole key,
+    // and closing on a tonic is the heaviest thing there is.
+    it('does not end a chart on a chord that is only offered', () => {
+      const ending = ['C', 'F', 'G', 'Dm', 'Em', 'Am', 'C'];
+      expect(guessOf(...ending)).toBe('C');
+      expect(guessOf(...ending, '(Am7)')).toBe('C');
+      expect(guessOf('(Am7)', ...ending)).toBe('C');
+    });
+
+    it('still ends a chart on one that is played', () => {
+      expect(guessOf('C', 'F', 'G', 'Dm', 'Em', 'C', 'Am')).toBe('Am');
+    });
+
     // A chart is in the key it arrives at more than the key it sets out
     // from. Worth the same, the two ends cancel here and leave the pair
     // level, and a chart whose ending had already answered the question is
@@ -263,6 +278,13 @@ describe('inferKey', () => {
     // two cannot drift apart.
     it.each([...TRIANGLE_MARKS])('reads %j as a major seventh', (mark) => {
       expect(guessOf(`C${mark}7`, 'Dm7', `F${mark}7`, 'G7', `C${mark}7`)).toBe('C');
+    });
+
+    // What follows the mark has to be read as though the mark were not there,
+    // whichever of them it is and however many characters it takes to write.
+    it.each([...TRIANGLE_MARKS])('reads what follows %j as it does what follows M', (mark) => {
+      expect(readingOf(`${mark}7#5`)).toBe(readingOf('M7#5'));
+      expect(readingOf(`${mark}7`)).toBe(readingOf('M7'));
     });
 
     // A fake book abbreviates a major seventh to `ma7`, which begins the way
