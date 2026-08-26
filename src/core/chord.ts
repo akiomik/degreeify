@@ -25,6 +25,37 @@ export interface ChordSymbol {
 }
 
 /**
+ * The spellings of the triangle that stands for a major seventh, and of the
+ * dash and plus that a fake book raises and lowers a note with. Named because
+ * a quality has to be allowed to contain them here and understood in
+ * `key.ts`, and the lists drifting apart would mean a chord the parser
+ * accepts and the scorer cannot read.
+ *
+ * `DASH_LOOKALIKES` is kept apart from the dashes proper. A Japanese keyboard
+ * puts the prolonged sound mark where a dash would go, so a quality reads the
+ * same with it — but it is a letter rather than a dash, and it says nothing
+ * on its own the way `C-7` does. Permitting a character and taking it to mean
+ * something are different things.
+ */
+export const TRIANGLE_MARKS = '△▲∆Δ';
+export const PLUS_MARKS = '+＋';
+export const DASH_LOOKALIKES = 'ー';
+export const DASH_MARKS = '−－-';
+
+/**
+ * Escapes a run of characters for use inside a regular expression class.
+ *
+ * Done here rather than by arranging the lists so that they happen to be safe
+ * where they are put. A hyphen sitting between two other characters opens a
+ * range, and a rule about which constant may be written last is a rule
+ * waiting to be broken by whoever adds the next one.
+ */
+const forCharClass = (chars: string) => chars.replace(/[\\\]^-]/g, '\\$&');
+
+/** Characters a quality may hold besides the letters and the digits. */
+const OTHER_QUALITY_CHARS = `${PLUS_MARKS}${TRIANGLE_MARKS}${DASH_MARKS}${DASH_LOOKALIKES}()°øØ,/`;
+
+/**
  * Characters a chord quality is written from.
  *
  * Passing an unknown quality through is deliberate, but "unknown" has to stop
@@ -37,9 +68,9 @@ export interface ChordSymbol {
  * Where a symbol has look-alikes that get typed for it, the ones that turn up
  * in practice are here as well. A major seventh triangle is written `△` or
  * `∆` more often than it is with the Greek delta, and a Japanese keyboard
- * produces `＃`, `－` and `ー` as readily as the ASCII ones. The list will
- * never be exhaustive, and a spelling missing from it costs only a chord left
- * as it was.
+ * produces `＃`, `＋`, `－` and `ー` as readily as the ASCII ones. The list
+ * will never be exhaustive, and a spelling missing from it costs only a chord
+ * left as it was.
  *
  * The accidentals are taken from `pitch.ts` rather than repeated here. One
  * allowed in a quality but unknown there would be read as the start of a
@@ -48,9 +79,10 @@ export interface ChordSymbol {
  * of an accidental belongs in {@link ACCIDENTAL_CHARS}, and reaches this set
  * from there.
  */
-const OTHER_QUALITY_CHARS = 'A-Za-z0-9()+,°øØ△▲∆Δ/−－ー-';
-
-const QUALITY_CHARS = new RegExp(`^[${ACCIDENTAL_CHARS}${OTHER_QUALITY_CHARS}]*$`, 'u');
+const QUALITY_CHARS = new RegExp(
+  `^[A-Za-z0-9${forCharClass(ACCIDENTAL_CHARS + OTHER_QUALITY_CHARS)}]*$`,
+  'u',
+);
 
 /**
  * Whole tokens that label a part of a chart rather than name a chord.
