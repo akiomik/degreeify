@@ -4,10 +4,31 @@ import type { Degree, DegreeChord, Numeral } from './degree';
  * Turning a degree into the text that goes on the page.
  *
  * `roman-ascii` is the default because a chart is laid out in a monospaced
- * font and ASCII is the only spelling certain to be measured as one column
- * per character. `roman-unicode` is narrower — `Ⅶ` occupies one character
- * where `VII` occupies three — which matters when a degree name has to fit
- * the width of the chord name it replaces.
+ * font and ASCII is the only spelling certain to be measured one column per
+ * character.
+ *
+ * `roman-unicode` exists to be measured against it, for when a degree name
+ * has to fit the width of the chord name it replaces. Whether it helps is an
+ * open question rather than a given, and counting code points is the wrong
+ * way to answer it. Every character it uses — `Ⅰ` to `Ⅶ`, `♭` and `♯` — has
+ * an East Asian width of Ambiguous, so a Japanese page renders all of them
+ * full width, two columns each:
+ *
+ * | ascii | columns | unicode | columns |
+ * | --- | --- | --- | --- |
+ * | `III`, `VII` | 3 | `Ⅲ`, `Ⅶ` | 2 |
+ * | `II`, `IV`, `VI` | 2 | `Ⅱ`, `Ⅳ`, `Ⅵ` | 2 |
+ * | `I`, `V`, `b`, `#` | 1 | `Ⅰ`, `Ⅴ`, `♭`, `♯` | 2 |
+ *
+ * Two of the seven numerals come out shorter, two come out longer, and an
+ * accidental always costs a column: `♯Ⅳ` takes four where `#IV` takes three.
+ * On top of that, monospaced fonts often have no glyph for U+2160 to U+2166,
+ * which falls back to a proportional face and loses the alignment the whole
+ * exercise is meant to protect.
+ *
+ * So this has to be measured on a real page before anything is allowed to
+ * depend on it. If it turns out to be the wrong trade, the thing to try next
+ * is ASCII numerals with the symbol accidentals.
  */
 export type Notation = 'roman-ascii' | 'roman-unicode';
 

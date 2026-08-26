@@ -76,8 +76,9 @@ describe('toDegreeChord', () => {
       [1, 'C#', 'bII', '#I'],
       [3, 'D#', 'bIII', '#II'],
       // Also the case that catches an alteration measured without wrapping
-      // into the negative: `Gb` against C comes out a semitone flat of the
-      // fifth, not eleven semitones sharp of the first.
+      // into the negative. The numeral comes from the letter distance either
+      // way, so it stays the fifth; it is the alteration that breaks, reading
+      // a semitone flat as eleven semitones sharp and falling back.
       [6, 'Gb', '#IV', 'bV'],
       [8, 'G#', 'bVI', '#V'],
       [10, 'A#', 'bVII', '#VI'],
