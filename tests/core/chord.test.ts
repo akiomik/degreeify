@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { type ChordSymbol, parseChord } from '@/core/chord';
+import {
+  type ChordSymbol,
+  DASH_LOOKALIKES,
+  DASH_MARKS,
+  PLUS_MARKS,
+  parseChord,
+  TRIANGLE_MARKS,
+} from '@/core/chord';
 import type { Accidental, Letter, Note } from '@/core/pitch';
 import { ACCIDENTAL_CHARS, FLAT_CHARS, SHARP_CHARS } from '@/core/pitch';
 
@@ -104,6 +111,17 @@ describe('parseChord', () => {
       it.each([...ACCIDENTAL_CHARS])('keeps %j inside a quality', (accidental) => {
         expect(parsed(`CM7(${accidental}11)`).quality).toBe(`M7(${accidental}11)`);
       });
+
+      // Every named mark has to survive being built into the character class
+      // that decides what a quality may hold. A hyphen among them opens a
+      // range unless it is escaped, and the escaping is easy to get wrong in
+      // a way that quietly admits or refuses a run of characters.
+      it.each([...PLUS_MARKS, ...TRIANGLE_MARKS, ...DASH_MARKS, ...DASH_LOOKALIKES])(
+        'keeps %j inside a quality too',
+        (mark) => {
+          expect(parsed(`C7${mark}9`).quality).toBe(`7${mark}9`);
+        },
+      );
 
       // These cannot be confused with an accidental, so they only ever need
       // to survive as part of the quality.

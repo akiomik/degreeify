@@ -253,15 +253,17 @@ function includesAny(text: string, parts: readonly string[]): boolean {
 }
 
 /*
- * An augmented chord is read rather than set aside, even though it belongs to
- * no key's plain scale and so counts against every candidate.
+ * An augmented chord is read rather than set aside, even though the only key
+ * that accounts for it is the minor one whose raised third it is, so against
+ * every other candidate it counts against.
  *
  * A quality that states no third, and one that cannot be read at all, are set
  * aside because there is nothing to say about them. An augmented chord is not
  * in that position: it is known, and known to be outside every scale, and a
  * chart full of chords outside every scale really is a chart whose key its
- * chords do not settle. Counting it lowers confidence rather than moving any
- * candidate ahead of another, which is the right direction to fail in.
+ * chords do not settle. Counting it lowers confidence nearly everywhere
+ * rather than putting a candidate ahead, which is the right direction to fail
+ * in.
  *
  * The cost is bounded and the alternative is worse. A chart carrying one or
  * two of them among its diatonic chords is still named; only one made mostly
@@ -427,7 +429,14 @@ const TONIC_TRIAD: Record<Mode, Triad> = { major: 'major', minor: 'minor' };
  * this alone" and, where there is a person to ask, ask them.
  */
 export function inferKey(chords: readonly ChordSymbol[]): KeyGuess | null {
-  const sounds = chords
+  // A chord in brackets is one offered rather than one the chart is made of,
+  // and a chord that may never be played must not be able to take away an
+  // answer the rest of them have already given. It says nothing about which
+  // key accounts for the chart and nothing about where the chart comes to
+  // rest, so it is left out of both.
+  const played = chords.filter((chord) => chord.wrapper === 'none');
+
+  const sounds = played
     .map((chord) => {
       const triad = triadOf(chord.quality);
       return triad ? { pitch: pitchClass(chord.root), triad } : null;
@@ -439,12 +448,8 @@ export function inferKey(chords: readonly ChordSymbol[]): KeyGuess | null {
   ];
   if (distinct.length < MIN_DISTINCT_CHORDS) return null;
 
-  // Read from every chord rather than only the ones whose triad could be made
-  // out: a chart opening on a power chord still opens where it opens. A chord
-  // in brackets is left out, though — that is one offered rather than one the
-  // chart rests on, and an optional chord written after the real ending would
-  // otherwise take the ending's word for what key the chart is in.
-  const played = chords.filter((chord) => chord.wrapper === 'none');
+  // Read from the chords whose triad could not be made out as well: a chart
+  // opening on a power chord still opens where it opens.
   const opening = endOf(played, 0);
   const closing = endOf(played, -1);
 

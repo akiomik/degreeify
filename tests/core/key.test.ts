@@ -91,6 +91,17 @@ describe('inferKey', () => {
       expect(guessOf('C', 'F', 'G', 'Dm', 'Em', 'C', 'Am')).toBe('Am');
     });
 
+    // Nor is it part of what the chart is made of. A chord that may never be
+    // played must not be able to take away an answer the rest of them have
+    // already given — and one chromatic chord offered over a chart that was
+    // only just being named is enough to do it.
+    it('does not let a chord that is only offered take the key away', () => {
+      const chart = ['C', 'F', 'G', 'Am', 'Dm', 'Em'];
+      expect(guessOf(...chart)).toBe('C');
+      expect(guessOf(...chart, '(Dbaug)')).toBe('C');
+      expect(guessOf(...chart, '(Em7)')).toBe('C');
+    });
+
     // A chart is in the key it arrives at more than the key it sets out
     // from. Worth the same, the two ends cancel here and leave the pair
     // level, and a chart whose ending had already answered the question is
