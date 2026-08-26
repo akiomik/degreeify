@@ -7,7 +7,7 @@ import {
   parseChord,
   TRIANGLE_MARKS,
 } from '@/core/chord';
-import { formatKey, inferKey, MIN_CONFIDENCE, parseKey } from '@/core/key';
+import { formatKey, inferKey, MIN_CONFIDENCE, namesAKey, parseKey } from '@/core/key';
 
 const chords = (...symbols: string[]): ChordSymbol[] =>
   symbols.map((symbol) => {
@@ -67,19 +67,28 @@ describe('parseKey', () => {
     expect(parseKey(input)).toBeNull();
   });
 
-  // A key signature holds at most seven sharps or seven flats, and a name
-  // needing more than that is not a key anyone is in. The mode comes into it:
-  // a minor key is named three fifths from the signature it shares with its
-  // relative, so G sharp minor is a key where G sharp major is not.
-  describe('names no key is in', () => {
-    it.each(['Cbb', 'F##', 'B#', 'E#', 'Fb', 'G#', 'D#', 'Fbm'])('rejects %j', (input) => {
-      expect(parseKey(input)).toBeNull();
-    });
+  // Reading a name and choosing one are different acts. A page writing `G#`
+  // has said which pitch it means, and every degree name follows from the
+  // pitch and nothing else, so a name no key is conventionally called by is
+  // still a key that has been handed over. Which names exist is a question
+  // for when the module is choosing one for itself, and the spelling cases
+  // further down are where that is held to.
+  describe('names no key is conventionally called by', () => {
+    it.each(['G#', 'D#', 'A#', 'E#', 'B#', 'Fb', 'Dbm', 'Gbm', 'Cbb', 'F##'])(
+      'takes %j as the chart wrote it',
+      (input) => {
+        const key = parseKey(input);
+        expect(key && formatKey(key)).toBe(input);
+      },
+    );
 
-    it.each(['Cb', 'C#', 'Ab', 'Gb', 'G#m', 'A#m', 'Abm', 'Ebm', 'D#m'])('accepts %j', (input) => {
-      const key = parseKey(input);
-      expect(key && formatKey(key)).toBe(input);
-    });
+    it.each(['Cb', 'C#', 'Ab', 'Gb', 'G#m', 'A#m', 'Abm', 'Ebm', 'D#m'])(
+      'takes %j too',
+      (input) => {
+        const key = parseKey(input);
+        expect(key && formatKey(key)).toBe(input);
+      },
+    );
   });
 
   it('reads the m as the mode rather than as a chord quality', () => {
@@ -274,9 +283,14 @@ describe('inferKey', () => {
       const chart = ['C', 'F', 'G', 'Dm', 'Em', 'Am'];
       const confidenceOf = (last: string) => inferKey(chords(...chart, last))?.confidence ?? 0;
 
-      it.each(['C5', 'Csus4'])('still ends the chart on %j', (last) => {
-        expect(confidenceOf(last)).toBe(confidenceOf('C'));
-      });
+      // A chord whose triad has no name is a chord all the same, standing on
+      // a root. Only what cannot be read at all is turned away.
+      it.each(['C5', 'Csus4', 'C7b5', 'Cm7#5', 'CM7b5', 'C(b5)'])(
+        'still ends the chart on %j',
+        (last) => {
+          expect(confidenceOf(last)).toBe(confidenceOf('C'));
+        },
+      );
 
       it.each(['Cim', 'Cwhatever'])('does not end the chart on %j', (last) => {
         expect(confidenceOf(last)).toBeLessThan(confidenceOf('C'));
@@ -579,21 +593,24 @@ describe('inferKey', () => {
         'Bdim',
         'D#dim',
       ];
-      let seed = 1;
-      const next = (bound: number): number => {
-        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-        return seed % bound;
-      };
+      // Every chart of three from the vocabulary, rather than a sample of
+      // them. A generator would have to be right about its own arithmetic
+      // before it could say anything about this module's, and there are few
+      // enough of these to take them all.
+      for (const first of vocabulary) {
+        for (const second of vocabulary) {
+          for (const third of vocabulary) {
+            const symbols = [first, second, third];
+            const guess = inferKey(chords(...symbols));
+            if (!guess) continue;
 
-      for (let attempt = 0; attempt < 2000; attempt++) {
-        const symbols = Array.from(
-          { length: 3 + next(5) },
-          () => vocabulary[next(vocabulary.length)] ?? 'C',
-        );
-        const guess = inferKey(chords(...symbols));
-        if (!guess) continue;
-        const name = formatKey(guess.key);
-        expect(parseKey(name), `${symbols.join(' ')} was named ${name}`).not.toBeNull();
+            const name = formatKey(guess.key);
+            const spelled = parseKey(name);
+            expect(spelled && namesAKey(spelled), `${symbols.join(' ')} was named ${name}`).toBe(
+              true,
+            );
+          }
+        }
       }
     });
 

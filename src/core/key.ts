@@ -71,10 +71,12 @@ function fifths(note: Note): number {
  * named three fifths from the signature it shares with its relative — G sharp
  * major is not a key and G sharp minor is.
  *
- * This is the one place that settles what may name a key, for a name read off
- * a chart and for one worked out from its chords alike.
+ * This governs the names this module chooses, not the names it will accept.
+ * A chart that states its own key has said what it means however it spells it
+ * — see {@link parseKey}. It is exported for anyone else with a name to
+ * choose or to offer, a key picker among them.
  */
-function namesAKey(key: Key): boolean {
+export function namesAKey(key: Key): boolean {
   const signature = fifths(key.tonic) - (key.mode === 'minor' ? FIFTHS_TO_RELATIVE_MAJOR : 0);
   return Math.abs(signature) <= MOST_ACCIDENTALS_IN_A_KEY_SIGNATURE;
 }
@@ -84,16 +86,20 @@ function namesAKey(key: Key): boolean {
  *
  * This is the name alone. Pulling the name out of whatever a site wraps it in
  * belongs to that site's adapter.
+ *
+ * Whatever the chart writes is taken, a name {@link namesAKey} would refuse
+ * included. A page saying `G#` has said which pitch it means, and every
+ * degree name follows from the pitch and nothing else, so refusing it would
+ * throw away a key that had been handed over, to no end. Which names exist is
+ * a question for choosing one — see {@link spellTonic}, which chooses rather
+ * than reads.
  */
 export function parseKey(text: string): Key | null {
   const read = readNotePrefix(text.trim());
   if (!read) return null;
 
   const mode: Mode | null = read.rest === '' ? 'major' : read.rest === 'm' ? 'minor' : null;
-  if (!mode) return null;
-
-  const key: Key = { tonic: read.note, mode };
-  return namesAKey(key) ? key : null;
+  return mode ? { tonic: read.note, mode } : null;
 }
 
 export function formatKey(key: Key): string {
@@ -112,16 +118,21 @@ export function formatKey(key: Key): string {
 type Triad = 'major' | 'minor' | 'diminished' | 'augmented';
 
 /**
- * What a quality says the chord is built on: one of the four triads, or that
- * there is no third to speak of.
+ * What a quality says the chord is built on: one of the four triads, or a
+ * chord built on none of them.
  *
- * The two are not the same as each other and neither is the same as not
- * knowing. A suspension states that it has no third, which is a thing the
- * quality says; a quality nothing can be made of says nothing at all, and a
- * token that carries one may not even be a chord.
+ * That second answer covers a chord stating no third — a suspension, a bare
+ * fifth — and one whose third and fifth make nothing that has a name, such as
+ * `7b5`. They come to the same thing here: no triad to score a key against,
+ * but a chord all the same, standing on a root, where a chart could come to
+ * rest.
+ *
+ * Neither is the same as not knowing, which is what null is for. A quality
+ * nothing can be made of says nothing, and a token carrying one may not be a
+ * chord at all.
  */
-const NO_THIRD = 'no third';
-type Reading = Triad | typeof NO_THIRD;
+const NO_TRIAD = 'no triad';
+type Reading = Triad | typeof NO_TRIAD;
 
 /**
  * The marks that lower and raise a note, taken from the lists that already
@@ -164,9 +175,9 @@ function hasFifth(word: string, marks: string): boolean {
  * left in, it would be found again against the five and make a diminished
  * triad out of a chord that says no such thing.
  */
-function withFifth(rest: string, third: 'major' | 'minor'): Triad | null {
-  if (raisesFifth(rest)) return third === 'major' ? 'augmented' : null;
-  if (hasFifth(rest, FLATTENING_MARKS)) return third === 'major' ? null : 'diminished';
+function withFifth(rest: string, third: 'major' | 'minor'): Reading {
+  if (raisesFifth(rest)) return third === 'major' ? 'augmented' : NO_TRIAD;
+  if (hasFifth(rest, FLATTENING_MARKS)) return third === 'major' ? NO_TRIAD : 'diminished';
   return third;
 }
 
@@ -254,7 +265,7 @@ function readQuality(quality: string): Reading | null {
   // `m7#5` is.
   if (includesAny(word, ['dim', '°', 'ø'])) return 'diminished';
   if (startsWithAny(word, ['aug', ...PLUS_MARKS])) return 'augmented';
-  if (includesAny(word, NO_THIRD_WORDS) || startsWithAny(word, BARE_FIFTHS)) return NO_THIRD;
+  if (includesAny(word, NO_THIRD_WORDS) || startsWithAny(word, BARE_FIFTHS)) return NO_TRIAD;
 
   // An `m` in front of an `add` is a minor chord with something added, not
   // the `ma` that says major. Which it is comes down to the case of that one
@@ -530,7 +541,7 @@ export function inferKey(chords: readonly ChordSymbol[]): KeyGuess | null {
       // A chord with no third fits every key equally and is evidence for
       // none, and one that cannot be read is evidence for nothing at all.
       // Neither belongs among the chords a key is scored against.
-      return reading && reading !== NO_THIRD
+      return reading && reading !== NO_TRIAD
         ? { pitch: pitchClass(chord.root), triad: reading }
         : null;
     })
@@ -603,17 +614,18 @@ function endOf(chords: readonly ChordSymbol[], index: number): Sound | null {
   const chord = chords.at(index);
   if (!chord) return null;
 
-  // A chord that states no third still rests where it rests, and a chart
-  // ending on a power chord ends where it ends. One whose quality nothing can
-  // be made of is different: it may not be a chord at all, and coming to rest
-  // on a tonic is the heaviest thing on the scoreboard to hand to a token
-  // that cannot be read.
+  // A chord rests where it rests whether or not its triad has a name: a chart
+  // ending on a power chord, or on a seventh with its fifth flattened out of
+  // any triad, ends where it ends. One whose quality nothing can be made of is
+  // different — it may not be a chord at all, its root may be half of a typo,
+  // and coming to rest on a tonic is the heaviest thing on the scoreboard to
+  // hand to something unread.
   const reading = readQuality(chord.quality);
   if (reading === null) return null;
 
   return {
     pitch: pitchClass(chord.root),
-    triad: reading === NO_THIRD ? null : reading,
+    triad: reading === NO_TRIAD ? null : reading,
   };
 }
 
@@ -662,7 +674,8 @@ function isIn(table: readonly Chord[], sound: Sound, tonic: number) {
  * among thirty `F#` should not decide it either. Following the chart stops at
  * {@link namesAKey}: a passing `E##`, or a `G#` in what turns out to be a
  * major key, is a chord spelled for where it is going rather than a name the
- * key has.
+ * key has. Nothing here was handed a name: the key was worked out from the
+ * chords, and what it gets called is this module's to choose well.
  */
 function spellTonic(key: Key, chords: readonly ChordSymbol[]): Note {
   const pitch = pitchClass(key.tonic);
