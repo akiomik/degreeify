@@ -49,6 +49,10 @@ describe.each(TRANSPOSITION_SAMPLES)('$label', ({ from, to, pairs }) => {
   it('leaves what is not a chord as it found it', () => {
     const passed = pairs.filter(([a]) => parseChord(a) === null);
 
+    // Every sample has some, and a sample that had none would make this test
+    // say nothing while still going green.
+    expect(passed.length).toBeGreaterThan(0);
+
     for (const [a, b] of passed) {
       expect(a).toBe(b);
       expect(nameOf(a, written)).toBe(a);

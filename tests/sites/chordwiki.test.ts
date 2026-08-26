@@ -75,6 +75,10 @@ describe('matching a page', () => {
     'https://ja.chordwiki.org/search.cgi?q=test',
     'https://chordwiki.org.example.com/wiki/Test',
     'https://example.com/wiki/Test',
+    // The address a chart is transposed to, and not merely something that
+    // starts the same way.
+    'https://ja.chordwiki.org/wiki.cgi.bak',
+    'https://ja.chordwiki.org/wiki.cgix?c=view',
   ];
 
   it.each(elsewhere)('leaves %s alone', (href) => {
@@ -112,6 +116,20 @@ describe('reading a chart', () => {
     expect(items.filter((item) => item.kind === 'chord')).toHaveLength(11);
   });
 
+  // A chord slot outside the chart is not part of the chart. Nothing on the
+  // site puts one there today, which is exactly when a guard is cheap.
+  it('reads only what is inside the chart', () => {
+    const doc = parse(`
+      <div class="related"><p class="line"><span class="chord">Bb</span></p></div>
+      <div class="main">
+        <p class="key">Key: C</p>
+        <p class="line"><span class="chord">C</span></p>
+      </div>
+    `);
+
+    expect(chordsOf(chordwiki.readChart(doc))).toEqual(['C']);
+  });
+
   it('hands back the element each chord sits in, which is what gets rewritten', () => {
     const items = chartOf('chordwiki-basic');
     const first = items.find((item) => item.kind === 'chord');
@@ -141,6 +159,22 @@ describe('the stated key', () => {
 
   it('has none to read where the chart states none', () => {
     expect(keysOf(chartOf('chordwiki-no-key'))).toEqual([]);
+  });
+
+  // The three shapes are the site's, but the case of the words in them is
+  // not something to depend on. Reading one of them regardless of case and
+  // the others only as written would leave a shouted line naming nothing.
+  it.each([
+    ['Key: C', 'C'],
+    ['key: c', null],
+    ['KEY: C', 'C'],
+    ['Original Key: C / Play: F#', 'F#'],
+    ['ORIGINAL KEY: C / PLAY: F#', 'F#'],
+    ['Original Key: Am / Capo: 5 / Play: Em', 'Em'],
+    ['ORIGINAL KEY: AM / CAPO: 5 / PLAY: EM', null],
+  ])('reads %j as %s however it is capitalised', (line, expected) => {
+    const doc = parse(`<div class="main"><p class="key">${line}</p></div>`);
+    expect(keysOf(chordwiki.readChart(doc))).toEqual([expected]);
   });
 });
 
@@ -177,6 +211,22 @@ describe('what a chart is called', () => {
     const bare = new URL('https://ja.chordwiki.org/wiki/Test#verse');
     expect(chordwiki.pageId(parse('<div class="main"></div>'), bare)).toBe(
       'https://ja.chordwiki.org/wiki/Test',
+    );
+  });
+
+  // The fallback has to keep the same promise the stated address does. What
+  // is in the bar for a transposed chart says how it is being shown as well
+  // as which chart it is, and only the second of those belongs in a name.
+  it('does not move on the fallback either', () => {
+    const page = parse('<div class="main"></div>');
+    const written = new URL('https://ja.chordwiki.org/wiki.cgi?c=view&t=Test%20Song&key=0');
+    const transposed = new URL(
+      'https://ja.chordwiki.org/wiki.cgi?c=view&t=Test%20Song&key=6&symbol=flat',
+    );
+
+    expect(chordwiki.pageId(page, transposed)).toBe(chordwiki.pageId(page, written));
+    expect(chordwiki.pageId(page, transposed)).toBe(
+      'https://ja.chordwiki.org/wiki.cgi?c=view&t=Test+Song',
     );
   });
 });

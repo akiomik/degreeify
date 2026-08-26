@@ -5,6 +5,9 @@
  * that is wrong. Keeping them together is also what makes it possible to say
  * what the adapter depends on without reading it.
  */
+/** The control a reader transposes a chart with. */
+const TRANSPOSE = '#key select[name="key"]';
+
 export const SELECTORS = {
   /** The wrapper the chart itself sits in. Its parent has neither id nor class. */
   chart: 'div.main',
@@ -21,11 +24,10 @@ export const SELECTORS = {
    */
   chartItems: 'p.key, p.line span.chord',
 
-  /** How far the page has transposed the chart, as a select the reader drives. */
-  transpose: '#key select[name="key"]',
+  transpose: TRANSPOSE,
 
-  /** The option that select arrived with, which is how far it has been transposed. */
-  transposeSelected: '#key select[name="key"] option[selected]',
+  /** The option that control arrived with, which is how far the chart has been transposed. */
+  transposeSelected: `${TRANSPOSE} option[selected]`,
 
   /** The address the site considers this chart to live at, transposed or not. */
   canonical: 'link[rel="canonical"]',

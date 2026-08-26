@@ -4,8 +4,18 @@ import { SELECTORS } from './selectors';
 
 const HOST = 'chordwiki.org';
 
-/** Where a chart lives, and where the site sends the reader on transposing one. */
-const CHART_PATHS = ['/wiki/', '/wiki.cgi'];
+/** Where a chart lives. */
+const CHART_PATH = '/wiki/';
+
+/** Where the site sends a reader who transposes one. */
+const TRANSPOSED_CHART_PATH = '/wiki.cgi';
+
+/**
+ * What the address says about how a chart is being shown rather than about
+ * which chart it is: how far it has been transposed, and whether the site is
+ * spelling it with sharps or with flats.
+ */
+const VIEWING_PARAMS = ['key', 'symbol'];
 
 /**
  * What the page is being played in, which on a transposed chart is not what
@@ -22,8 +32,8 @@ const CHART_PATHS = ['/wiki/', '/wiki.cgi'];
  * against a tonic that is not there. The capo is where to put a capo and not
  * a key, and is no business of a degree name.
  */
-const PLAYED = /Play\s*[:：]\s*([^\s/]+)/u;
-const WRITTEN = /Key\s*[:：]\s*([^\s/]+)/u;
+const PLAYED = /Play\s*[:：]\s*([^\s/]+)/iu;
+const WRITTEN = /Key\s*[:：]\s*([^\s/]+)/iu;
 const TRANSPOSED = /Original\s+Key\s*[:：]/iu;
 
 function readKeyLine(text: string): Key | null {
@@ -46,7 +56,7 @@ export const chordwiki: SiteAdapter = {
   matches(url) {
     const host = url.hostname;
     if (host !== HOST && !host.endsWith(`.${HOST}`)) return false;
-    return CHART_PATHS.some((path) => url.pathname.startsWith(path));
+    return url.pathname === TRANSPOSED_CHART_PATH || url.pathname.startsWith(CHART_PATH);
   },
 
   isChordPage(doc) {
@@ -54,9 +64,15 @@ export const chordwiki: SiteAdapter = {
   },
 
   readChart(root) {
+    // Scoped to the chart, so that a chord slot anywhere else on the page —
+    // a related-songs list, whatever the site adds next — is not read as part
+    // of it. Falling back to what was handed over covers a caller that has
+    // already narrowed it down.
+    const chart = root.querySelector(SELECTORS.chart) ?? root;
+
     // Document order is guaranteed, which is why the keys and the chords are
     // asked for together rather than separately and put back in step.
-    return [...root.querySelectorAll(SELECTORS.chartItems)].map((element): ChartItem => {
+    return [...chart.querySelectorAll(SELECTORS.chartItems)].map((element): ChartItem => {
       const text = element.textContent ?? '';
       if (element.matches(SELECTORS.key)) {
         return { kind: 'key', key: readKeyLine(text), raw: text };
@@ -76,8 +92,12 @@ export const chordwiki: SiteAdapter = {
     const stated = canonical || openGraph;
     if (stated) return new URL(stated, url).href;
 
+    // Off what is in the bar, which does move when a chart is transposed: the
+    // fragment is a place in the page and the viewing parameters are how it
+    // is being shown, and neither says which chart this is.
     const here = new URL(url.href);
     here.hash = '';
+    for (const param of VIEWING_PARAMS) here.searchParams.delete(param);
     return here.href;
   },
 

@@ -30,6 +30,7 @@ export const TRANSPOSITION_SAMPLES: readonly TranspositionSample[] = [
     from: 'F#',
     to: 'C',
     pairs: [
+      ['', ''],
       ['A#m9', 'Em9'],
       ['Am/B', 'D#m/F'],
       ['B/F#', 'F/C'],
@@ -49,6 +50,7 @@ export const TRANSPOSITION_SAMPLES: readonly TranspositionSample[] = [
       ['G#m', 'Dm'],
       ['Gaug', 'C#aug'],
       ['Gbim', 'Cim'],
+      ['N.C.', 'N.C.'],
     ],
   },
   {
