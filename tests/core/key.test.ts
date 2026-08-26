@@ -580,7 +580,10 @@ describe('inferKey', () => {
         'D#dim',
       ];
       let seed = 1;
-      const next = (n: number) => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff), seed % n);
+      const next = (bound: number): number => {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        return seed % bound;
+      };
 
       for (let attempt = 0; attempt < 2000; attempt++) {
         const symbols = Array.from(
