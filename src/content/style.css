@@ -1,0 +1,43 @@
+/*
+ * Everything this injects into a page a site serves.
+ *
+ * Five declarations, and no more than five on purpose. A content script
+ * shares a document with the page it is on: a reset, or anything a framework
+ * brings with it, would take the site's own layout apart. Nothing here
+ * selects anything but the elements this extension has rewritten.
+ *
+ * The class is written twice on purpose. A site styles its own chord slots by
+ * tag and class — `span.chord` on the one site supported so far — and one
+ * class on its own loses to that, whichever order the stylesheets happen to
+ * arrive in. Losing is not a cosmetic matter here: a slot that stays inline
+ * because the site said so takes no width, the lock does nothing, and the
+ * columns this exists to hold still move. Repeating the class buys the
+ * specificity without `!important`, which would win against declarations
+ * nobody has read yet.
+ */
+.degreeify-applied.degreeify-applied {
+  /* A width can only be set on something that is not inline. */
+  display: inline-block;
+
+  /*
+   * Locked to what the slot measured before it was rewritten, so a name wider
+   * than the chord it stands for does not push the lyric under it out of
+   * line. The fallback is what an unmeasured slot gets — one that was not
+   * being rendered when the widths were read — and it has to be here: a slot
+   * fixed at the nothing it measured would take the chord off the page.
+   */
+  width: var(--degreeify-w, auto);
+
+  /*
+   * The measurement is a border-box one, so the width has to be read as the
+   * same thing. Left as content-box, a slot with padding or a border would be
+   * locked wider than it was by exactly that padding — and the alignment
+   * would drift by a little on every such slot rather than break visibly on
+   * one.
+   */
+  box-sizing: border-box;
+
+  /* A longer name runs past its slot rather than widening it. */
+  overflow: visible;
+  white-space: nowrap;
+}

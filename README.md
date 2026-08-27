@@ -15,6 +15,24 @@ names, so a chart reads as `I - VIm - IV - V` instead of `C - Am - F - G`.
 - Turns off from the popup, restoring the original chord names exactly.
 - Lets you set the key by hand when the page does not declare one.
 
+## Known limitations
+
+- **Resizing across the mobile breakpoint.** ChordWiki changes font size at
+  640px. Chord slots are measured once, so resizing the window across that
+  point leaves the locked widths matching the font size they were measured at.
+  Reloading the page re-measures.
+- **A long degree name overhangs its slot.** Locking the width is what keeps
+  the lyrics and bar lines aligned, so a name wider than the chord it replaces
+  runs into the space beside it rather than widening the column.
+- **A chart that states no key and points at no key is left alone.** Guessing
+  wrong is worse than not naming, so the guess is declined where the chords do
+  not settle it; set the key by hand from the popup. The same applies to a
+  chart whose one key line is written in a form this cannot read.
+- **A chart that changes key cannot be overridden section by section.** A key
+  set by hand covers a chart that says nothing this can use. Where a chart
+  states several keys and one of them cannot be read, that section is left as
+  the chart wrote it rather than named in the key given for the page.
+
 ## Requirements
 
 - Node.js 26 (see `.node-version`)
