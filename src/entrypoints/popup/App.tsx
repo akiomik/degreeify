@@ -8,7 +8,9 @@ import { overrideFor, withOverride, withoutOverride } from '@/settings/overrides
 import {
   DEFAULT_SETTINGS,
   type Detection,
+  type KeyStamps,
   loadSettings,
+  loadStamps,
   pruneDetections,
   readDetection,
   recordKey,
@@ -86,32 +88,48 @@ function App() {
   /**
    * Changes a setting, and shows what was actually kept.
    *
-   * Read again before writing, for the reason the content script reads again
-   * before stamping a key as used: a popup holds its copy for as long as it
-   * is open, and a page marks a key as used while it is. Written back from
-   * the copy, those stamps go back — and they are what decides which key is
-   * dropped when there are too many.
+   * One at a time. Every change here reads, alters and writes, and two of
+   * those overlapping both read the same thing and the second writes over the
+   * first — a reader who chose numerals and then spelling before the first
+   * write landed would find the numerals back as they were, with nothing to
+   * say so. Controls are two clicks apart; the window is a storage round
+   * trip.
+   *
+   * Read again before writing rather than written from what the popup is
+   * holding. It holds its copy for as long as it is open, and a page can
+   * write in that time.
    *
    * Written before shown, because a control showing a setting that was not
    * kept is a reader told their answer was taken when it was not. Where the
    * write fails there is nothing to show but that it failed.
    */
-  const update = async (change: (settings: Settings) => Settings) => {
-    try {
-      const next = change(await loadSettings());
-      await saveSettings(next);
+  let writing: Promise<void> = Promise.resolve();
 
-      setSettings(next);
-      setFailed(false);
-    } catch {
-      setFailed(true);
+  const update = (change: (settings: Settings, stamps: KeyStamps) => Settings) => {
+    const next = async () => {
+      try {
+        const [settings, stamps] = await Promise.all([loadSettings(), loadStamps()]);
+        const changed = change(settings, stamps);
+        await saveSettings(changed);
 
-      // And the controls put back to what is kept. A checkbox a reader
-      // clicked shows what they clicked until something says otherwise, and
-      // nothing here has changed — so the same settings are handed back under
-      // a new identity, which is what makes the controls read them again.
-      setSettings((shown) => (shown ? { ...shown } : shown));
-    }
+        setSettings(changed);
+        setFailed(false);
+      } catch {
+        setFailed(true);
+
+        // And the controls put back to what is kept. A checkbox a reader
+        // clicked shows what they clicked until something says otherwise, and
+        // nothing here has changed — so the same settings are handed back
+        // under a new identity, which is what makes the controls read them
+        // again.
+        setSettings((shown) => (shown ? { ...shown } : shown));
+      }
+    };
+
+    // On both sides, so that one failure does not leave every change after it
+    // skipped over a chain that has already rejected.
+    writing = writing.then(next, next);
+    return writing;
   };
 
   /** The key set for this chart, as the chart is being shown. */
@@ -142,8 +160,8 @@ function App() {
     if (!found || !note || found.transposeOffset === null) return;
 
     const { pageId, transposeOffset } = found;
-    await update((settings) =>
-      withOverride(settings, pageId, { tonic: note, mode }, transposeOffset, Date.now()),
+    await update((settings, stamps) =>
+      withOverride(settings, pageId, { tonic: note, mode }, transposeOffset, stamps),
     );
   };
 

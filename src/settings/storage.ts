@@ -26,15 +26,21 @@ export interface KeyOverride {
   /** The tonic, spelled as `core` spells one: a letter and its accidentals. */
   readonly tonic: string;
   readonly mode: Mode;
-  /**
-   * When this was last used to name a chart, to the day.
-   *
-   * Kept so that the oldest can be dropped when there are too many. Written
-   * no more than once a day per page, because the alternative is a storage
-   * write on every chart anyone opens.
-   */
-  readonly usedAt: number;
 }
+
+/**
+ * When each key was last used to name a chart, to the day.
+ *
+ * Kept so that the oldest can be dropped when there are too many, and kept
+ * apart from the settings because it is written by a different hand for a
+ * different reason. A page stamps the key it used; a reader changes a
+ * setting; and a whole-object write from either would undo whatever the other
+ * had just done. Two keys in storage cannot collide that way.
+ *
+ * Written no more than once a day per chart, because the alternative is a
+ * storage write on every chart anyone opens.
+ */
+export type KeyStamps = Readonly<Record<string, number>>;
 
 export interface Settings {
   readonly version: number;
@@ -97,6 +103,7 @@ export interface Detection {
 }
 
 const SETTINGS_KEY = 'settings';
+const STAMPS_KEY = 'used';
 const DETECTION_PREFIX = 'detected:';
 
 /**
@@ -122,6 +129,21 @@ export function recordKey(address: string | undefined | null): string | null {
   } catch {
     return null;
   }
+}
+
+export async function loadStamps(): Promise<KeyStamps> {
+  const stored = (await browser.storage.local.get(STAMPS_KEY))[STAMPS_KEY];
+  if (!isRecord(stored)) return {};
+
+  const stamps = Object.entries(stored).filter(
+    (entry): entry is [string, number] => typeof entry[1] === 'number',
+  );
+
+  return Object.fromEntries(stamps);
+}
+
+export async function saveStamps(stamps: KeyStamps): Promise<void> {
+  await browser.storage.local.set({ [STAMPS_KEY]: stamps });
 }
 
 export async function loadSettings(): Promise<Settings> {
@@ -226,10 +248,11 @@ export const MOST_OVERRIDES = 200;
  */
 export function prunedOverrides(
   overrides: Readonly<Record<string, KeyOverride>>,
+  stamps: KeyStamps,
   most = MOST_OVERRIDES,
 ): Record<string, KeyOverride> {
   const kept = Object.entries(overrides)
-    .sort(([, a], [, b]) => b.usedAt - a.usedAt)
+    .sort(([a], [b]) => (stamps[b] ?? 0) - (stamps[a] ?? 0))
     .slice(0, most);
 
   return Object.fromEntries(kept);
@@ -238,8 +261,20 @@ export function prunedOverrides(
 /** A day, which is how often a page's last-used stamp is worth rewriting. */
 export const USED_AT_GRANULARITY = 24 * 60 * 60 * 1000;
 
+/**
+ * Whether stored settings are settings.
+ *
+ * The version, and then the fields that are read without being asked about.
+ * `loadSettings` fills in what is missing from the defaults, which cannot
+ * help with a field that is present and is the wrong thing: a `keyOverrides`
+ * of `null` replaces the default and then every page throws on the first
+ * thing it looks up. Reachable only from storage somebody has edited or
+ * corrupted, which is reason enough to answer no rather than to trust it.
+ */
 function isSettings(value: unknown): value is Settings {
-  return isRecord(value) && value.version === SCHEMA_VERSION;
+  if (!isRecord(value) || value.version !== SCHEMA_VERSION) return false;
+
+  return value.keyOverrides === undefined || isRecord(value.keyOverrides);
 }
 
 function isDetection(value: unknown): value is Detection {

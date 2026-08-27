@@ -14,7 +14,7 @@ const PAGE = 'chordwiki:chart:Test Song';
 
 const withKey = (tonic: string, mode: Mode = 'major'): Settings => ({
   ...DEFAULT_SETTINGS,
-  keyOverrides: { [PAGE]: { tonic, mode, usedAt: 0 } },
+  keyOverrides: { [PAGE]: { tonic, mode } },
 });
 
 const named = (settings: Settings, offset: number | null): string | null => {
@@ -55,35 +55,35 @@ describe('setting a key from what is on the screen', () => {
   // the key of the chart untransposed. Kept as shown, transposing the chart
   // afterwards would leave their own setting naming the page wrongly.
   it('keeps it shifted back to where the chart started', () => {
-    const settings = withOverride(DEFAULT_SETTINGS, PAGE, key('Gb'), 6, 0);
+    const settings = withOverride(DEFAULT_SETTINGS, PAGE, key('Gb'), 6, {});
 
-    expect(settings.keyOverrides[PAGE]).toEqual({ tonic: 'C', mode: 'major', usedAt: 0 });
+    expect(settings.keyOverrides[PAGE]).toEqual({ tonic: 'C', mode: 'major' });
   });
 
   // Which is the property the two directions exist for: what a reader sets is
   // what they are shown, whatever transposition they set it at.
   it.each([-5, -1, 0, 1, 6, 12])('comes back as it was set, at a transposition of %i', (offset) => {
-    const settings = withOverride(DEFAULT_SETTINGS, PAGE, key('Eb', 'minor'), offset, 0);
+    const settings = withOverride(DEFAULT_SETTINGS, PAGE, key('Eb', 'minor'), offset, {});
 
     expect(named(settings, offset)).toBe('Ebm');
   });
 
   it('replaces one already set for the same chart', () => {
-    const first = withOverride(DEFAULT_SETTINGS, PAGE, key('C'), 0, 0);
-    const second = withOverride(first, PAGE, key('D'), 0, 1);
+    const first = withOverride(DEFAULT_SETTINGS, PAGE, key('C'), 0, {});
+    const second = withOverride(first, PAGE, key('D'), 0, {});
 
     expect(Object.keys(second.keyOverrides)).toEqual([PAGE]);
     expect(named(second, 0)).toBe('D');
   });
 
   it('takes the chart back to its own key when it is removed', () => {
-    const settings = withOverride(DEFAULT_SETTINGS, PAGE, key('C'), 0, 0);
+    const settings = withOverride(DEFAULT_SETTINGS, PAGE, key('C'), 0, {});
 
     expect(named(withoutOverride(settings, PAGE), 0)).toBeNull();
   });
 
   it('leaves other charts alone when one is removed', () => {
-    const settings = withOverride(withKey('C'), 'chordwiki:chart:Other', key('D'), 0, 0);
+    const settings = withOverride(withKey('C'), 'chordwiki:chart:Other', key('D'), 0, {});
 
     expect(Object.keys(withoutOverride(settings, PAGE).keyOverrides)).toEqual([
       'chordwiki:chart:Other',

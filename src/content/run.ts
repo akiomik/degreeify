@@ -1,13 +1,16 @@
 import { type ApplyReport, apply } from '@/content/apply';
+import type { Key } from '@/core/key';
 import { formatNote } from '@/core/pitch';
 import { overrideFor } from '@/settings/overrides';
 import {
+  DEFAULT_SETTINGS,
   type Detection,
   loadSettings,
+  loadStamps,
   recordKey,
   SCHEMA_VERSION,
   type Settings,
-  saveSettings,
+  saveStamps,
   USED_AT_GRANULARITY,
   watchSettings,
   writeDetection,
@@ -51,19 +54,11 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   const pageId = adapter.pageId(doc, url);
   const stored = recordKey(url.href);
 
-  // Listening before reading, so that a change made while the page is still
-  // loading is not the one change nothing hears.
-  //
-  // And the reading queued rather than awaited, so that a change arriving
-  // during it is queued behind it and not in front of it. Awaited, the
-  // settings from before the change would be the ones handed over last and
-  // would be the ones that won — a reader who turned the names off inside
-  // that window would watch them stay on until they reloaded the page.
   // What the page was last shown for. A settings change that does not change
-  // any of it is a change about somewhere else — a key set for another chart,
-  // or a stamp saying when one was last used — and reading, restoring,
-  // measuring and rewriting this page over it would be a flicker on every
-  // other tab open on the site, every time a reader set a key on one.
+  // any of it is a change about somewhere else — a key set for another chart
+  // — and reading, restoring, measuring and rewriting this page over it would
+  // be a flicker on every other tab open on the site, every time a reader set
+  // a key on one.
   let showed: string | null = null;
 
   let showing = Promise.resolve();
@@ -82,13 +77,22 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
       const wanted = matters(current, pageId);
       if (wanted === showed) return;
 
+      // Recorded once the page shows it, which is neither before the showing
+      // nor after everything that follows it. Before, a run that threw while
+      // painting would be remembered as the one on the page and a change back
+      // to it skipped as a change to nothing; after, the same is true of a
+      // run that painted and then failed to write down what it found.
+      const painted = paint(doc, adapter, current, pageId);
       showed = wanted;
-      await show(doc, adapter, current, pageId, stored);
+
+      await remember(current, pageId, stored, painted);
     };
     showing = showing.then(next, next);
     return showing;
   };
 
+  // Listening before reading, so that a change made while the page is still
+  // loading is not the one change nothing hears.
   const stop = watchSettings((settings) => {
     // Nothing is waiting on this one. A run that rejects with nobody attached
     // is an unhandled rejection, which in a content script is a line in a
@@ -97,7 +101,18 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
     void queue(() => settings).catch(() => {});
   });
 
-  await queue(loadSettings);
+  // The reading queued rather than awaited, so that a change arriving during
+  // it is queued behind it and not in front of it. Awaited, the settings from
+  // before the change would be the ones handed over last and would be the
+  // ones that won — a reader who turned the names off inside that window
+  // would watch them stay on until they reloaded the page.
+  //
+  // And a reading that fails falls back to the defaults rather than leaving
+  // the page unnamed. Before there were settings this needed no storage at
+  // all; a storage read that throws — an extension reloaded out from under an
+  // open page is the ordinary way — must not be the difference between a
+  // chart in degree names and a chart in none.
+  await queue(() => loadSettings().catch(() => DEFAULT_SETTINGS));
 
   return stop;
 }
@@ -120,21 +135,21 @@ function matters(settings: Settings, pageId: string): string {
   });
 }
 
-async function show(
+/** Shows the chart as the settings ask for it, and says what it found. */
+function paint(
   doc: Document,
   adapter: SiteAdapter,
   settings: Settings,
   pageId: string,
-  stored: string | null,
-): Promise<void> {
+): { report: ApplyReport; offset: number | null; key: Key | null } {
   const offset = adapter.transposeOffset(doc);
   const key = overrideFor(settings, pageId, offset);
 
-  // Read whether or not the names are being shown, and written down either
-  // way. Being switched off means the page is left alone, not that nothing is
-  // known about it — a reader who has the names off can still be told what
-  // key the chart is in, and would find that display empty for no reason they
-  // could see if this branched any earlier.
+  // Read whether or not the names are being shown. Being switched off means
+  // the page is left alone, not that nothing is known about it — a reader who
+  // has the names off can still be told what key the chart is in, and would
+  // find that display empty for no reason they could see if this branched any
+  // earlier.
   const report = apply(doc, adapter, {
     notation: settings.notation,
     spelling: settings.spelling,
@@ -142,6 +157,22 @@ async function show(
     write: settings.enabled,
   });
 
+  return { report, offset, key };
+}
+
+/**
+ * Writes down what the page turned out to be, for the popup to read.
+ *
+ * Kept apart from the showing because only one of the two is what a reader
+ * sees. This can fail — a full quota, an extension reloaded out from under
+ * the page — and the chart is named either way.
+ */
+async function remember(
+  settings: Settings,
+  pageId: string,
+  stored: string | null,
+  { report, offset, key }: ReturnType<typeof paint>,
+): Promise<void> {
   if (stored) await writeDetection(stored, record(pageId, report, offset));
   if (key && settings.enabled) await touchOverride(pageId);
 }
@@ -154,22 +185,17 @@ async function show(
  * which would be a storage write for every chart they look at.
  */
 async function touchOverride(pageId: string): Promise<void> {
-  // Read again rather than written from the settings this page was shown
-  // with. Those were read before the page was measured and named, and a
-  // reader can reach the popup in that time — writing the whole object back
-  // from a copy that old would undo whatever they had just changed, and the
-  // only sign of it would be a setting that went back on its own.
-  const settings = await loadSettings();
-  const stored = settings.keyOverrides[pageId];
-  if (!stored) return;
-
+  // Written to its own place in storage rather than back into the settings.
+  // A page stamps a key while a reader is changing something in the popup,
+  // and a whole-object write from either would undo the other's — reading
+  // again first narrows that to one round trip and does not close it. Two
+  // keys in storage cannot collide at all.
+  const stamps = await loadStamps();
   const now = Date.now();
-  if (now - stored.usedAt < USED_AT_GRANULARITY) return;
 
-  await saveSettings({
-    ...settings,
-    keyOverrides: { ...settings.keyOverrides, [pageId]: { ...stored, usedAt: now } },
-  });
+  if (now - (stamps[pageId] ?? 0) < USED_AT_GRANULARITY) return;
+
+  await saveStamps({ ...stamps, [pageId]: now });
 }
 
 function record(pageId: string, report: ApplyReport, offset: number | null): Detection {

@@ -299,7 +299,9 @@ describe('the popup on a chart', () => {
   // beside the one that sets it — so a chart edited to declare a second key
   // leaves the reader with a key they cannot reach.
   it('can still forget a key set for a chart that can no longer take one', async () => {
-    await saveSettings(withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', KEY_OF_G, 0, 1));
+    await saveSettings(
+      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', KEY_OF_G, 0, {}),
+    );
     await onATab(ADDRESS, detection({ statedKeys: 7 }));
 
     const { root, dispose } = await open();
@@ -319,7 +321,7 @@ describe('the popup on a chart', () => {
   // choose saved as a major key.
   it('goes on offering the minor tonics after a minor key is cleared', async () => {
     await saveSettings(
-      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', KEY_OF_C_MINOR, 0, 1),
+      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', KEY_OF_C_MINOR, 0, {}),
     );
     await onATab(ADDRESS, detection({ statedKeys: 0, key: null, source: null }));
 
@@ -331,6 +333,33 @@ describe('the popup on a chart', () => {
     const offered = [...(root.querySelector('select')?.options ?? [])].map((o) => o.value);
     expect(offered).toContain('F#');
     expect(offered).not.toContain('Gb');
+    dispose();
+  });
+
+  // Every change reads, alters and writes, and controls are two clicks apart.
+  // Two of those overlapping both read the same thing and the second writes
+  // over the first — a reader who chose numerals and then spelling before the
+  // first write landed would find the numerals back as they were, with
+  // nothing to say so.
+  it('keeps both of two changes made in quick succession', async () => {
+    await onATab(ADDRESS, detection());
+    const { root, dispose } = await open();
+
+    const selects = [...root.querySelectorAll('select')];
+    const numerals = selects.at(-2);
+    const spelling = selects.at(-1);
+    if (!numerals || !spelling) throw new Error('there are two global settings');
+
+    numerals.value = 'roman-unicode';
+    numerals.dispatchEvent(new Event('change', { bubbles: true }));
+    spelling.value = 'source';
+    spelling.dispatchEvent(new Event('change', { bubbles: true }));
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const settings = await loadSettings();
+    expect(settings.notation).toBe('roman-unicode');
+    expect(settings.spelling).toBe('source');
     dispose();
   });
 

@@ -1,6 +1,6 @@
 import { type Key, transposeKey } from '@/core/key';
 import { formatNote, parseNote } from '@/core/pitch';
-import { MOST_OVERRIDES, prunedOverrides, type Settings } from './storage';
+import { type KeyStamps, MOST_OVERRIDES, prunedOverrides, type Settings } from './storage';
 
 /**
  * Reading and writing the key a person set for a chart.
@@ -43,7 +43,7 @@ export function withOverride(
   pageId: string,
   key: Key,
   offset: number,
-  now: number,
+  stamps: KeyStamps,
 ): Settings {
   const untransposed = transposeKey(key, -offset);
 
@@ -52,8 +52,9 @@ export function withOverride(
     keyOverrides: prunedOverrides(
       {
         ...settings.keyOverrides,
-        [pageId]: { tonic: formatNote(untransposed.tonic), mode: untransposed.mode, usedAt: now },
+        [pageId]: { tonic: formatNote(untransposed.tonic), mode: untransposed.mode },
       },
+      stamps,
       MOST_OVERRIDES,
     ),
   };

@@ -5,6 +5,7 @@ import {
   DEFAULT_SETTINGS,
   type Detection,
   loadSettings,
+  loadStamps,
   MOST_DETECTIONS,
   pruneDetections,
   prunedOverrides,
@@ -12,6 +13,7 @@ import {
   recordKey,
   SCHEMA_VERSION,
   saveSettings,
+  saveStamps,
   watchSettings,
   writeDetection,
 } from '@/settings/storage';
@@ -80,6 +82,40 @@ describe('reading settings from a version this does not know', () => {
     const settings = await loadSettings();
     expect(settings.enabled).toBe(false);
     expect(settings.notation).toBe(DEFAULT_SETTINGS.notation);
+  });
+});
+
+describe('reading settings that are not settings', () => {
+  // Filling in what is missing from the defaults cannot help with a field
+  // that is there and is the wrong thing: it replaces the default, and then
+  // every page throws on the first thing it looks up.
+  it.each([null, 'nothing', 7])('gives the defaults where the keys are %j', async (overrides) => {
+    await browser.storage.local.set({
+      settings: { ...DEFAULT_SETTINGS, keyOverrides: overrides },
+    });
+
+    expect(await loadSettings()).toEqual(DEFAULT_SETTINGS);
+  });
+});
+
+describe('when a key was last used', () => {
+  // Kept apart from the settings because it is written by a different hand
+  // for a different reason: a page stamps the key it used while a reader is
+  // changing a setting, and a whole-object write from either would undo the
+  // other's.
+  it('is written without touching the settings', async () => {
+    await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
+    await saveStamps({ page: 5 });
+
+    expect((await loadSettings()).enabled).toBe(false);
+    expect(await loadStamps()).toEqual({ page: 5 });
+  });
+
+  it('is nothing where nothing was written, and ignores what is not a time', async () => {
+    expect(await loadStamps()).toEqual({});
+
+    await browser.storage.local.set({ used: { page: 'yesterday', other: 3 } });
+    expect(await loadStamps()).toEqual({ other: 3 });
   });
 });
 
@@ -162,18 +198,26 @@ describe('what was found on a page', () => {
 });
 
 describe('keys kept for too many charts', () => {
-  it('drops the least recently used', () => {
-    const overrides = {
-      old: { tonic: 'C', mode: 'major' as const, usedAt: 1 },
-      newer: { tonic: 'D', mode: 'major' as const, usedAt: 2 },
-      newest: { tonic: 'E', mode: 'major' as const, usedAt: 3 },
-    };
+  const overrides = {
+    old: { tonic: 'C', mode: 'major' as const },
+    newer: { tonic: 'D', mode: 'major' as const },
+    newest: { tonic: 'E', mode: 'major' as const },
+  };
 
-    expect(Object.keys(prunedOverrides(overrides, 2))).toEqual(['newest', 'newer']);
+  it('drops the least recently used', () => {
+    const stamps = { old: 1, newer: 2, newest: 3 };
+    expect(Object.keys(prunedOverrides(overrides, stamps, 2))).toEqual(['newest', 'newer']);
   });
 
   it('keeps everything where there is room', () => {
-    const overrides = { one: { tonic: 'C', mode: 'major' as const, usedAt: 1 } };
-    expect(prunedOverrides(overrides, 200)).toEqual(overrides);
+    expect(prunedOverrides(overrides, { old: 1, newer: 2, newest: 3 }, 200)).toEqual(overrides);
+  });
+
+  // A key set and never used again has no stamp of its own. It is the oldest
+  // thing there is rather than the newest, which is what dropping the least
+  // recently used has to mean.
+  it('treats a key never used as older than one that has been', () => {
+    const stamps = { newer: 2 };
+    expect(Object.keys(prunedOverrides(overrides, stamps, 1))).toEqual(['newer']);
   });
 });

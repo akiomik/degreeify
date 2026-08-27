@@ -11,9 +11,11 @@ import { withOverride } from '@/settings/overrides';
 import {
   DEFAULT_SETTINGS,
   loadSettings,
+  loadStamps,
   readDetection,
   recordKey,
   saveSettings,
+  saveStamps,
 } from '@/settings/storage';
 import { chordwiki } from '@/sites/chordwiki/adapter';
 
@@ -32,6 +34,7 @@ const key = (tonic: string, mode: Mode = 'major'): Key => {
 };
 
 const ADDRESS = 'https://ja.chordwiki.org/wiki/Test%20Song';
+const PAGE = 'chordwiki:chart:Test Song';
 const RECORD = recordKey(ADDRESS) ?? '';
 
 const shown = (doc: Document): string[] =>
@@ -97,6 +100,22 @@ describe('running on a chart', () => {
   });
 });
 
+describe('a page whose settings cannot be read', () => {
+  // Before there were settings this needed no storage at all. A storage read
+  // that throws — an extension reloaded out from under an open page is the
+  // ordinary way — must not be the difference between a chart in degree names
+  // and a chart in none.
+  it('names the chart with the defaults rather than not at all', async () => {
+    vi.spyOn(browser.storage.local, 'get').mockRejectedValue(new Error('context invalidated'));
+
+    const doc = load('chordwiki-basic');
+    const stop = await run(doc, chordwiki, new URL(ADDRESS));
+
+    expect(shown(doc)[0]).toBe('I');
+    stop();
+  });
+});
+
 describe('following the settings', () => {
   it('names the chart again when a setting changes', async () => {
     const doc = load('chordwiki-basic');
@@ -140,10 +159,8 @@ describe('a setting changed while the page is still being read', () => {
   // this page started with, whatever they changed would be undone — and the
   // only sign of it would be a setting that went back on its own.
   it('is not undone by the page writing down that it used a key', async () => {
-    const yesterday = Date.now() - 25 * 60 * 60 * 1000;
-    await saveSettings(
-      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', key('G'), 0, yesterday),
-    );
+    await saveSettings(withOverride(DEFAULT_SETTINGS, PAGE, key('G'), 0, {}));
+    await saveStamps({ [PAGE]: Date.now() - 25 * 60 * 60 * 1000 });
 
     const doc = load('chordwiki-basic');
     const running = run(doc, chordwiki, new URL(ADDRESS));
@@ -221,6 +238,38 @@ describe('a setting changed while the first reading is being loaded', () => {
   });
 });
 
+describe('a showing that failed', () => {
+  // `apply` puts the page back before it reads, so a reading that throws
+  // leaves the chart in chord names — which is the honest state for a page
+  // this can no longer read. What must not happen is that it stays there:
+  // the next change has to be acted on.
+  it('leaves the chart in chord names and goes on following the settings', async () => {
+    let breaking = false;
+    const brittle = {
+      ...chordwiki,
+      readChart: (doc: Document) => {
+        if (breaking) throw new Error('the page moved');
+        return chordwiki.readChart(doc);
+      },
+    };
+
+    const doc = load('chordwiki-basic');
+    const stop = await run(doc, brittle, new URL(ADDRESS));
+
+    breaking = true;
+    await saveSettings({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(shown(doc)[1]).toBe('Am7');
+
+    breaking = false;
+    await saveSettings({ ...DEFAULT_SETTINGS, spelling: 'source' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(shown(doc)[1]).toBe('VIm7');
+    stop();
+  });
+});
+
 describe('a settings change about somewhere else', () => {
   const OTHER = 'chordwiki:chart:Another Song';
 
@@ -244,7 +293,7 @@ describe('a settings change about somewhere else', () => {
     const stop = await start(doc);
     const wrote = vi.spyOn(browser.storage.local, 'set');
 
-    await saveSettings(withOverride(DEFAULT_SETTINGS, OTHER, key('G'), 0, Date.now()));
+    await saveSettings(withOverride(DEFAULT_SETTINGS, OTHER, key('G'), 0, {}));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(readings(wrote)).toBe(0);
@@ -254,14 +303,16 @@ describe('a settings change about somewhere else', () => {
   // Nor does a stamp moving, which is written by whichever page used the key
   // and is displayed nowhere.
   it('does not make the page read itself again for a stamp either', async () => {
-    await saveSettings(withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', key('G'), 0, 1));
+    await saveSettings(
+      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', key('G'), 0, {}),
+    );
 
     const doc = load('chordwiki-basic');
     const stop = await start(doc);
     const wrote = vi.spyOn(browser.storage.local, 'set');
 
     await saveSettings(
-      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', key('G'), 0, Date.now()),
+      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', key('G'), 0, {}),
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -275,7 +326,7 @@ describe('a settings change about somewhere else', () => {
     const stop = await start(doc);
 
     await saveSettings(
-      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', key('G'), 0, Date.now()),
+      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', key('G'), 0, {}),
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -310,7 +361,7 @@ describe('a key set for the chart', () => {
   it('is used, and named as set by hand', async () => {
     const doc = load('chordwiki-basic');
     await saveSettings(
-      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', key('G'), 0, Date.now()),
+      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', key('G'), 0, {}),
     );
 
     const stop = await start(doc);
@@ -327,7 +378,7 @@ describe('a key set for the chart', () => {
   it('moves with a chart that has been transposed', async () => {
     const doc = load('chordwiki-transposed');
     await saveSettings(
-      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', key('C'), 0, Date.now()),
+      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', key('C'), 0, {}),
     );
 
     const stop = await start(doc);
@@ -347,15 +398,14 @@ describe('a key set for the chart', () => {
   it('is stamped as used no more than once a day', async () => {
     const doc = load('chordwiki-basic');
     const yesterday = Date.now() - 25 * 60 * 60 * 1000;
-    await saveSettings(
-      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', key('G'), 0, yesterday),
-    );
+    await saveSettings(withOverride(DEFAULT_SETTINGS, PAGE, key('G'), 0, {}));
+    await saveStamps({ [PAGE]: yesterday });
 
     (await start(doc))();
-    const stamped = (await loadSettings()).keyOverrides['chordwiki:chart:Test Song']?.usedAt ?? 0;
+    const stamped = (await loadStamps())[PAGE] ?? 0;
     expect(stamped).toBeGreaterThan(yesterday);
 
     (await start(load('chordwiki-basic')))();
-    expect((await loadSettings()).keyOverrides['chordwiki:chart:Test Song']?.usedAt).toBe(stamped);
+    expect((await loadStamps())[PAGE]).toBe(stamped);
   });
 });
