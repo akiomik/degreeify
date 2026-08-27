@@ -487,6 +487,20 @@ describe('how far the chart has been transposed', () => {
   // would answer six for every untransposed chart and shift a reader's key
   // by a tritone. Written in the site's own order so that reading the first
   // is wrong here in the way it would be wrong on a real page.
+  // The same document `readChart` reads no chords out of, and for the same
+  // reason: its options are not `HTMLOptionElement`s and have no value to
+  // read. A throw here would not be one page misread but the script stopping
+  // on that page, which is what the head guard exists to prevent.
+  it('says nothing about a control in a document that is not HTML', () => {
+    const feed = new DOMParser().parseFromString(
+      '<div id="key"><select name="key"><option selected="">+6</option></select></div>',
+      'text/xml',
+    );
+
+    expect(feed.querySelectorAll('#key select[name="key"]')).toHaveLength(1);
+    expect(chordwiki.transposeOffset(feed)).toBeNull();
+  });
+
   it('says nothing where the control marks none of its options', () => {
     const options = [6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5]
       .map((value) => `<option value="${value}">${value}</option>`)
@@ -695,6 +709,26 @@ describe('what a chart is called', () => {
       expect(named(bare, 'https://ja.chordwiki.org/wiki/a%2Fb')).toBe('chordwiki:chart:a/b');
       expect(deep).toBe('chordwiki:page:https://ja.chordwiki.org/wiki/a/b');
       expect(chordwiki.matches(new URL('https://ja.chordwiki.org/wiki/a/b'))).toBe(false);
+    });
+
+    // A `?` is legal unescaped inside a value, so a title cannot be looked
+    // for in a query — it has to be cut out of one the way a parser cuts it.
+    // Looked for, the address below names a chart called `Victim` while every
+    // parser on the page calls it `Real Song`, and a reader following such a
+    // link reads and writes another chart's settings.
+    it('takes the title the query parser would, not the first thing that looks like one', () => {
+      const url = new URL('https://ja.chordwiki.org/wiki.cgi?c=view&z=x?t=Victim&t=Real+Song');
+
+      expect(chordwiki.pageId(bare, url)).toBe('chordwiki:chart:Real Song');
+      expect(chordwiki.pageId(bare, url)).toBe(`chordwiki:chart:${url.searchParams.get('t')}`);
+    });
+
+    // And where a query names it twice, the first — which is the one the
+    // parser answers with.
+    it('takes the first of two titles, as the query parser does', () => {
+      const url = new URL('https://ja.chordwiki.org/wiki.cgi?t=First&t=Second');
+
+      expect(chordwiki.pageId(bare, url)).toBe(`chordwiki:chart:${url.searchParams.get('t')}`);
     });
 
     // A slash on the end is the address's rather than a second part, so it is

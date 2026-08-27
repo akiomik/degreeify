@@ -182,8 +182,29 @@ const WRITTEN_REPLACEMENT = /%EF%BF%BD|\uFFFD/giu;
 /** How many times `character` occurs in `text`. */
 const timesIn = (text: string, character: string): number => text.split(character).length - 1;
 
-/** The title in a transposed chart's address, as written rather than as read. */
-const WRITTEN_TITLE = new RegExp(`[?&]${TITLE_PARAM}=([^&]*)`, 'u');
+/**
+ * The title in a transposed chart's address, as written rather than as read.
+ *
+ * Cut on `&` the way a parser cuts a query, and not looked for. A `?` is
+ * legal unescaped inside a value, so a pattern anchored on `[?&]t=` reads
+ * `z=x?t=Victim&t=Real+Song` as a chart called `Victim` while the parser
+ * reads it as `Real Song` — two charts sharing one chart's settings, by way
+ * of a link somebody sends. Where a query names the title twice the first is
+ * taken, since that is the one the parser answers with.
+ *
+ * As written, because a title that cannot be read is kept in the spelling it
+ * was written in, and reading it here would take that away.
+ */
+const WRITTEN_TITLE = `${TITLE_PARAM}=`;
+const QUERY_FIELDS = /&/u;
+
+function writtenTitleIn(search: string): string | undefined {
+  const field = search
+    .slice(1)
+    .split(QUERY_FIELDS)
+    .find((part) => part.startsWith(WRITTEN_TITLE));
+  return field?.slice(WRITTEN_TITLE.length);
+}
 
 /** Slashes the address ends with, which belong to the address. */
 const TRAILING_SLASHES = /\/+$/u;
@@ -299,7 +320,7 @@ function chartNamed(url: URL): string | null {
   // about an escape that is not text is done about it wherever it was found.
   const written =
     url.pathname === TRANSPOSED_CHART_PATH
-      ? WRITTEN_TITLE.exec(url.search)?.[1]
+      ? writtenTitleIn(url.search)
       : url.pathname.slice(CHART_PATH.length);
 
   // Trailing slashes come off the address rather than off the title: they are
@@ -561,9 +582,15 @@ export const chordwiki: SiteAdapter = {
       // `+6` down to `-5`, so falling back to the first would answer six for
       // every untransposed chart on the site and shift a reader's key by a
       // tritone.
-      const marked = [
-        ...control.querySelectorAll<HTMLOptionElement>(SELECTORS.transposeSelected),
-      ].at(-1);
+      // Asked what they are rather than told, for the reason `readChart` asks
+      // its chord slots: a selector matches on names and attributes, which a
+      // document that is not HTML carries as readily as one that is, and its
+      // options have no value to read. Asserted, this would throw — and a
+      // throw here is not one page misread but the script stopping on that
+      // page, which is the whole of why the head is guarded.
+      const marked = [...control.querySelectorAll(SELECTORS.transposeSelected)]
+        .filter((option) => option instanceof HTMLOptionElement)
+        .at(-1);
 
       // The option's value, and not the `value` attribute it may not have: an
       // option written without one takes its text for its value, so
