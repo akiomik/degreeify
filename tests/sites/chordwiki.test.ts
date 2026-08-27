@@ -314,6 +314,21 @@ describe('the stated key', () => {
     ['Key: C♭♭♭', null],
     ['Key: Cbbb', null],
     ['Key: C major', 'C'],
+    // A dash after a name is not punctuation after it. `C-` is C minor to a
+    // lead sheet and `C-Dur` is C major to a German one, and there is no
+    // telling which from here — so the key is not read, rather than read
+    // confidently a minor third away from what was meant.
+    ['Key: C-', null],
+    ['Key: C-Dur', null],
+    ['Key: Cー', null],
+    ['Key: C−', null],
+    ['Key: C－', null],
+    // A dash in front of one is punctuation, being nothing the name was
+    // stopped at.
+    ['Key: -C', 'C'],
+    // And a dash with the spaces a chart writes it with stops the capture
+    // before it, which is where the observed lines are.
+    ['Key: C - Am', 'C'],
   ])('reads the key of %j as %s, punctuation and all', (line, expected) => {
     expect(keysOf(chordwiki.readChart(chartStating(line)))).toEqual([expected]);
   });

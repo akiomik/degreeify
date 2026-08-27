@@ -1,3 +1,4 @@
+import { DASH_LOOKALIKES, DASH_MARKS } from '@/core/chord';
 import { type Key, parseKey } from '@/core/key';
 import { ACCIDENTAL_CHARS } from '@/core/pitch';
 import type { ChartItem, SiteAdapter } from '../types';
@@ -60,6 +61,15 @@ const NOT_PART_OF_A_NAME = /^[^\p{L}\p{N}]+/u;
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
 
 /**
+ * The characters that are part of a key's name rather than punctuation after
+ * it, besides the letters and the digits.
+ *
+ * Taken from where notes and chords are read rather than written out again,
+ * so that a spelling added there cannot go missing here.
+ */
+const NAMES_CARRY = ACCIDENTAL_CHARS + DASH_MARKS + DASH_LOOKALIKES;
+
+/**
  * Whether a name was stopped in the middle of itself, asked of the one
  * character it was stopped at.
  *
@@ -67,6 +77,13 @@ const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
  * is not simply punctuation: `C♭♭♭` is a note reader's refusal and not an
  * invitation to read `C♭♭` and leave the rest, which is reading something
  * other than what is written.
+ *
+ * A dash as well, because a dash after a key name means something and this
+ * cannot tell which: `C-` is C minor to a lead sheet and `C-Dur` is C major
+ * to a German one, and answering C major confidently would label a whole
+ * section a minor third out wherever the first reading was meant. Neither is
+ * a form seen on this site, which is the argument for stopping rather than
+ * for picking one.
  *
  * The next character and not the rest of them, because the rest is not the
  * question. Asked of everything left over, `C, D` reads as C and `C,D` reads
@@ -84,7 +101,7 @@ function continuesAName(text: string): boolean {
   const [first] = text;
   if (!first) return false;
 
-  return LETTER_OR_DIGIT.test(first) || ACCIDENTAL_CHARS.includes(first);
+  return LETTER_OR_DIGIT.test(first) || NAMES_CARRY.includes(first);
 }
 
 /**
@@ -182,19 +199,7 @@ const WRITTEN_REPLACEMENT = /%EF%BF%BD|\uFFFD/giu;
 /** How many times `character` occurs in `text`. */
 const timesIn = (text: string, character: string): number => text.split(character).length - 1;
 
-/**
- * The title in a transposed chart's address, as written rather than as read.
- *
- * Cut on `&` the way a parser cuts a query, and not looked for. A `?` is
- * legal unescaped inside a value, so a pattern anchored on `[?&]t=` reads
- * `z=x?t=Victim&t=Real+Song` as a chart called `Victim` while the parser
- * reads it as `Real Song` — two charts sharing one chart's settings, by way
- * of a link somebody sends. Where a query names the title twice the first is
- * taken, since that is the one the parser answers with.
- *
- * As written, because a title that cannot be read is kept in the spelling it
- * was written in, and reading it here would take that away.
- */
+/** What a query is cut into fields on, and what ends a field's name. */
 const QUERY_FIELDS = /&/u;
 const NAME_ENDS = '=';
 
