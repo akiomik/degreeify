@@ -1,0 +1,25 @@
+/*
+ * Everything this injects into a page a site serves.
+ *
+ * Four declarations, and no more than four on purpose. A content script
+ * shares a document with the page it is on: a reset, or anything a framework
+ * brings with it, would take the site's own layout apart. Nothing here
+ * selects anything but the elements this extension has rewritten.
+ */
+.degreeify-applied {
+  /* A width can only be set on something that is not inline. */
+  display: inline-block;
+
+  /*
+   * Locked to what the slot measured before it was rewritten, so a name
+   * wider than the chord it stands for does not push the lyric under it out
+   * of line. The fallback is what an unmeasured slot gets — one that was not
+   * being rendered when the widths were read — and it has to be here: a slot
+   * fixed at the nothing it measured would take the chord off the page.
+   */
+  width: var(--degreeify-w, auto);
+
+  /* A longer name runs past its slot rather than widening it. */
+  overflow: visible;
+  white-space: nowrap;
+}

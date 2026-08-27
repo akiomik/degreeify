@@ -33,6 +33,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   chord of their scale. Where nothing chooses between the leading candidates
   the guess is declined, leaving the chart in chord names rather than
   relabelling it against the wrong tonic.
+- Degree names on the page. The chart is read, each chord slot is rewritten
+  in place, and everything that is not a chord — bar lines, accents, rhythm
+  notes, `N.C.` — is left exactly as the site served it. A section whose key
+  the chart states and this cannot read is left alone too, rather than named
+  against the key of the section before it. Turning the extension off puts the
+  page back character for character.
+- A width lock, so that naming a chart does not move it. A slot is measured
+  before it is rewritten and fixed at that width, so a name longer than the
+  chord it stands for overhangs rather than pushing the lyric under it out of
+  line. A slot that measures nothing — one that is not being rendered — is
+  left to lay itself out instead.
 - A reader for ChordWiki charts, and the shape every later site fits: the
   chords in document order together with the keys they are read in, so that
   which chords fall under which key needs no reconstructing. It reads the key
