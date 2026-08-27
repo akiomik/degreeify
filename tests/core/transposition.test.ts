@@ -62,7 +62,7 @@ describe.each(TRANSPOSITION_SAMPLES)('$label', ({ from, to, pairs }) => {
  * and the transposer does, it is not choosing spellings by what they mean —
  * following it names the same music two ways.
  */
-describe('keeping the chartspelling instead', () => {
+describe('keeping the chart spelling instead', () => {
   it('does not hold across a transposition', () => {
     const differing = TRANSPOSITION_SAMPLES.flatMap(({ from, to, pairs }) =>
       pairs.filter(
@@ -70,11 +70,20 @@ describe('keeping the chartspelling instead', () => {
       ),
     );
 
-    expect(differing).toEqual([
-      ['Am/B', 'D#m/F'],
-      ['Baug/A', 'Faug/D#'],
-      ['D', 'G#'],
-      ['Gaug', 'C#aug'],
-    ]);
+    // That there are some, and one of them shown, rather than the whole list.
+    // Fixing the list would turn every sample added and every spelling
+    // reconsidered into a failure to read through — over behaviour this test
+    // exists to say is not promised, and which nothing may rely on.
+    expect(differing.length).toBeGreaterThan(0);
+    expect(differing).toContainEqual(['D', 'G#']);
+  });
+
+  // The same sound under the two keys, written out, so that what the counts
+  // above stand for is legible without running anything: the transposer wrote
+  // a sixth degree with a letter under one key and with a sharp under the
+  // other, and following the chart names it twice.
+  it('names one sound two ways where the chart spelled it two ways', () => {
+    expect(nameOf('D', keyNamed('F#'), 'source')).toBe('bVI');
+    expect(nameOf('G#', keyNamed('C'), 'source')).toBe('#V');
   });
 });

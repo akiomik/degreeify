@@ -419,9 +419,18 @@ export const chordwiki: SiteAdapter = {
       // by whoever wrote the chart, so a link in it is one reader's text and
       // not the site's word for where this chart lives — and taking it as the
       // site's would let one chart put its name on another's settings.
+      //
+      // The head is asked for rather than reached through. `lib.dom` types it
+      // as always there, and on an HTML page it is; but the content script is
+      // matched by address rather than by content type, and a document that
+      // is not HTML — a feed, an XML resource — has none. Reaching through it
+      // there throws, and a throw here is not one page misread but the script
+      // stopping on that page. The type is why this needs saying: a reader
+      // with the compiler's word for it would take the `?.` for clutter.
+      const head: HTMLHeadElement | null = doc.head;
       const stated = [
-        doc.head.querySelector(SELECTORS.canonical)?.getAttribute('href'),
-        doc.head.querySelector(SELECTORS.openGraphUrl)?.getAttribute('content'),
+        head?.querySelector(SELECTORS.canonical)?.getAttribute('href'),
+        head?.querySelector(SELECTORS.openGraphUrl)?.getAttribute('content'),
         url.href,
       ];
 

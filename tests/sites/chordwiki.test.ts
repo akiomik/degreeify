@@ -417,14 +417,78 @@ describe('what a chart is called', () => {
 
   const named = (page: Document, href: string) => chordwiki.pageId(page, new URL(href));
 
+  /** A page stating no address of its own, leaving only the one it is at. */
+  const bare = stating({});
+
   // The same chart transposed is the same chart. A name that moved when a
   // reader transposed one would lose them the key they had set by hand, at
   // the moment they pressed a button that changed nothing about the song.
+  //
+  // Each page at the address a reader would be at when looking at it, rather
+  // than both at one address. Handed the same address twice this passes for a
+  // name taken from the address bar alone — which is the drift it is here to
+  // catch.
   it('does not move when the chart is transposed', () => {
-    const url = new URL('https://ja.chordwiki.org/wiki.cgi?c=view&t=Test%20Song&key=6');
-    expect(chordwiki.pageId(load('chordwiki-transposed'), url)).toBe(
-      chordwiki.pageId(load('chordwiki-basic'), url),
+    expect(
+      chordwiki.pageId(
+        load('chordwiki-transposed'),
+        new URL('https://ja.chordwiki.org/wiki.cgi?c=view&t=Test%20Song&key=6'),
+      ),
+    ).toBe(
+      chordwiki.pageId(
+        load('chordwiki-basic'),
+        new URL('https://ja.chordwiki.org/wiki/Test%20Song'),
+      ),
     );
+  });
+
+  // The content script is matched by address, and an address says nothing
+  // about what will come back from it. A feed or an XML resource under a
+  // matching address is a document with no head at all, and reaching through
+  // one throws — which is not one page misread but the script stopping on
+  // that page.
+  it('names a document that is not HTML rather than throwing', () => {
+    const feed = new DOMParser().parseFromString('<rss><channel /></rss>', 'text/xml');
+    expect(feed.head).toBeNull();
+    expect(chordwiki.pageId(feed, new URL('https://ja.chordwiki.org/wiki/Test%20Song'))).toBe(
+      'chordwiki:chart:Test Song',
+    );
+  });
+
+  // A path is normalised before this ever sees it: `.` and `..` are segments
+  // an address is made of, and they come off in the parser, encoded or not.
+  // So a title that is nothing but dots cannot be carried in a path — not a
+  // pair of addresses disagreeing, but one address unable to say it. The
+  // parameter says it, and the site's own stated address, being a path, is
+  // passed over the way any address that names no chart is.
+  describe('a title a path cannot carry', () => {
+    it('reads it from the parameter', () => {
+      expect(named(bare, 'https://ja.chordwiki.org/wiki.cgi?c=view&t=.')).toBe('chordwiki:chart:.');
+    });
+
+    it('still reads it where the page states the path the site would', () => {
+      expect(
+        named(
+          stating({ canonical: 'https://ja.chordwiki.org/wiki/.' }),
+          'https://ja.chordwiki.org/wiki.cgi?c=view&t=.',
+        ),
+      ).toBe('chordwiki:chart:.');
+    });
+
+    it('names the address itself where that is all there is', () => {
+      expect(named(bare, 'https://ja.chordwiki.org/wiki/.')).toBe(
+        'chordwiki:page:https://ja.chordwiki.org/wiki/',
+      );
+    });
+
+    // Only a whole segment of dots. A title that merely contains them, or one
+    // that spells a slash, comes through as written.
+    it.each([
+      ['https://ja.chordwiki.org/wiki/%2E%2E%2E', 'chordwiki:chart:...'],
+      ['https://ja.chordwiki.org/wiki/a%2F..%2Fb', 'chordwiki:chart:a/../b'],
+    ])('carries %s', (href, id) => {
+      expect(named(bare, href)).toBe(id);
+    });
   });
 
   // Every address a chart is reachable at, from every place an address can
@@ -432,8 +496,6 @@ describe('what a chart is called', () => {
   // how they came to disagree about percent-encoding, about the host, and
   // about whether a query is part of a chart's name.
   describe('every address a chart is reachable at', () => {
-    const bare = stating({});
-
     const sameChart: [what: string, id: () => string][] = [
       ['in the path', () => named(bare, 'https://ja.chordwiki.org/wiki/Rock%20%26%20Roll')],
       ['in a parameter', () => named(bare, 'https://ja.chordwiki.org/wiki.cgi?t=Rock+%26+Roll')],
