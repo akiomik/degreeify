@@ -265,6 +265,27 @@ describe('the stated key', () => {
     expect(nameChart(chordwiki.readChart(doc))).toEqual(['VIm7', 'IV']);
   });
 
+  // A line writes a key with something around it more often than it looks,
+  // and what is captured runs to the next space or slash — so the punctuation
+  // comes with it and the name is then no name. A key that cannot be read
+  // stops the naming for the rest of the section, so a single stray bracket
+  // would cost a chart from there on.
+  it.each([
+    ['Key: C,', 'C'],
+    ['Key: C, D', 'C'],
+    ['Key: (C)', 'C'],
+    ['Key: 「Gm」', 'Gm'],
+    ['Key: F#,', 'F#'],
+    // Read no further than punctuation. `EM` is `Em` shouted, and nothing
+    // here can make a minor key of it — dropping the letter to call it E
+    // major would be worse than saying so.
+    ['Key: EM', null],
+    ['Key: Am7', null],
+    ['Key: C major', 'C'],
+  ])('reads the key of %j as %s, punctuation and all', (line, expected) => {
+    expect(keysOf(chordwiki.readChart(chartStating(line)))).toEqual([expected]);
+  });
+
   // Each word has to begin where it says it does. A line ending `Display:`
   // holds `play:`, and one beginning `Monkey:` holds `key:` — either read as
   // what it is not takes a section of the chart with it, since a key that
@@ -295,12 +316,33 @@ describe('how far the chart has been transposed', () => {
   // the chart is not in.
   it('says nothing where the page says nothing', () => {
     expect(chordwiki.transposeOffset(parse('<div class="main"></div>'))).toBeNull();
+  });
+
+  // An option written without a value takes its text for one, so reading the
+  // attribute would call this nothing at all — a key shifted by nothing,
+  // silently.
+  it('reads an option written without a value from its text', () => {
     expect(
       chordwiki.transposeOffset(
         parse('<div id="key"><select name="key"><option selected>+6</option></select></div>'),
       ),
-    ).toBeNull();
+    ).toBe(6);
   });
+
+  // `Number.parseInt` reads as far as it understands and stops, so a control
+  // saying something that is not a count of semitones would be read as one.
+  it.each(['1e3', '6x', '', '  ', '99', '-99', 'six'])(
+    'says nothing where the control says %j',
+    (value) => {
+      expect(
+        chordwiki.transposeOffset(
+          parse(
+            `<div id="key"><select name="key"><option selected value="${value}">x</option></select></div>`,
+          ),
+        ),
+      ).toBeNull();
+    },
+  );
 });
 
 describe('what a chart is called', () => {
@@ -387,6 +429,10 @@ describe('what a chart is called', () => {
       ['a stray percent sign', '100%', '100%', '100%'],
       ['an escape that is not text', '%C6%FC', '%C6%FC', '\uFFFD\uFFFD'],
       ['a trailing slash', 'Rock%20Roll/', 'Rock+Roll', 'Rock Roll'],
+      // Which is the address's and not the title's. Taken off the title
+      // instead, a chart whose name really does end in one would lose it here
+      // and keep it at the other address.
+      ['a slash of its own', 'Rock%20Roll%2F', 'Rock+Roll%2F', 'Rock Roll/'],
     ];
 
     it.each(encodings)('reads %s the same in either place', (_what, path, query, title) => {

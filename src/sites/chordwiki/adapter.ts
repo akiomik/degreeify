@@ -45,9 +45,47 @@ const PLAYED = /\bPlay\s*[:：]\s*([^\s/／]+)/iu;
 const WRITTEN = /\bKey\s*[:：]\s*([^\s/／]+)/iu;
 const TRANSPOSED = /\bOriginal\s+Key\s*[:：]/iu;
 
+/**
+ * Anything in front of the key name that cannot be part of one.
+ *
+ * A line writes a key with something around it more often than it looks:
+ * `Key: (C)`, `Key: C, D`. What is captured runs to the next space or slash,
+ * so the punctuation comes with it and the name is then no name — and a key
+ * that cannot be read stops the naming for the rest of the section, so a
+ * single stray bracket costs a chart from there on.
+ */
+const NOT_PART_OF_A_NAME = /^[^\p{L}\p{N}]+/u;
+
+/** Nothing but punctuation, which is all a name is allowed to be read past. */
+const ONLY_PUNCTUATION = /^[^\p{L}\p{N}]*$/u;
+
+/**
+ * The key a captured name states, reading as much of it as is one.
+ *
+ * From the front and outwards, longest first, so that `C,` is read as C
+ * rather than as nothing. What a key may be called is still `parseKey`'s to
+ * say; this only decides how much to hand it.
+ *
+ * What gets left off has to be punctuation and nothing else. Reading up to
+ * whatever happens to parse would take `EM` — which is `Em` shouted, and
+ * which no reader here can make a minor key of — and quietly call it E major
+ * by dropping a letter. A key that cannot be read is the honest answer there,
+ * and stopping is what the section deserves.
+ */
+function keyNamed(captured: string): Key | null {
+  const name = captured.replace(NOT_PART_OF_A_NAME, '');
+
+  for (let end = name.length; end > 0; end--) {
+    const key = parseKey(name.slice(0, end));
+    if (key) return ONLY_PUNCTUATION.test(name.slice(end)) ? key : null;
+  }
+
+  return null;
+}
+
 function readKeyLine(text: string): Key | null {
   const played = PLAYED.exec(text)?.[1];
-  if (played) return parseKey(played);
+  if (played) return keyNamed(played);
 
   // A line that names what the chart was written in without naming what is
   // being played is a shape nothing here has seen. The key it does name is
@@ -56,7 +94,7 @@ function readKeyLine(text: string): Key | null {
   if (TRANSPOSED.test(text)) return null;
 
   const written = WRITTEN.exec(text)?.[1];
-  return written ? parseKey(written) : null;
+  return written ? keyNamed(written) : null;
 }
 
 /** An address, or nothing where the text is not one. */
@@ -92,16 +130,25 @@ function isChartAddress(url: URL): boolean {
  */
 const QUERY_SEPARATOR = /&/g;
 
+/** Slashes the address ends with, which belong to the address. */
+const TRAILING_SLASHES = /\/+$/u;
+
 /**
  * Text decoded as a form encodes it: a plus is a space, and a broken escape
  * is a replacement character rather than a thrown error.
  *
  * One decoder, applied to both places a title can sit in an address, because
- * two decoders is what the last round of this was. `decodeURIComponent` reads
+ * two decoders is what the round before last was. `decodeURIComponent` reads
  * a plus as a plus and throws on a broken escape, and a query read that way
  * would call `Rock+Roll` two different charts depending on which address a
  * reader arrived at — and lose the chart's name altogether the first time a
  * title carried a stray percent sign.
+ *
+ * That a path is read the same way is the site's doing and not an assumption.
+ * It writes a space into a path segment as a plus, which is a thing a path is
+ * not obliged to mean and this one does:
+ *
+ *     <a href="/tag/WEST+GROUND">WEST GROUND</a>
  */
 function formDecoded(text: string): string {
   const escaped = text.replace(QUERY_SEPARATOR, '%26');
@@ -128,11 +175,13 @@ function chartNamed(url: URL): string | null {
 
   if (url.pathname === TRANSPOSED_CHART_PATH) return url.searchParams.get(TITLE_PARAM) || null;
 
-  // Trailing slashes are the site's, not the chart's: a chart reached with
-  // one and without it is the same chart, and would otherwise have a third
-  // name on top of the two the two addresses already give it.
-  const title = formDecoded(url.pathname.slice(CHART_PATH.length)).replace(/\/+$/u, '');
-  return title || null;
+  // Trailing slashes come off the address rather than off the title: they are
+  // the site's, not the chart's, and a chart reached with one and without it
+  // is the same chart. Taken off afterwards they would take a real one with
+  // them — `/wiki/Foo%2F` names a chart whose title ends in a slash, and the
+  // other address for it would keep what this one had thrown away.
+  const segment = url.pathname.slice(CHART_PATH.length).replace(TRAILING_SLASHES, '');
+  return formDecoded(segment) || null;
 }
 
 /**
@@ -153,6 +202,28 @@ function chartIn(doc: Document): Element | null {
     if (candidate.querySelector(SELECTORS.chord)) return candidate;
   }
   return null;
+}
+
+/** How far a transposition can go before it is the same as a shorter one. */
+const SEMITONES_IN_AN_OCTAVE = 12;
+
+/** A whole number of semitones and nothing else. */
+const WHOLE_NUMBER = /^[+-]?\d+$/u;
+
+/**
+ * A transposition read off a control, or nothing where what it says is not
+ * one.
+ *
+ * Strictly, because `Number.parseInt` reads as far as it understands and
+ * stops: `1e3` is one to it, `6x` is six, and a number of any size at all
+ * passes for a count of semitones. What is not a plain whole number within an
+ * octave is not something this control said.
+ */
+function semitones(value: string): number | null {
+  if (!WHOLE_NUMBER.test(value)) return null;
+
+  const offset = Number(value);
+  return Math.abs(offset) < SEMITONES_IN_AN_OCTAVE ? offset : null;
 }
 
 export const chordwiki: SiteAdapter = {
@@ -224,13 +295,18 @@ export const chordwiki: SiteAdapter = {
     // It is also the only reading that does not depend on the DOM agreeing
     // about `selectedIndex`, which happy-dom does not: given this markup it
     // reports the option before the marked one.
-    const marked = doc.querySelector(SELECTORS.transposeSelected);
-    const offset = Number.parseInt(marked?.getAttribute('value') ?? '', 10);
+    // The option's value and not its `value` attribute: an option written
+    // without one takes its text for its value, so `<option selected>+6` is a
+    // transposition of six and reading the attribute would call it nothing at
+    // all — a key shifted by nothing, silently, which is the failure this
+    // file keeps warning about.
+    const marked = doc.querySelector<HTMLOptionElement>(SELECTORS.transposeSelected);
+    const offset = marked && semitones(marked.value);
 
     // Nothing, rather than none: a page with no such control, or one whose
     // marked option says nothing, has not told us the chart is untransposed —
     // it has told us nothing, and a caller shifting a key by this had better
     // know which it is looking at.
-    return Number.isFinite(offset) ? offset : null;
+    return offset ?? null;
   },
 };
