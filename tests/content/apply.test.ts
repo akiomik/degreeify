@@ -5,13 +5,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   APPLIED_CLASS,
   apply,
-  ORIGINAL_ATTRIBUTE as ORIGINAL,
   ORIGINAL_ATTRIBUTE,
   restore,
   STATE_ATTRIBUTE,
   WIDTH_PROPERTY,
 } from '@/content/apply';
-import type { Key, Mode } from '@/core/key';
+import { formatKey, type Key, type Mode } from '@/core/key';
 import { parseNote } from '@/core/pitch';
 import { chordwiki } from '@/sites/chordwiki/adapter';
 
@@ -106,13 +105,44 @@ describe('applying degree names', () => {
   });
 
   // A chord slot holds bar lines, accents, rhythm notes and `N.C.` as well as
-  // chords, and a slot the chart left empty is still a slot.
-  it('leaves what is not a chord as the chart wrote it', () => {
+  // chords, and a slot the chart left empty is still a slot. Which of them is
+  // which is the whole of what this fixture is for, so the answer is written
+  // out: asking only that the untouched slots are untouched would pass on a
+  // page where everything was named and on one where nothing was.
+  it('names the chords of a chart and leaves the rest as it found them', () => {
+    const { doc, report } = run('chordwiki-tokens');
+
+    expect(shown(doc)).toEqual([
+      '|',
+      '>',
+      '＞',
+      '(3連)',
+      '(2拍3連)',
+      'N.C.',
+      '',
+      // A chord offered rather than played keeps the brackets it was offered
+      // in; a power chord and a quality with brackets of its own come through
+      // with them.
+      '(IIIm7)',
+      'VI5/III',
+      'IVM7(#11)',
+    ]);
+    expect(report.named).toBe(3);
+    expect(report.passed).toBe(7);
+  });
+
+  it('marks the slots it named and no others', () => {
     const { doc } = run('chordwiki-tokens');
+
+    expect(applied(doc).map((element) => element.getAttribute(ORIGINAL_ATTRIBUTE))).toEqual([
+      '(Em7)',
+      'A5/E',
+      'FM7(#11)',
+    ]);
 
     for (const element of doc.querySelectorAll('p.line span.chord')) {
       if (element.classList.contains(APPLIED_CLASS)) continue;
-      expect(element.hasAttribute(ORIGINAL)).toBe(false);
+      expect(element.hasAttribute(ORIGINAL_ATTRIBUTE)).toBe(false);
       expect(element.getAttribute('style')).toBeNull();
     }
   });
@@ -151,6 +181,82 @@ describe('a key the chart states and this cannot read', () => {
     expect(report.statedKeys).toBe(2);
     expect(report.named).toBe(1);
     expect(report.passed).toBe(1);
+  });
+});
+
+describe('a key line the chart states and this cannot read', () => {
+  /** A chart whose only key line says something that is not a key. */
+  const unreadableOnly = () =>
+    parse(`
+      <div class="main">
+        <p class="key">Key: 未定</p>
+        <p class="line"><span class="chord">C</span><span class="chord">Am</span></p>
+        <p class="line"><span class="chord">F</span><span class="chord">G7</span></p>
+        <p class="line"><span class="chord">C</span></p>
+      </div>
+    `);
+
+  // The page shows a key and the extension shows no names, and the reader is
+  // told to set the key by hand. If a key set by hand then did nothing, there
+  // would be nothing left on the page to explain why — which is the failure
+  // this whole file keeps circling.
+  it('takes the key it is given where the chart states one line and it is unread', () => {
+    const doc = unreadableOnly();
+    const report = apply(doc, chordwiki, { key: key('G') });
+
+    expect(shown(doc)).toEqual(['IV', 'IIm', 'bVII', 'I7', 'IV']);
+    expect(report.source).toBe('manual');
+    expect(report.unreadKeys).toBe(1);
+  });
+
+  it('falls back to what the chords point at where it is given nothing', () => {
+    const doc = unreadableOnly();
+    const report = apply(doc, chordwiki);
+
+    expect(shown(doc)).toEqual(['I', 'VIm', 'IV', 'V7', 'I']);
+    expect(report.source).toBe('inferred');
+  });
+
+  // More than one key line is a chart that changes key, and one key given for
+  // the whole page cannot be right for every section of it. The section the
+  // chart stopped naming stays stopped, whatever it was given.
+  it('does not spread a given key over a chart that changes key', () => {
+    const doc = parse(`
+      <div class="main">
+        <p class="key">Key: C</p>
+        <p class="line"><span class="chord">Am7</span></p>
+        <p class="key">Key: 未定</p>
+        <p class="line"><span class="chord">F</span></p>
+      </div>
+    `);
+    const report = apply(doc, chordwiki, { key: key('G') });
+
+    expect(shown(doc)).toEqual(['VIm7', 'F']);
+    expect(report.source).toBe('page');
+  });
+});
+
+describe('the key the chart was read in', () => {
+  it('is the one the chart states, said to have come from the page', () => {
+    const { report } = run('chordwiki-basic');
+
+    expect(report.source).toBe('page');
+    expect(report.key && formatKey(report.key)).toBe('C');
+  });
+
+  // The first of them. A chart that changes key is in several, and what a
+  // reader is looking at when they open the page is the first.
+  it('is the first of several where the chart changes key', () => {
+    const { report } = run('chordwiki-modulation');
+
+    expect(report.key && formatKey(report.key)).toBe('Gm');
+  });
+
+  it('is nothing where the chart could not be read in any key', () => {
+    const { report } = run('chordwiki-no-key');
+
+    expect(report.key).toBeNull();
+    expect(report.source).toBeNull();
   });
 });
 

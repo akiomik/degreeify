@@ -57,7 +57,16 @@ export interface ApplyReport {
   readonly unreadKeys: number;
   /** Key lines the chart stated at all. */
   readonly statedKeys: number;
-  /** The key naming began in, which a chart may change part way through. */
+  /**
+   * The key the chart was read in, and where that key came from.
+   *
+   * The first of them where the chart states its own, which is what a person
+   * looking at the page is being shown; the key it was given or the key its
+   * chords point at where it states none. Null where the chart could not be
+   * read in any key, which is the answer a caller has to be able to tell from
+   * "read in C" — a chart showing no degree names and a chart showing them
+   * look different to a reader and identical to an extension that is off.
+   */
   readonly key: Key | null;
   readonly source: KeySource | null;
 }
@@ -126,7 +135,7 @@ export function apply(
   let unreadKeys = 0;
   let statedKeys = 0;
 
-  let current = opening.key;
+  let current = opening.opening;
 
   for (const item of chart) {
     if (item.kind === 'key') {
@@ -138,7 +147,7 @@ export function apply(
       // passed through instead, which is the failure worth having.
       statedKeys++;
       if (!item.key) unreadKeys++;
-      current = item.key;
+      if (opening.follows) current = item.key;
       continue;
     }
 
@@ -180,27 +189,61 @@ function nameOf(
 }
 
 /**
- * The key a chart is read in before it states one of its own.
+ * The key a chart is read in, before it states one of its own.
  *
- * A chart that states a key states it above its chords: on every real page
- * checked, the first thing the adapter reads is the key line and no chord
- * comes before it. So a chord ahead of the first statement is not a chord the
- * chart has said anything about, and it is left alone rather than named in a
- * key the chart goes on to state afterwards.
+ * `key` is what the chart is in and `opening` is what the fold starts on, and
+ * they are not the same where a chart states its key. A chart that states one
+ * states it above its chords — on every real page checked, the key line is
+ * the first thing the adapter reads and no chord comes before it — so a chord
+ * ahead of the first statement is one the chart has said nothing about, and
+ * it is left alone rather than named in a key stated afterwards.
  *
- * Where a chart states no key at all there is nothing to wait for, and the
- * whole of it is read in one key — a person's, where one has been given, and
- * otherwise whichever key the chords themselves point at clearly enough.
+ * A key given from outside stands in where the chart says nothing this can
+ * use, and nowhere else. Saying nothing covers two cases and stops at a
+ * third:
+ *
+ * - a chart with no key line at all, which is what the popup exists for;
+ * - a chart whose one key line could not be read, which says the same thing
+ *   in a way that looks different — the reader can see a key on the page and
+ *   would have no idea why setting one by hand did nothing;
+ * - but not a chart with more than one key line, some read and some not. More
+ *   than one statement is a chart that changes key, and one key given for the
+ *   whole page cannot be right for every section of it. Those sections stop,
+ *   which is what the report's count is for.
  */
-function openingKey(
-  chart: readonly ChartItem[],
-  given: Key | null | undefined,
-): { key: Key | null; source: KeySource | null } {
-  if (chart.some((item) => item.kind === 'key')) return { key: null, source: null };
-  if (given) return { key: given, source: 'manual' };
+function openingKey(chart: readonly ChartItem[], given: Key | null | undefined): Reading {
+  const stated = chart.filter((item) => item.kind === 'key');
+  const read = stated.find((item) => item.key)?.key;
+  if (read) return { key: read, source: 'page', opening: null, follows: true };
+
+  if (stated.length > 1) return { key: null, source: null, opening: null, follows: true };
+  if (given) return { key: given, source: 'manual', opening: given, follows: false };
 
   const guess = inferKey(chordsIn(chart));
-  return guess ? { key: guess.key, source: 'inferred' } : { key: null, source: null };
+  const inferred = guess ? guess.key : null;
+  return {
+    key: inferred,
+    source: inferred ? 'inferred' : null,
+    opening: inferred,
+    follows: inferred === null,
+  };
+}
+
+interface Reading {
+  /** What the chart is in, for a caller with somewhere to show it. */
+  readonly key: Key | null;
+  readonly source: KeySource | null;
+  /** What the fold starts on, which is nothing where the chart states its own. */
+  readonly opening: Key | null;
+  /**
+   * Whether the chart's own key lines are what the reading follows.
+   *
+   * False only where a key from outside is standing in for the one line the
+   * chart states and this could not read. That line is the same line the key
+   * is standing in for, so letting it clear the reading would take the given
+   * key away at the first thing it was given for.
+   */
+  readonly follows: boolean;
 }
 
 function chordsIn(chart: readonly ChartItem[]): ChordSymbol[] {
