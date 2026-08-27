@@ -57,6 +57,8 @@ const TRANSPOSED = /\bOriginal\s+Key\s*[:：]/iu;
  */
 const NOT_PART_OF_A_NAME = /^[^\p{L}\p{N}]+/u;
 
+const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
+
 /**
  * Whether a name was stopped in the middle of itself, asked of the one
  * character it was stopped at.
@@ -71,8 +73,19 @@ const NOT_PART_OF_A_NAME = /^[^\p{L}\p{N}]+/u;
  * as nothing, which makes whether a chart can be named turn on whether
  * somebody typed a space — and a key that cannot be read silences every
  * chord after it.
+ *
+ * The accidentals are asked of as a list rather than built into a pattern.
+ * They are an open list, kept where notes are read and meant to grow, and a
+ * `-` added to it would quietly turn into a range while a `]` would stop this
+ * file loading at all — taking every chord on the page with it, for the sake
+ * of one key line.
  */
-const CONTINUES_A_NAME = new RegExp(`^[\\p{L}\\p{N}${ACCIDENTAL_CHARS}]`, 'u');
+function continuesAName(text: string): boolean {
+  const [first] = text;
+  if (!first) return false;
+
+  return LETTER_OR_DIGIT.test(first) || ACCIDENTAL_CHARS.includes(first);
+}
 
 /**
  * The key a captured name states, reading as much of it as is one.
@@ -92,7 +105,7 @@ function keyNamed(captured: string): Key | null {
 
   for (let end = name.length; end > 0; end--) {
     const key = parseKey(name.slice(0, end));
-    if (key) return CONTINUES_A_NAME.test(name.slice(end)) ? null : key;
+    if (key) return continuesAName(name.slice(end)) ? null : key;
   }
 
   return null;
@@ -145,6 +158,12 @@ function isChartAddress(url: URL): boolean {
  */
 const QUERY_SEPARATOR = /&/g;
 
+/** What a percent-escape that is not text decodes to, whatever it was. */
+const REPLACEMENT_CHARACTER = '\uFFFD';
+
+/** The title in a transposed chart's address, as written rather than as read. */
+const WRITTEN_TITLE = new RegExp(`[?&]${TITLE_PARAM}=([^&]*)`, 'u');
+
 /** Slashes the address ends with, which belong to the address. */
 const TRAILING_SLASHES = /\/+$/u;
 
@@ -172,7 +191,13 @@ const TRAILING_SLASHES = /\/+$/u;
  */
 function formDecoded(text: string): string {
   const escaped = text.replace(QUERY_SEPARATOR, '%26');
-  return new URLSearchParams(`${TITLE_PARAM}=${escaped}`).get(TITLE_PARAM) ?? '';
+  const decoded = new URLSearchParams(`${TITLE_PARAM}=${escaped}`).get(TITLE_PARAM) ?? '';
+
+  // Every escape that is not text decodes to the same character, so two
+  // charts written in some encoding this is not would come back as one name
+  // and share one chart's settings. Where that happens the address is handed
+  // back as it was written: unreadable, but still telling two charts apart.
+  return decoded.includes(REPLACEMENT_CHARACTER) ? text : decoded;
 }
 
 /**
@@ -193,15 +218,20 @@ function formDecoded(text: string): string {
 function chartNamed(url: URL): string | null {
   if (!isChartAddress(url)) return null;
 
-  if (url.pathname === TRANSPOSED_CHART_PATH) return url.searchParams.get(TITLE_PARAM) || null;
-
+  // Taken as written from either place and decoded once, so that what is done
+  // about an escape that is not text is done about it wherever it was found.
+  //
   // Trailing slashes come off the address rather than off the title: they are
   // the site's, not the chart's, and a chart reached with one and without it
   // is the same chart. Taken off afterwards they would take a real one with
   // them — `/wiki/Foo%2F` names a chart whose title ends in a slash, and the
   // other address for it would keep what this one had thrown away.
-  const segment = url.pathname.slice(CHART_PATH.length).replace(TRAILING_SLASHES, '');
-  return formDecoded(segment) || null;
+  const written =
+    url.pathname === TRANSPOSED_CHART_PATH
+      ? WRITTEN_TITLE.exec(url.search)?.[1]
+      : url.pathname.slice(CHART_PATH.length).replace(TRAILING_SLASHES, '');
+
+  return (written && formDecoded(written)) || null;
 }
 
 /**
@@ -258,6 +288,18 @@ function semitones(value: string): number | null {
   const offset = Number(stated);
   return Math.abs(offset) <= SEMITONES_IN_AN_OCTAVE ? offset : null;
 }
+
+/**
+ * Which of the two things a name is: the chart of that title, or the page at
+ * that address.
+ *
+ * Kept apart because a chart's title is whatever somebody typed. On a wiki
+ * that is not a hypothetical — a page titled with the address of another page
+ * is a page anybody can make, and without these the two would come back as
+ * one name and share one set of settings.
+ */
+const CHART_NAMESPACE = 'chart';
+const PAGE_NAMESPACE = 'page';
 
 export const chordwiki: SiteAdapter = {
   id: ID,
@@ -321,14 +363,14 @@ export const chordwiki: SiteAdapter = {
       for (const href of stated) {
         const address = absolute(href, url);
         const title = address && chartNamed(address);
-        if (title) return `${ID}:${title}`;
+        if (title) return `${ID}:${CHART_NAMESPACE}:${title}`;
       }
     }
 
     // Not a chart. Whatever it is, it is at least itself, and it is itself
     // down to the query: two pages for editing two charts are one address and
     // two different pages. The fragment goes, being a place in a page.
-    return `${ID}:${url.origin}${url.pathname}${url.search}`;
+    return `${ID}:${PAGE_NAMESPACE}:${url.origin}${url.pathname}${url.search}`;
   },
 
   transposeOffset(doc) {

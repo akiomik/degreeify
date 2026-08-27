@@ -474,12 +474,16 @@ describe('what a chart is called', () => {
       ['a plus for a space', 'Rock+Roll', 'Rock+Roll', 'Rock Roll'],
       ['an ampersand', 'Rock%20%26%20Roll', 'Rock+%26+Roll', 'Rock & Roll'],
       ['a stray percent sign', '100%', '100%', '100%'],
-      ['an escape that is not text', '%C6%FC', '%C6%FC', '\uFFFD\uFFFD'],
       ['a trailing slash', 'Rock%20Roll/', 'Rock+Roll', 'Rock Roll'],
       // Which is the address's and not the title's. Taken off the title
       // instead, a chart whose name really does end in one would lose it here
       // and keep it at the other address.
       ['a slash of its own', 'Rock%20Roll%2F', 'Rock+Roll%2F', 'Rock Roll/'],
+      // An escape that is not text decodes to the same character whatever it
+      // was, so decoding one is how two charts come to share a name. Where
+      // that happens the address is kept as written instead: unreadable, and
+      // still two charts.
+      ['an escape kept as written', '%C6%FC', '%C6%FC', '%C6%FC'],
     ];
 
     it.each(encodings)('reads %s the same in either place', (_what, path, query, title) => {
@@ -487,13 +491,34 @@ describe('what a chart is called', () => {
       const inParam = named(bare, `https://ja.chordwiki.org/wiki.cgi?t=${query}&key=6`);
 
       expect(inPath).toBe(inParam);
-      expect(inPath).toBe(`chordwiki:${title}`);
+      expect(inPath).toBe(`chordwiki:chart:${title}`);
     });
 
     it('names a different chart differently', () => {
       expect(named(bare, 'https://ja.chordwiki.org/wiki/Rock%20%26%20Rolling')).not.toBe(
         named(bare, 'https://ja.chordwiki.org/wiki/Rock%20%26%20Roll'),
       );
+    });
+
+    // Including two whose addresses cannot be read. Decoding them would make
+    // them one name and one set of settings.
+    it('names two charts it cannot read differently', () => {
+      expect(named(bare, 'https://ja.chordwiki.org/wiki/%C6%FC')).not.toBe(
+        named(bare, 'https://ja.chordwiki.org/wiki/%C7%FD'),
+      );
+    });
+
+    // A title is whatever somebody typed, and on a wiki a page titled with
+    // another page's address is a page anybody can make. Which of the two a
+    // name is has to be part of the name.
+    it('does not let a title stand in for an address', () => {
+      const asTitle = named(
+        bare,
+        'https://ja.chordwiki.org/wiki/https%3A%2F%2Fja.chordwiki.org%2Fsearch.cgi%3Fq%3Dx',
+      );
+      const asAddress = named(bare, 'https://ja.chordwiki.org/search.cgi?q=x');
+
+      expect(asTitle).not.toBe(asAddress);
     });
   });
 
@@ -562,7 +587,9 @@ describe('what a chart is called', () => {
       </body></html>
     `);
 
-    expect(named(injected, 'https://ja.chordwiki.org/wiki/Attacker')).toBe('chordwiki:Attacker');
+    expect(named(injected, 'https://ja.chordwiki.org/wiki/Attacker')).toBe(
+      'chordwiki:chart:Attacker',
+    );
   });
 
   // A page for editing a chart states that chart's own address. Reading the
