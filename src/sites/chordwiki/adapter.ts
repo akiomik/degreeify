@@ -198,23 +198,34 @@ const timesIn = (text: string, character: string): number => text.split(characte
 const QUERY_FIELDS = /&/u;
 const NAME_ENDS = '=';
 
-function writtenTitleIn(search: string): string | undefined {
-  for (const field of search.slice(1).split(QUERY_FIELDS)) {
-    // The name the parser reads rather than the name as it stands. A name is
-    // escaped like anything else in a query, so `%74=Attacker` is a field
-    // called `t` — and comparing the text passes it over and takes a later
-    // `t=` that no parser ever reaches. Handing the field to the parser is
-    // what keeps the two from being able to disagree about which field this
-    // is. Only the value is taken as written, and only because a title that
-    // cannot be read has to keep the spelling it was written in.
-    const [name] = new URLSearchParams(field).keys();
-    if (name !== TITLE_PARAM) continue;
+/**
+ * The title in a transposed chart's address, as written rather than as read.
+ *
+ * Which field is the title is asked of the parser, and only where it is
+ * answered here. A query is cut on `&` and its fields are named in escapes,
+ * and both of those have already been got wrong once each: a `?` is legal
+ * inside a value, and `%74=` is a field called `t`. Reading a field name here
+ * would be a second parser, and the two coming apart is a reader following a
+ * link to one chart and reading another chart's settings.
+ *
+ * So the names come from the parser and the text comes from the address, and
+ * they are matched by position. Empty fields are dropped first because the
+ * parser drops them: `a=1&&t=x` is two fields to it and three to a split, and
+ * a position out of step is the same disagreement in a new place.
+ *
+ * The value alone is taken as written, because a title that cannot be read
+ * has to keep the spelling it was written in and the parser would give it
+ * back read.
+ */
+function writtenTitleIn(url: URL): string | undefined {
+  const at = [...url.searchParams.keys()].indexOf(TITLE_PARAM);
+  if (at < 0) return undefined;
 
-    const at = field.indexOf(NAME_ENDS);
-    return at < 0 ? '' : field.slice(at + 1);
-  }
+  const field = url.search.slice(1).split(QUERY_FIELDS).filter(Boolean)[at];
+  if (field === undefined) return undefined;
 
-  return undefined;
+  const ends = field.indexOf(NAME_ENDS);
+  return ends < 0 ? '' : field.slice(ends + 1);
 }
 
 /** Slashes the address ends with, which belong to the address. */
@@ -331,7 +342,7 @@ function chartNamed(url: URL): string | null {
   // about an escape that is not text is done about it wherever it was found.
   const written =
     url.pathname === TRANSPOSED_CHART_PATH
-      ? writtenTitleIn(url.search)
+      ? writtenTitleIn(url)
       : url.pathname.slice(CHART_PATH.length);
 
   // Trailing slashes come off the address rather than off the title: they are

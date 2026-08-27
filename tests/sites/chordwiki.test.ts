@@ -732,10 +732,29 @@ describe('what a chart is called', () => {
       ['escapes the name', 'https://ja.chordwiki.org/wiki.cgi?c=view&%74=Attacker&t=Victim'],
       ['escapes the only name', 'https://ja.chordwiki.org/wiki.cgi?%74=Only'],
       ['writes a plus in the name', 'https://ja.chordwiki.org/wiki.cgi?a+b=x&t=Real'],
+      ['starts with a second question mark', 'https://ja.chordwiki.org/wiki.cgi??t=Victim&t=Real'],
+      [
+        'writes a question mark into a name',
+        'https://ja.chordwiki.org/wiki.cgi?a=1&?t=Victim&t=Real',
+      ],
+      ['leaves a field empty', 'https://ja.chordwiki.org/wiki.cgi?a=1&&t=Real'],
+      ['ends on an empty field', 'https://ja.chordwiki.org/wiki.cgi?t=Real&'],
+      ['names nothing before it', 'https://ja.chordwiki.org/wiki.cgi?&t=Real'],
     ])('takes the title the parser does, where the query %s', (_what, href) => {
       const url = new URL(href);
 
       expect(chordwiki.pageId(bare, url)).toBe(`chordwiki:chart:${url.searchParams.get('t')}`);
+    });
+
+    // A field whose name really is `?t` is not the title field, whatever it
+    // looks like once a `?` has been taken for the start of a query.
+    it('names no chart where only a question-marked name looks like the title', () => {
+      const url = new URL('https://ja.chordwiki.org/wiki.cgi??t=A');
+
+      expect(url.searchParams.get('t')).toBeNull();
+      expect(chordwiki.pageId(bare, url)).toBe(
+        'chordwiki:page:https://ja.chordwiki.org/wiki.cgi??t=A',
+      );
     });
 
     // A field with no value is a field naming no chart, which is the same
