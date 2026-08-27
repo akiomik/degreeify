@@ -58,15 +58,21 @@ const TRANSPOSED = /\bOriginal\s+Key\s*[:：]/iu;
 const NOT_PART_OF_A_NAME = /^[^\p{L}\p{N}]+/u;
 
 /**
- * Nothing that could have gone on being the name, which is all a name is
- * allowed to be read past.
+ * Whether a name was stopped in the middle of itself, asked of the one
+ * character it was stopped at.
  *
  * Letters and digits, plainly. Accidentals too, and they are the reason this
  * is not simply punctuation: `C♭♭♭` is a note reader's refusal and not an
  * invitation to read `C♭♭` and leave the rest, which is reading something
  * other than what is written.
+ *
+ * The next character and not the rest of them, because the rest is not the
+ * question. Asked of everything left over, `C, D` reads as C and `C,D` reads
+ * as nothing, which makes whether a chart can be named turn on whether
+ * somebody typed a space — and a key that cannot be read silences every
+ * chord after it.
  */
-const CONTINUES_A_NAME = new RegExp(`[\\p{L}\\p{N}${ACCIDENTAL_CHARS}]`, 'u');
+const CONTINUES_A_NAME = new RegExp(`^[\\p{L}\\p{N}${ACCIDENTAL_CHARS}]`, 'u');
 
 /**
  * The key a captured name states, reading as much of it as is one.
@@ -218,7 +224,14 @@ function chartIn(doc: Document): Element | null {
   return null;
 }
 
-/** How far a transposition can go before it is the same as a shorter one. */
+/**
+ * How far a transposition can go and still be one.
+ *
+ * An octave, inclusive: a chart transposed by twelve is the chart, which is a
+ * transposition the control could offer and a thing the page would then be
+ * saying. Beyond that it would be saying something shorter in a longer way,
+ * which is not something this control does.
+ */
 const SEMITONES_IN_AN_OCTAVE = 12;
 
 /** A whole number of semitones and nothing else. */
@@ -243,7 +256,7 @@ function semitones(value: string): number | null {
   if (!WHOLE_NUMBER.test(stated)) return null;
 
   const offset = Number(stated);
-  return Math.abs(offset) < SEMITONES_IN_AN_OCTAVE ? offset : null;
+  return Math.abs(offset) <= SEMITONES_IN_AN_OCTAVE ? offset : null;
 }
 
 export const chordwiki: SiteAdapter = {
@@ -295,9 +308,13 @@ export const chordwiki: SiteAdapter = {
       // too but with the view mixed in. All of them are read the same way,
       // and one that names no chart on this site — a link to somewhere else,
       // or an address that is not one — is passed over rather than believed.
+      // Out of the head, and not out of the page. The chart body is written
+      // by whoever wrote the chart, so a link in it is one reader's text and
+      // not the site's word for where this chart lives — and taking it as the
+      // site's would let one chart put its name on another's settings.
       const stated = [
-        doc.querySelector(SELECTORS.canonical)?.getAttribute('href'),
-        doc.querySelector(SELECTORS.openGraphUrl)?.getAttribute('content'),
+        doc.head.querySelector(SELECTORS.canonical)?.getAttribute('href'),
+        doc.head.querySelector(SELECTORS.openGraphUrl)?.getAttribute('content'),
         url.href,
       ];
 

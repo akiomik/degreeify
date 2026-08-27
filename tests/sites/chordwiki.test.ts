@@ -273,6 +273,11 @@ describe('the stated key', () => {
   it.each([
     ['Key: C,', 'C'],
     ['Key: C, D', 'C'],
+    // Whether a chart can be named must not turn on whether somebody typed a
+    // space. What stops a name is the character it was stopped at, and not
+    // whatever else is left on the line.
+    ['Key: C,D', 'C'],
+    ['Key: C(=Am)', 'C'],
     ['Key: (C)', 'C'],
     ['Key: 「Gm」', 'Gm'],
     ['Key: F#,', 'F#'],
@@ -345,7 +350,24 @@ describe('how far the chart has been transposed', () => {
 
   // `Number.parseInt` reads as far as it understands and stops, so a control
   // saying something that is not a count of semitones would be read as one.
-  it.each(['1e3', '6x', '', '  ', '99', '-99', 'six'])(
+  // An octave is a transposition the control could offer and the chart it
+  // gives back is the chart, so it is one of the things a page can say.
+  it.each([
+    ['12', 12],
+    ['-12', -12],
+    ['11', 11],
+    ['0', 0],
+  ])('reads a transposition of %j semitones', (value, expected) => {
+    expect(
+      chordwiki.transposeOffset(
+        parse(
+          `<div id="key"><select name="key"><option selected value="${value}">x</option></select></div>`,
+        ),
+      ),
+    ).toBe(expected);
+  });
+
+  it.each(['1e3', '6x', '', '  ', '13', '-13', '99', 'six'])(
     'says nothing where the control says %j',
     (value) => {
       expect(
@@ -360,15 +382,24 @@ describe('how far the chart has been transposed', () => {
 });
 
 describe('what a chart is called', () => {
-  /** A page stating whichever of the two addresses a site can state. */
+  /**
+   * A page stating whichever of the two addresses a site can state.
+   *
+   * Written out as a whole document, head and all, because that is where a
+   * site states one and because this parser will not put a stray link there
+   * on its own — a fragment beginning with one lands in the body, which is
+   * exactly the place a stated address does not count.
+   */
   const stating = (links: { canonical?: string; openGraph?: string }): Document =>
-    parse(
-      [
-        links.canonical ? `<link rel="canonical" href="${links.canonical}" />` : '',
-        links.openGraph ? `<meta property="og:url" content="${links.openGraph}" />` : '',
-        '<div class="main"></div>',
-      ].join(''),
-    );
+    parse(`
+      <html>
+        <head>
+          ${links.canonical ? `<link rel="canonical" href="${links.canonical}" />` : ''}
+          ${links.openGraph ? `<meta property="og:url" content="${links.openGraph}" />` : ''}
+        </head>
+        <body><div class="main"></div></body>
+      </html>
+    `);
 
   const named = (page: Document, href: string) => chordwiki.pageId(page, new URL(href));
 
@@ -514,6 +545,24 @@ describe('what a chart is called', () => {
     expect(id).toBe(named(page, 'https://ja.chordwiki.org/search.cgi?q=x#other'));
     expect(id).not.toBe(named(page, 'https://ja.chordwiki.org/search.cgi?q=y'));
     expect(id).not.toBe(named(page, 'https://ja.chordwiki.org/other.cgi?q=x'));
+  });
+
+  // The chart body is written by whoever wrote the chart. A link in it is one
+  // reader's text and not the site's word for where this chart lives, and
+  // taking it as the site's would let one chart put its name on another
+  // chart's settings — on a wiki, by editing a page.
+  it('does not let a chart claim another chart by writing a link into itself', () => {
+    const injected = parse(`
+      <html><body>
+        <div class="main">
+          <p class="line"><span class="chord">C</span></p>
+          <link rel="canonical" href="https://ja.chordwiki.org/wiki/Victim" />
+          <meta property="og:url" content="https://ja.chordwiki.org/wiki/Victim" />
+        </div>
+      </body></html>
+    `);
+
+    expect(named(injected, 'https://ja.chordwiki.org/wiki/Attacker')).toBe('chordwiki:Attacker');
   });
 
   // A page for editing a chart states that chart's own address. Reading the
