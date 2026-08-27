@@ -258,11 +258,29 @@ describe("a chord above the chart's first key line", () => {
     expect(report.source).toBe('manual');
   });
 
-  it('is left alone where the chart states a key of its own', () => {
+  it('is left alone where the chart states a key and nothing overrides it', () => {
     const doc = aboveTheKeyLine('Key: C');
-    const report = apply(doc, chordwiki, { key: key('C') });
+    const report = apply(doc, chordwiki);
 
     expect(shown(doc)).toEqual(['G7', 'I']);
+    expect(report.source).toBe('page');
+  });
+
+  // A chart that changes key is followed rather than overridden, so a chord
+  // above its first key line stays a chord above a key line.
+  it('is left alone where a chart that changes key is given a key', () => {
+    const doc = parse(`
+      <div class="main">
+        <p class="line"><span class="chord">G7</span></p>
+        <p class="key">Key: C</p>
+        <p class="line"><span class="chord">C</span></p>
+        <p class="key">Key: G</p>
+        <p class="line"><span class="chord">C</span></p>
+      </div>
+    `);
+    const report = apply(doc, chordwiki, { key: key('D') });
+
+    expect(shown(doc)).toEqual(['G7', 'I', 'IV']);
     expect(report.source).toBe('page');
   });
 });
@@ -334,14 +352,16 @@ describe('a chart that states no key', () => {
     expect(report.source).toBe('manual');
   });
 
-  // A chart that says what key it is in is the chart in front of the reader,
-  // and this is not. A key given from outside stands in for the guess rather
-  // than overruling the page.
-  it('believes the chart over the key it is given', () => {
+  // A key set by hand is set by somebody looking at the page, and one of the
+  // reasons to set one is a chart whose stated key is read correctly and is
+  // not the key its reader wants it in. An override that cannot override the
+  // page is not an override.
+  it('takes the key it is given over the one the chart states', () => {
     const doc = load('chordwiki-basic');
-    apply(doc, chordwiki, { key: key('G') });
+    const report = apply(doc, chordwiki, { key: key('G') });
 
-    expect(shown(doc)[0]).toBe('I');
+    expect(shown(doc)[0]).toBe('IV');
+    expect(report.source).toBe('manual');
   });
 });
 

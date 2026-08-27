@@ -33,6 +33,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   chord of their scale. Where nothing chooses between the leading candidates
   the guess is declined, leaving the chart in chord names rather than
   relabelling it against the wrong tonic.
+- A popup, and the settings behind it. The names can be turned off, the
+  numerals written as `I` or as `Ⅰ`, and a chord's spelling followed or
+  normalised. The popup also says what key the chart was read in and where
+  that reading came from — the page, a guess, or a person — because a chart
+  with no names on it and an extension that is switched off look the same
+  otherwise.
+- A key set by hand, per chart, for a chart that one key can answer for. It is
+  kept as the key of the untransposed chart and moved to wherever the reader
+  has transposed it, so that transposing a chart does not lose the key set for
+  it. A chart that changes key is followed rather than overridden, and the
+  popup says so instead of offering a control that would not work.
+- What the page was read as is written down whether or not the names are being
+  shown. Turning the names off leaves the page as the site served it; it does
+  not stop the extension knowing what key the chart is in, so a reader can see
+  that before deciding to turn them on.
 - Degree names on the page. The chart is read, each chord slot is rewritten
   in place, and everything that is not a chord — bar lines, accents, rhythm
   notes, `N.C.` — is left exactly as the site served it. A section whose key

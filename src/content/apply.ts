@@ -37,6 +37,20 @@ export interface ApplyOptions {
    * this is not.
    */
   readonly key?: Key | null;
+  /**
+   * Whether to write the names onto the page.
+   *
+   * False reads the chart and reports on it without touching it, which is
+   * what the extension being switched off means: the page is left as the site
+   * served it, and what was found on it is still found. A reader who has
+   * turned the names off can still be shown what key the chart is in, and can
+   * see it before turning them on.
+   *
+   * The same call either way, and not a second function that reads without
+   * writing. Two paths to one report are two reports that can disagree, and
+   * the one nobody is looking at is the one that would.
+   */
+  readonly write?: boolean;
 }
 
 /**
@@ -100,12 +114,14 @@ export function restore(doc: Document): void {
 }
 
 /**
- * Writes degree names over the chord slots of a chart.
+ * Reads a chart, and writes degree names over its chord slots.
  *
  * Restores first and then applies, always, so that there is one path into the
  * page instead of one for a fresh page and another for a page already written
  * on. A caller changing a setting asks for this again and gets the same
- * answer it would get on a page it had never touched.
+ * answer it would get on a page it had never touched. Asked not to write, it
+ * still restores: a page with the names turned off is a page as the site
+ * served it.
  *
  * The adapter is taken rather than the chart it reads, because the chart has
  * to be read *after* the restoring and there is no way for a caller to be
@@ -132,7 +148,7 @@ export function apply(
   restore(doc);
 
   const chart = adapter.readChart(doc);
-  const { notation = 'roman-ascii', spelling = 'canonical' } = options;
+  const { notation = 'roman-ascii', spelling = 'canonical', write: writing = true } = options;
   const opening = openingKey(chart, options.key);
 
   const named: { node: ChordNode; text: string }[] = [];
@@ -169,8 +185,10 @@ export function apply(
     named.push({ node: item.node, text });
   }
 
-  write(named);
-  doc.documentElement.setAttribute(STATE_ATTRIBUTE, 'on');
+  if (writing) {
+    write(named);
+    doc.documentElement.setAttribute(STATE_ATTRIBUTE, 'on');
+  }
 
   return {
     named: named.length,
@@ -203,21 +221,30 @@ function nameOf(
  * ahead of the first statement is one the chart has said nothing about, and
  * it is left alone rather than named in a key stated afterwards.
  *
- * A key given from outside stands in where the chart says nothing this can
- * use, and nowhere else. Saying nothing covers two cases and stops at a
- * third:
+ * A key given from outside answers for a chart that one key can answer for,
+ * and for no other:
  *
- * - a chart with no key line at all, which is what the popup exists for;
- * - a chart whose one key line could not be read, which says the same thing
- *   in a way that looks different — the reader can see a key on the page and
- *   would have no idea why setting one by hand did nothing;
- * - but not a chart with more than one key line, some read and some not. More
- *   than one statement is a chart that changes key, and one key given for the
- *   whole page cannot be right for every section of it. Those sections stop,
- *   which is what the report's count is for.
+ * - a chart with no key line, which is what the popup exists for;
+ * - a chart with one key line, whether or not it could be read. Read, the
+ *   reader is disagreeing with the page, which is a thing to be allowed to do
+ *   — an override that cannot override is not one. Unread, they can see a key
+ *   on the page and would have no idea why setting one did nothing;
+ * - but not a chart with more than one key line. More than one statement is a
+ *   chart that changes key, and one key given for the whole page cannot be
+ *   right for every section of it. There the chart is followed, and a section
+ *   whose statement could not be read stops rather than borrowing the key
+ *   given for the page — which is what the report's count is for.
  */
 function openingKey(chart: readonly ChartItem[], given: Key | null | undefined): Reading {
   const stated = chart.filter((item) => item.kind === 'key');
+
+  // A person's answer first, where the chart is one a single answer can cover.
+  // A key set by hand is set by somebody looking at the page, and an override
+  // that cannot override is not one: the reasons for setting one include a
+  // chart whose stated key this reads correctly and whose reader disagrees
+  // with it.
+  if (given && stated.length <= 1) return { key: given, source: 'manual', follows: false };
+
   const read = stated.find((item) => item.key)?.key;
   if (read) return { key: read, source: 'page', follows: true };
 

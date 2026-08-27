@@ -7,7 +7,17 @@ import {
   parseChord,
   TRIANGLE_MARKS,
 } from '@/core/chord';
-import { formatKey, inferKey, MIN_CONFIDENCE, namesAKey, parseKey } from '@/core/key';
+import {
+  formatKey,
+  inferKey,
+  type Key,
+  MIN_CONFIDENCE,
+  type Mode,
+  namesAKey,
+  parseKey,
+  transposeKey,
+} from '@/core/key';
+import { parseNote } from '@/core/pitch';
 
 const chords = (...symbols: string[]): ChordSymbol[] =>
   symbols.map((symbol) => {
@@ -94,6 +104,56 @@ describe('parseKey', () => {
   it('reads the m as the mode rather than as a chord quality', () => {
     expect(parseKey('Gm')?.mode).toBe('minor');
     expect(parseKey('G')?.mode).toBe('major');
+  });
+});
+
+describe('transposeKey', () => {
+  const key = (tonic: string, mode: Mode = 'major'): Key => {
+    const note = parseNote(tonic);
+    if (!note) throw new Error(`${tonic} is not a note`);
+    return { tonic: note, mode };
+  };
+
+  const moved = (tonic: string, semitones: number, mode: Mode = 'major') =>
+    formatKey(transposeKey(key(tonic, mode), semitones));
+
+  it.each([
+    ['C', 0, 'C'],
+    ['C', 1, 'Db'],
+    ['C', 6, 'Gb'],
+    ['C', -1, 'B'],
+    ['C', -5, 'G'],
+    ['C', 12, 'C'],
+    ['C', -12, 'C'],
+  ])('reads %s moved by %i semitones as %s', (tonic, semitones, expected) => {
+    expect(moved(tonic, semitones)).toBe(expected);
+  });
+
+  // The two modes do not name the same pitches the same way: D flat and G
+  // flat name no minor key anybody writes, and a key nobody writes is one a
+  // reader would not recognise as the one they set.
+  it.each([
+    ['A', 3, 'Cm'],
+    ['A', 4, 'C#m'],
+    ['A', 9, 'F#m'],
+  ])('reads %s minor moved by %i semitones as %s', (tonic, semitones, expected) => {
+    expect(moved(tonic, semitones, 'minor')).toBe(expected);
+  });
+
+  // The spelling comes from the table and not from the key it was given, so
+  // that one pitch has one name however it was reached. `source` spelling
+  // compares a chord's spelling against the key's, so `F#` and `Gb` arriving
+  // at the same place by different routes would name the same chart two ways.
+  it('spells a pitch the same way however it was reached', () => {
+    expect(moved('F#', 0)).toBe('Gb');
+    expect(moved('Gb', 0)).toBe('Gb');
+    expect(moved('C', 6)).toBe(moved('B', 7));
+  });
+
+  it('takes a chart transposed and back to where it started', () => {
+    for (const offset of [-5, -1, 1, 6, 11]) {
+      expect(formatKey(transposeKey(transposeKey(key('Eb'), offset), -offset))).toBe('Eb');
+    }
   });
 });
 
