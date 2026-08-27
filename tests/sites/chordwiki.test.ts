@@ -343,6 +343,32 @@ describe('the stated key', () => {
   ])('does not find a word inside another in %j', (line, expected) => {
     expect(keysOf(chordwiki.readChart(chartStating(line)))).toEqual([expected]);
   });
+
+  // A key the chart was written in is not the key it is being played in, and
+  // the ways of saying "written in" are not a list anybody can finish — least
+  // of all on a Japanese site. So a written key is read only where the line
+  // opens with it, which is the shape the site writes, rather than wherever
+  // one is found with whatever came before it checked against a list.
+  //
+  // The asymmetry is the argument: a `Play:` gone unread costs a name, and a
+  // `Key:` taken for a `Play:` costs a wrong name — a whole section against a
+  // tonic the page is not in, with nothing on the page to say so.
+  it.each([
+    ['原曲Key: C', null],
+    ['Orig. Key: C', null],
+    ['Original-Key: C', null],
+    ['OriginalKey: C', null],
+    ['Capo: 5 / Key: C', null],
+    // What the guard still covers on its own: a line opening with a key and
+    // going on to name an original is a line half of which is a played key,
+    // and reading the opening would be reading half a line.
+    ['Key: C / Original Key: D', null],
+    // And the shapes the site does write are unaffected.
+    ['Key: C', 'C'],
+    ['原曲Key: C / Play: F#', 'F#'],
+  ])('reads %j as %s, a written key being read only where the line opens with one', (line, key) => {
+    expect(keysOf(chordwiki.readChart(chartStating(line)))).toEqual([key]);
+  });
 });
 
 describe('how far the chart has been transposed', () => {

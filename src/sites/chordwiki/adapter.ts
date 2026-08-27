@@ -42,9 +42,20 @@ const VIEWING_ACTION = 'view';
  *
  * The separators come in both widths — a Japanese keyboard gives the wide
  * ones as readily as the narrow — so the key name ends at either.
+ *
+ * `Key:` is read only where the line opens with it, and that is the whole of
+ * what keeps a written key from being taken for a played one. Anchored, the
+ * line has to be the shape the site writes; unanchored, every spelling of
+ * "the key it was written in" that the guard below does not know becomes a
+ * played key — `原曲Key: C` on a Japanese site, `Orig. Key: C`,
+ * `Original-Key: C`. A guard that has to enumerate those is a guard that
+ * will be missing one, and what it misses is not a key gone unread but a
+ * section named against a tonic the page is not in. Missing a `Play:` costs
+ * a name; taking a `Key:` that was not one costs a wrong name, which this
+ * file spends itself avoiding.
  */
 const PLAYED = /\bPlay\s*[:：]\s*([^\s/／]+)/iu;
-const WRITTEN = /\bKey\s*[:：]\s*([^\s/／]+)/iu;
+const WRITTEN = /^Key\s*[:：]\s*([^\s/／]+)/iu;
 const TRANSPOSED = /\bOriginal\s+Key\s*[:：]/iu;
 
 /**
@@ -136,6 +147,13 @@ function readKeyLine(text: string): Key | null {
   // being played is a shape nothing here has seen. The key it does name is
   // not the one the chords are in, so the honest answer is that this section
   // no longer says.
+  //
+  // Kept although the anchor on `WRITTEN` already declines a line opening
+  // this way, because the two say different things: the anchor says a key
+  // has to be the first thing on the line, and this says a line naming an
+  // original key is not naming a played one wherever it names it. What they
+  // cover between them is a line that opens `Key:` and goes on to name an
+  // original — where reading the opening would be reading half a line.
   if (TRANSPOSED.test(text)) return null;
 
   const written = WRITTEN.exec(text)?.[1];
@@ -595,9 +613,23 @@ export const chordwiki: SiteAdapter = {
       // DOM says is selected. The page arrives marked and changing the
       // control submits the form, so what the page states is what is being
       // shown and there is no moment at which a reader has moved it and the
-      // page has not caught up. It is also the only reading that does not
-      // need the DOM to agree about `selectedIndex`, which happy-dom does
-      // not: given this markup it reports the option before the marked one.
+      // page has not caught up.
+      //
+      // That the DOM the tests run in disagrees is a second reason and not
+      // the first, but it is not a small one: on the pages saved to check
+      // this, happy-dom's `select.value` answers `5` where the page marks
+      // `0`, and `-1` for `selectedIndex` on the transposed one. Six of the
+      // seven disagree with what the page states. A reading built on the
+      // DOM's idea of selectedness would have been wrong about nearly every
+      // real page and green in every test.
+      //
+      // Where the site stops marking an option — were it to set the control
+      // from a script instead — this answers nothing, on every page at once.
+      // That is the chosen failure rather than an overlooked one: the
+      // alternative readings are the first option, which is `+6` here and
+      // was measured wrong in an earlier round, and the DOM's, which is the
+      // one just measured wrong. Answering nothing leaves a caller able to
+      // tell that it does not know.
       //
       // The last of them where a page marks more than one, which is not valid
       // and is what a browser shows — reading the first would report a

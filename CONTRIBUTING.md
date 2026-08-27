@@ -83,10 +83,15 @@ worth what the check behind it was worth.
 
 ### Non-English test data
 
-As an explicit exception to the English-only rule, test data may hold real
-tokens from a supported site verbatim — for example `(3連)`, `(2拍3連)`, `＞`.
+As an explicit exception to the English-only rule, test data may hold tokens
+in the language of a supported site — for example `(3連)`, `(2拍3連)`, `＞`.
 The parser is required to pass these through untouched, and verifying that
 needs the real strings.
+
+The same applies to a token a site could write rather than one it has been
+seen to write, where the point of the case is that it is not in English: a
+Japanese site labelling a field in Japanese is the reason a reader is not
+allowed to assume an English label, and the case cannot say so in English.
 
 The exception covers **data only**. Comments, identifiers, and test names stay
 in English, and non-English strings appear only as observed input or expected
