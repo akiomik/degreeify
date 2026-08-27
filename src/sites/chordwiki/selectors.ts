@@ -59,13 +59,6 @@ export const SELECTORS = {
   transposeSelected: 'option[selected]',
 
   /**
-   * Every option of it, in the order the control offers them, and relative to
-   * it for the same reason. A control arriving with none of them marked is
-   * showing its first, and that is what it will send.
-   */
-  transposeOption: 'option',
-
-  /**
    * The address the site considers this chart to live at, transposed or not.
    *
    * A `rel` is a list of words and the words are not case-sensitive, so

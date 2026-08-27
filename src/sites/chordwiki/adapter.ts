@@ -448,19 +448,6 @@ export const chordwiki: SiteAdapter = {
   },
 
   transposeOffset(doc) {
-    // Read from the attribute rather than from the control's value. The page
-    // arrives with the option marked, and changing the control submits the
-    // form — so what the page states is what is being shown, and there is no
-    // moment at which a reader has moved it and the page has not caught up.
-    //
-    // It is also the only reading that does not depend on the DOM agreeing
-    // about `selectedIndex`, which happy-dom does not: given this markup it
-    // reports the option before the marked one.
-    // The option's value and not its `value` attribute: an option written
-    // without one takes its text for its value, so `<option selected>+6` is a
-    // transposition of six and reading the attribute would call it nothing at
-    // all — a key shifted by nothing, silently, which is the failure this
-    // file keeps warning about.
     // The site's control, and not whichever one the page holds most of. What
     // follows it is the chart body, and a chart body is written by whoever
     // wrote the chart — so a control put there is one reader's text, and
@@ -470,21 +457,35 @@ export const chordwiki: SiteAdapter = {
     // the site's is the first rather than the one in a trusted place.
     const control = doc.querySelector(SELECTORS.transpose);
 
-    // Within it, the last marked option and not the first. More than one is
-    // not valid, and where a control arrives with more than one a browser
-    // shows the last — so reading the first would report a transposition
-    // nobody is looking at.
+    // Which option the page arrived with marked, rather than which one the
+    // DOM says is selected. The page arrives marked and changing the control
+    // submits the form, so what the page states is what is being shown and
+    // there is no moment at which a reader has moved it and the page has not
+    // caught up. It is also the only reading that does not need the DOM to
+    // agree about `selectedIndex`, which happy-dom does not: given this
+    // markup it reports the option before the marked one.
     //
-    // Falling back to the first option where none is marked, which is what a
-    // browser shows and what the control would send. Today the site marks one
-    // on every page, so this stands against the day it stops: declining there
-    // would be this file's own warning come true, a chart read and then
-    // quietly not named, with nothing on the page to say why.
-    const shown =
-      [...(control?.querySelectorAll<HTMLOptionElement>(SELECTORS.transposeSelected) ?? [])].at(
-        -1,
-      ) ?? control?.querySelector<HTMLOptionElement>(SELECTORS.transposeOption);
-    const offset = shown && semitones(shown.value);
+    // The last of them where a page marks more than one, which is not valid
+    // and is what a browser shows — reading the first would report a
+    // transposition nobody is looking at.
+    //
+    // Nothing at all where none is marked, and deliberately not the first
+    // option. The first option is what the control would send, not what the
+    // page is showing, and those come apart here: the site lists its options
+    // from `+6` down to `-5`, so falling back to the first would answer six
+    // for every untransposed chart on the site and shift a reader's key by a
+    // tritone. Where the page has not said, saying so is the answer a caller
+    // can do something about.
+    const marked = [
+      ...(control?.querySelectorAll<HTMLOptionElement>(SELECTORS.transposeSelected) ?? []),
+    ].at(-1);
+
+    // The option's value, and not the `value` attribute it may not have: an
+    // option written without one takes its text for its value, so
+    // `<option selected>+6` is a transposition of six and reading the
+    // attribute would call it nothing at all — a key shifted by nothing,
+    // silently, which is the failure this file keeps warning about.
+    const offset = marked && semitones(marked.value);
 
     // Nothing, rather than none: a page with no such control, or one whose
     // marked option says nothing, has not told us the chart is untransposed —

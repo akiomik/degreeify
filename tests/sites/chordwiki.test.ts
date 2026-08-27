@@ -370,19 +370,23 @@ describe('how far the chart has been transposed', () => {
     expect(chordwiki.transposeOffset(doc)).toBe(0);
   });
 
-  // A control arriving with none of its options marked is showing its first,
-  // and that is what it would send. Declining there would be this file's own
-  // warning come true: a chart read and then quietly not named, with nothing
-  // on the page to say why.
-  it('reads the first option where the control marks none, as a browser does', () => {
-    const doc = parse(
-      '<div id="key"><select name="key"><option value="0">0</option><option value="6">+6</option></select></div>',
-    );
+  // A control that marks none of its options has not said how far the chart
+  // in front of it has been transposed. Its first option is what it would
+  // send, which is a different question — and on this site a different
+  // answer: the options run from `+6` down to `-5`, so reading the first
+  // would answer six for every untransposed chart and shift a reader's key
+  // by a tritone. Written in the site's own order so that reading the first
+  // is wrong here in the way it would be wrong on a real page.
+  it('says nothing where the control marks none of its options', () => {
+    const options = [6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5]
+      .map((value) => `<option value="${value}">${value}</option>`)
+      .join('');
 
-    expect(chordwiki.transposeOffset(doc)).toBe(0);
-    expect(chordwiki.transposeOffset(doc)).toBe(
-      Number(doc.querySelector<HTMLSelectElement>('select')?.value),
-    );
+    expect(
+      chordwiki.transposeOffset(
+        parse(`<div id="key"><select name="key">${options}</select></div>`),
+      ),
+    ).toBeNull();
   });
 
   it('reads an option written without a value from its text', () => {
