@@ -1,4 +1,5 @@
 import { type Key, parseKey } from '@/core/key';
+import { ACCIDENTAL_CHARS } from '@/core/pitch';
 import type { ChartItem, SiteAdapter } from '../types';
 import { SELECTORS } from './selectors';
 
@@ -56,8 +57,16 @@ const TRANSPOSED = /\bOriginal\s+Key\s*[:：]/iu;
  */
 const NOT_PART_OF_A_NAME = /^[^\p{L}\p{N}]+/u;
 
-/** Nothing but punctuation, which is all a name is allowed to be read past. */
-const ONLY_PUNCTUATION = /^[^\p{L}\p{N}]*$/u;
+/**
+ * Nothing that could have gone on being the name, which is all a name is
+ * allowed to be read past.
+ *
+ * Letters and digits, plainly. Accidentals too, and they are the reason this
+ * is not simply punctuation: `C♭♭♭` is a note reader's refusal and not an
+ * invitation to read `C♭♭` and leave the rest, which is reading something
+ * other than what is written.
+ */
+const CONTINUES_A_NAME = new RegExp(`[\\p{L}\\p{N}${ACCIDENTAL_CHARS}]`, 'u');
 
 /**
  * The key a captured name states, reading as much of it as is one.
@@ -77,7 +86,7 @@ function keyNamed(captured: string): Key | null {
 
   for (let end = name.length; end > 0; end--) {
     const key = parseKey(name.slice(0, end));
-    if (key) return ONLY_PUNCTUATION.test(name.slice(end)) ? key : null;
+    if (key) return CONTINUES_A_NAME.test(name.slice(end)) ? null : key;
   }
 
   return null;
@@ -225,9 +234,15 @@ const WHOLE_NUMBER = /^[+-]?\d+$/u;
  * octave is not something this control said.
  */
 function semitones(value: string): number | null {
-  if (!WHOLE_NUMBER.test(value)) return null;
+  // Trimmed, because an option written without a value takes its text for
+  // one and the site's markup puts that text on its own line. A browser
+  // collapses the whitespace out of it and this DOM does not, which makes it
+  // the tests that would find this — and only if one of them were written
+  // with the markup laid out the way the site lays it out.
+  const stated = value.trim();
+  if (!WHOLE_NUMBER.test(stated)) return null;
 
-  const offset = Number(value);
+  const offset = Number(stated);
   return Math.abs(offset) < SEMITONES_IN_AN_OCTAVE ? offset : null;
 }
 
@@ -269,26 +284,34 @@ export const chordwiki: SiteAdapter = {
   },
 
   pageId(doc, url) {
-    // The site's own address for the chart first, since it is the site
-    // saying which chart this is; then the one in the bar, which says that
-    // too but with the view mixed in. All of them are read the same way, and
-    // one that names no chart on this site — a link to somewhere else, or an
-    // address that is not one — is passed over rather than believed.
-    const stated = [
-      doc.querySelector(SELECTORS.canonical)?.getAttribute('href'),
-      doc.querySelector(SELECTORS.openGraphUrl)?.getAttribute('content'),
-      url.href,
-    ];
+    // Asked here rather than assumed to have been asked already. The content
+    // script reaches every page on the site, so a page that is not a chart
+    // can be handed to this — and a page for editing one states that chart's
+    // own address, which would let it claim the chart's settings by way of a
+    // link rather than by being it.
+    if (isChartAddress(url)) {
+      // The site's own address for the chart first, since it is the site
+      // saying which chart this is; then the one in the bar, which says that
+      // too but with the view mixed in. All of them are read the same way,
+      // and one that names no chart on this site — a link to somewhere else,
+      // or an address that is not one — is passed over rather than believed.
+      const stated = [
+        doc.querySelector(SELECTORS.canonical)?.getAttribute('href'),
+        doc.querySelector(SELECTORS.openGraphUrl)?.getAttribute('content'),
+        url.href,
+      ];
 
-    for (const href of stated) {
-      const address = absolute(href, url);
-      const title = address && chartNamed(address);
-      if (title) return `${ID}:${title}`;
+      for (const href of stated) {
+        const address = absolute(href, url);
+        const title = address && chartNamed(address);
+        if (title) return `${ID}:${title}`;
+      }
     }
 
-    // Nothing on the page named a chart, so this is not one. Whatever it is,
-    // it is at least itself, and settings kept against it stay put.
-    return `${ID}:${url.origin}${url.pathname}`;
+    // Not a chart. Whatever it is, it is at least itself, and it is itself
+    // down to the query: two pages for editing two charts are one address and
+    // two different pages. The fragment goes, being a place in a page.
+    return `${ID}:${url.origin}${url.pathname}${url.search}`;
   },
 
   transposeOffset(doc) {

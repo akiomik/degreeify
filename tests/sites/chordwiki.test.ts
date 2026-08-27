@@ -281,6 +281,10 @@ describe('the stated key', () => {
     // major would be worse than saying so.
     ['Key: EM', null],
     ['Key: Am7', null],
+    // An accidental could have gone on being the name, so leaving one off is
+    // reading something other than what is written.
+    ['Key: C♭♭♭', null],
+    ['Key: Cbbb', null],
     ['Key: C major', 'C'],
   ])('reads the key of %j as %s, punctuation and all', (line, expected) => {
     expect(keysOf(chordwiki.readChart(chartStating(line)))).toEqual([expected]);
@@ -321,6 +325,16 @@ describe('how far the chart has been transposed', () => {
   // An option written without a value takes its text for one, so reading the
   // attribute would call this nothing at all — a key shifted by nothing,
   // silently.
+  it.each([
+    ['<option selected>+6</option>', 6],
+    ['<option selected>\n  +6\n</option>', 6],
+    ['<option selected> -5 </option>', -5],
+  ])('reads %j from its text', (option, expected) => {
+    expect(
+      chordwiki.transposeOffset(parse(`<div id="key"><select name="key">${option}</select></div>`)),
+    ).toBe(expected);
+  });
+
   it('reads an option written without a value from its text', () => {
     expect(
       chordwiki.transposeOffset(
@@ -489,12 +503,36 @@ describe('what a chart is called', () => {
     expect(named(stating({}), doing)).not.toBe(named(stating({}), reading));
   });
 
-  it('names a page that is no chart after itself, and keeps naming it that', () => {
+  // Down to the query, because two pages for editing two charts are one
+  // address and two different pages, and settings kept against one of them
+  // must not be read back on the other. The fragment goes, being a place in a
+  // page rather than a page.
+  it('names a page that is no chart after itself, whole', () => {
     const page = stating({});
     const id = named(page, 'https://ja.chordwiki.org/search.cgi?q=x#top');
 
-    expect(id).toBe(named(page, 'https://ja.chordwiki.org/search.cgi?q=y'));
-    expect(id).not.toBe(named(page, 'https://ja.chordwiki.org/other.cgi'));
+    expect(id).toBe(named(page, 'https://ja.chordwiki.org/search.cgi?q=x#other'));
+    expect(id).not.toBe(named(page, 'https://ja.chordwiki.org/search.cgi?q=y'));
+    expect(id).not.toBe(named(page, 'https://ja.chordwiki.org/other.cgi?q=x'));
+  });
+
+  // A page for editing a chart states that chart's own address. Reading the
+  // stated one before asking whether this page is a chart at all would let it
+  // claim the chart's settings by way of a link rather than by being it, and
+  // the guard that turns such an address away sits somewhere else entirely.
+  it('does not let a page state its way into being a chart', () => {
+    const editing = stating({ canonical: 'https://ja.chordwiki.org/wiki/Test%20Song' });
+    const reading = stating({});
+
+    const claimed = named(editing, 'https://ja.chordwiki.org/wiki.cgi?c=edit&t=Test+Song');
+    expect(claimed).not.toBe(named(reading, 'https://ja.chordwiki.org/wiki/Test%20Song'));
+  });
+
+  it('tells two pages that are no charts apart', () => {
+    const page = stating({});
+    expect(named(page, 'https://ja.chordwiki.org/wiki.cgi?c=edit&t=Song%20A')).not.toBe(
+      named(page, 'https://ja.chordwiki.org/wiki.cgi?c=edit&t=Song%20B'),
+    );
   });
 });
 
