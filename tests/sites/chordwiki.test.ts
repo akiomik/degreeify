@@ -90,9 +90,9 @@ describe('matching a page', () => {
   it('knows a chart from a page that only looks like one', () => {
     expect(chordwiki.isChordPage(load('chordwiki-basic'))).toBe(true);
 
-    document.documentElement.innerHTML =
-      '<body><div class="main"><p>No chart here.</p></div></body>';
-    expect(chordwiki.isChordPage(document)).toBe(false);
+    expect(chordwiki.isChordPage(parse('<div class="main"><p>No chart here.</p></div>'))).toBe(
+      false,
+    );
   });
 });
 
@@ -128,6 +128,21 @@ describe('reading a chart', () => {
 
     expect(chordwiki.isChordPage(outside)).toBe(false);
     expect(chordwiki.readChart(outside)).toEqual([]);
+  });
+
+  // Where a page carries two of the wrapper, both questions have to be about
+  // the same one. Asked with a selector rather than an element, one would say
+  // the page is a chart because of the first and the other read the second.
+  it('reads the chart it decided the page was, where a page carries two', () => {
+    const doc = parse(`
+      <div class="main"><p>Something else the site put in one of these.</p></div>
+      <div class="main">
+        <p class="key">Key: C</p>
+        <p class="line"><span class="chord">C</span></p>
+      </div>
+    `);
+
+    expect(chordwiki.isChordPage(doc)).toBe(chordwiki.readChart(doc).length > 0);
   });
 
   it('reads only what is inside the chart', () => {
@@ -205,6 +220,35 @@ describe('the stated key', () => {
     expect(keysOf(chordwiki.readChart(doc))).toEqual([expected]);
   });
 
+  // The separators come in both widths, and a line written in the wide ones
+  // has to end the key name at the wide slash as it does at the narrow.
+  it.each([
+    ['Original Key: C ／ Play: F#', 'F#'],
+    ['Original Key：Am ／ Capo：5 ／ Play：Em', 'Em'],
+    ['Play：F#／Capo：3', 'F#'],
+  ])('reads %j, written with the wide separators, as %s', (line, expected) => {
+    const doc = parse(`<div class="main"><p class="key">${line}</p></div>`);
+    expect(keysOf(chordwiki.readChart(doc))).toEqual([expected]);
+  });
+
+  // An empty one says nothing, which is not the same as saying something that
+  // cannot be read. Passed on as a key with none it would stop the naming
+  // until the chart states another, so one stray empty line would cost the
+  // rest of the chart.
+  it('passes over an empty key line rather than reading it as an unreadable one', () => {
+    const doc = parse(`
+      <div class="main">
+        <p class="key">Key: C</p>
+        <p class="line"><span class="chord">Am7</span></p>
+        <p class="key"></p>
+        <p class="line"><span class="chord">F</span></p>
+      </div>
+    `);
+
+    expect(keysOf(chordwiki.readChart(doc))).toEqual(['C']);
+    expect(nameChart(chordwiki.readChart(doc))).toEqual(['VIm7', 'IV']);
+  });
+
   // Each word has to begin where it says it does. A line ending `Display:`
   // holds `play:`, and one beginning `Monkey:` holds `key:` — either read as
   // what it is not takes a section of the chart with it, since a key that
@@ -245,53 +289,117 @@ describe('how far the chart has been transposed', () => {
 });
 
 describe('what a chart is called', () => {
-  const url = new URL('https://ja.chordwiki.org/wiki.cgi?c=view&t=Test%20Song&key=6');
+  /** A page stating whichever of the two addresses a site can state. */
+  const stating = (links: { canonical?: string; openGraph?: string }): Document =>
+    parse(
+      [
+        links.canonical ? `<link rel="canonical" href="${links.canonical}" />` : '',
+        links.openGraph ? `<meta property="og:url" content="${links.openGraph}" />` : '',
+        '<div class="main"></div>',
+      ].join(''),
+    );
+
+  const named = (page: Document, href: string) => chordwiki.pageId(page, new URL(href));
 
   // The same chart transposed is the same chart. A name that moved when a
   // reader transposed one would lose them the key they had set by hand, at
   // the moment they pressed a button that changed nothing about the song.
   it('does not move when the chart is transposed', () => {
-    const written = chordwiki.pageId(load('chordwiki-basic'), url);
-    const transposed = chordwiki.pageId(load('chordwiki-transposed'), url);
-    expect(transposed).toBe(written);
-  });
-
-  it('falls back to the address in the bar, without its fragment', () => {
-    const bare = new URL('https://ja.chordwiki.org/wiki/Test#verse');
-    expect(chordwiki.pageId(parse('<div class="main"></div>'), bare)).toBe(
-      'https://ja.chordwiki.org/wiki/Test',
+    const url = new URL('https://ja.chordwiki.org/wiki.cgi?c=view&t=Test%20Song&key=6');
+    expect(chordwiki.pageId(load('chordwiki-transposed'), url)).toBe(
+      chordwiki.pageId(load('chordwiki-basic'), url),
     );
   });
 
-  // The fallback has to keep the same promise the stated address does, and
-  // the two addresses a chart is reachable at put its title in different
-  // places — in the path, or in a parameter of the one a reader is sent to on
-  // transposing. Comparing two transposed addresses against each other would
-  // have missed that: they agree with one another and not with the chart.
-  it('does not move on the fallback either', () => {
-    const page = parse('<div class="main"></div>');
-    const addresses = [
-      'https://ja.chordwiki.org/wiki/Test%20Song',
-      'https://ja.chordwiki.org/wiki.cgi?c=view&t=Test%20Song',
-      'https://ja.chordwiki.org/wiki.cgi?c=view&t=Test%20Song&key=6&symbol=flat',
-      'https://ja.chordwiki.org/wiki/Test%20Song#verse',
+  // Every address a chart is reachable at, from every place an address can
+  // come from, has to name it the same. Reconciling them a pair at a time is
+  // how they came to disagree about percent-encoding, about the host, and
+  // about whether a query is part of a chart's name.
+  describe('every address a chart is reachable at', () => {
+    const bare = stating({});
+
+    const sameChart: [what: string, id: () => string][] = [
+      ['in the path', () => named(bare, 'https://ja.chordwiki.org/wiki/Rock%20%26%20Roll')],
+      ['in a parameter', () => named(bare, 'https://ja.chordwiki.org/wiki.cgi?t=Rock+%26+Roll')],
+      [
+        'with the view mixed in',
+        () => named(bare, 'https://ja.chordwiki.org/wiki.cgi?t=Rock+%26+Roll&key=6&symbol=flat'),
+      ],
+      ['with a fragment', () => named(bare, 'https://ja.chordwiki.org/wiki/Rock%20%26%20Roll#v')],
+      [
+        "on another of the site's hosts",
+        () => named(bare, 'https://www.chordwiki.org/wiki/Rock%20%26%20Roll'),
+      ],
+      ['on the bare host', () => named(bare, 'https://chordwiki.org/wiki/Rock%20%26%20Roll')],
+      [
+        'stated by the page',
+        () =>
+          named(
+            stating({ canonical: 'https://ja.chordwiki.org/wiki/Rock%20%26%20Roll' }),
+            'https://ja.chordwiki.org/wiki.cgi?t=Something%20Else',
+          ),
+      ],
+      [
+        'stated by the page, with the view mixed in',
+        () =>
+          named(
+            stating({ canonical: 'https://ja.chordwiki.org/wiki.cgi?t=Rock+%26+Roll&key=6' }),
+            'https://ja.chordwiki.org/wiki.cgi?t=Something%20Else',
+          ),
+      ],
+      [
+        'stated the other way',
+        () =>
+          named(
+            stating({ openGraph: 'https://ja.chordwiki.org/wiki/Rock%20%26%20Roll' }),
+            'https://ja.chordwiki.org/wiki.cgi?t=Something%20Else',
+          ),
+      ],
     ];
 
-    for (const href of addresses) {
-      expect(chordwiki.pageId(page, new URL(href))).toBe(
-        'https://ja.chordwiki.org/wiki/Test%20Song',
+    it.each(sameChart)('names it the same %s', (_what, id) => {
+      expect(id()).toBe(sameChart[0]?.[1]());
+    });
+
+    it('names a different chart differently', () => {
+      expect(named(bare, 'https://ja.chordwiki.org/wiki/Rock%20%26%20Rolling')).not.toBe(
+        named(bare, 'https://ja.chordwiki.org/wiki/Rock%20%26%20Roll'),
       );
-    }
+    });
   });
 
-  // A page can put anything it likes in that link, and building an address
-  // out of it throws where it is not one. In a content script an uncaught
-  // throw takes every chord on the page with it.
-  it('falls through rather than throwing on an address that is not one', () => {
-    const broken = parse('<link rel="canonical" href="https://[" /><div class="main"></div>');
-    expect(chordwiki.pageId(broken, new URL('https://ja.chordwiki.org/wiki/Test'))).toBe(
-      'https://ja.chordwiki.org/wiki/Test',
-    );
+  // Which the page states is not the point; whether it names a chart is. A
+  // page can put anything it likes in either of them, and picking one before
+  // reading it throws away the other.
+  describe('an address the page states that names no chart', () => {
+    const elsewhere = 'https://ja.chordwiki.org/wiki/Test';
+
+    it.each([
+      ['is not an address at all', 'https://['],
+      ['is somewhere else entirely', 'https://example.com/wiki/Other'],
+      ['is the site, but not a chart', 'https://ja.chordwiki.org/search.cgi?q=x'],
+    ])('passes over one that %s', (_what, canonical) => {
+      expect(named(stating({ canonical }), elsewhere)).toBe(named(stating({}), elsewhere));
+    });
+
+    it('passes over it in favour of the other one, not of the address in the bar', () => {
+      const page = stating({
+        canonical: 'https://[',
+        openGraph: 'https://ja.chordwiki.org/wiki/Test%20Song',
+      });
+
+      expect(named(page, elsewhere)).toBe(
+        named(stating({}), 'https://ja.chordwiki.org/wiki/Test%20Song'),
+      );
+    });
+  });
+
+  it('names a page that is no chart after itself, and keeps naming it that', () => {
+    const page = stating({});
+    const id = named(page, 'https://ja.chordwiki.org/search.cgi?q=x#top');
+
+    expect(id).toBe(named(page, 'https://ja.chordwiki.org/search.cgi?q=y'));
+    expect(id).not.toBe(named(page, 'https://ja.chordwiki.org/other.cgi'));
   });
 });
 

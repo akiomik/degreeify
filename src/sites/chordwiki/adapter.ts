@@ -2,6 +2,8 @@ import { type Key, parseKey } from '@/core/key';
 import type { ChartItem, SiteAdapter } from '../types';
 import { SELECTORS } from './selectors';
 
+const ID = 'chordwiki';
+
 const HOST = 'chordwiki.org';
 
 /** Where a chart lives. */
@@ -31,9 +33,12 @@ const TITLE_PARAM = 't';
  * Each word has to begin where it says it does. A line ending `Display: Foo`
  * holds `play:` and a line beginning `Monkey:` holds `key:`, and either read
  * as what it is not takes a section of the chart with it.
+ *
+ * The separators come in both widths — a Japanese keyboard gives the wide
+ * ones as readily as the narrow — so the key name ends at either.
  */
-const PLAYED = /\bPlay\s*[:：]\s*([^\s/]+)/iu;
-const WRITTEN = /\bKey\s*[:：]\s*([^\s/]+)/iu;
+const PLAYED = /\bPlay\s*[:：]\s*([^\s/／]+)/iu;
+const WRITTEN = /\bKey\s*[:：]\s*([^\s/／]+)/iu;
 const TRANSPOSED = /\bOriginal\s+Key\s*[:：]/iu;
 
 function readKeyLine(text: string): Key | null {
@@ -50,13 +55,7 @@ function readKeyLine(text: string): Key | null {
   return written ? parseKey(written) : null;
 }
 
-/**
- * An address, or nothing where it is not one.
- *
- * A page can say anything it likes in a `canonical` link, and building a URL
- * out of it throws where it is not one. In a content script an uncaught throw
- * takes the whole run with it, and every chord on the page along with it.
- */
+/** An address, or nothing where the text is not one. */
 function absolute(href: string | null | undefined, base: URL): URL | null {
   if (!href) return null;
   try {
@@ -66,58 +65,106 @@ function absolute(href: string | null | undefined, base: URL): URL | null {
   }
 }
 
-export const chordwiki: SiteAdapter = {
-  id: 'chordwiki',
+/** Text with its percent-encoding undone, or nothing where that is not possible. */
+function decoded(text: string): string | null {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return null;
+  }
+}
 
-  matches(url) {
-    const host = url.hostname;
-    if (host !== HOST && !host.endsWith(`.${HOST}`)) return false;
-    return url.pathname === TRANSPOSED_CHART_PATH || url.pathname.startsWith(CHART_PATH);
-  },
+function isChartAddress(url: URL): boolean {
+  const host = url.hostname;
+  if (host !== HOST && !host.endsWith(`.${HOST}`)) return false;
+  return url.pathname === TRANSPOSED_CHART_PATH || url.pathname.startsWith(CHART_PATH);
+}
+
+/**
+ * The chart an address names, or nothing where it names none.
+ *
+ * The title, and only the title. A chart is reachable at more than one
+ * address — in the path, or in a parameter of the one a reader is sent to on
+ * transposing, on any of the site's hosts, with or without the parameters
+ * saying how far it has been transposed and which accidentals it is being
+ * spelled with — and all of those are the same chart. What is left once the
+ * title is taken out of them is about the view.
+ *
+ * Every address goes through here, wherever it came from, which is the point.
+ * Reconciling the paths one pair at a time is how they came to disagree about
+ * percent-encoding, about the host, and about whether a query is part of a
+ * chart's name: three answers to a question that has one.
+ */
+function chartNamed(url: URL): string | null {
+  if (!isChartAddress(url)) return null;
+
+  if (url.pathname === TRANSPOSED_CHART_PATH) return url.searchParams.get(TITLE_PARAM);
+  return decoded(url.pathname.slice(CHART_PATH.length));
+}
+
+export const chordwiki: SiteAdapter = {
+  id: ID,
+
+  matches: isChartAddress,
 
   isChordPage(doc) {
-    // The same scope the chart is read in. A chord slot the site puts
-    // somewhere else on the page does not make the page a chart, and would
-    // otherwise say it did while the reading found nothing.
-    return doc.querySelector(SELECTORS.chord) !== null;
+    return doc.querySelector(SELECTORS.chart)?.querySelector(SELECTORS.chord) != null;
   },
 
   readChart(doc) {
     // No wrapper, no chart. Reading the page at large instead would be a
     // chord chart's worth of rewriting let loose on whatever else is on it,
     // the first time the site renames this.
+    //
+    // The one element, rather than the selector, so that this and the
+    // question of whether the page is a chart at all cannot answer about
+    // different parts of it — which they would the moment a page carried two
+    // of these.
     const chart = doc.querySelector(SELECTORS.chart);
     if (!chart) return [];
 
     // Document order is guaranteed, which is why the keys and the chords are
     // asked for together rather than separately and put back in step.
-    return [...chart.querySelectorAll(SELECTORS.chartItems)].map((element): ChartItem => {
+    const items: ChartItem[] = [];
+    for (const element of chart.querySelectorAll(SELECTORS.chartItems)) {
       const text = (element.textContent ?? '').trim();
-      if (element.matches(SELECTORS.key)) {
-        return { kind: 'key', key: readKeyLine(text), raw: text };
+
+      if (!element.matches(SELECTORS.key)) {
+        items.push({ kind: 'chord', node: { element: element as HTMLElement, text } });
+        continue;
       }
-      return { kind: 'chord', node: { element: element as HTMLElement, text } };
-    });
+
+      // An empty one says nothing, which is not the same as saying something
+      // that cannot be read. Passing it on as a key with none would stop the
+      // naming until the chart states another, so one stray empty line would
+      // cost the rest of the chart.
+      if (text) items.push({ kind: 'key', key: readKeyLine(text), raw: text });
+    }
+
+    return items;
   },
 
   pageId(doc, url) {
-    // The site's own address for the chart stays put when the chart is
-    // transposed, where the address in the bar does not.
-    const canonical = doc.querySelector(SELECTORS.canonical)?.getAttribute('href');
-    const openGraph = doc.querySelector(SELECTORS.openGraphUrl)?.getAttribute('content');
-    const stated = absolute(canonical || openGraph, url);
-    if (stated) return stated.href;
+    // The site's own address for the chart first, since it is the site
+    // saying which chart this is; then the one in the bar, which says that
+    // too but with the view mixed in. All of them are read the same way, and
+    // one that names no chart on this site — a link to somewhere else, or an
+    // address that is not one — is passed over rather than believed.
+    const stated = [
+      doc.querySelector(SELECTORS.canonical)?.getAttribute('href'),
+      doc.querySelector(SELECTORS.openGraphUrl)?.getAttribute('content'),
+      url.href,
+    ];
 
-    // Otherwise the same promise has to be kept off the address in the bar,
-    // which says how the chart is being shown as well as which chart it is. A
-    // chart is named by its title, and the two addresses put the title in
-    // different places: in the path, or in a parameter of the one a reader is
-    // sent to on transposing. Everything else — the transposition, which
-    // accidentals it is being spelled with, where in the page they were — is
-    // about the view and not about the chart.
-    const title = url.pathname === TRANSPOSED_CHART_PATH && url.searchParams.get(TITLE_PARAM);
-    const path = title ? `${CHART_PATH}${encodeURIComponent(title)}` : url.pathname;
-    return new URL(path, url).href;
+    for (const href of stated) {
+      const address = absolute(href, url);
+      const title = address && chartNamed(address);
+      if (title) return `${ID}:${title}`;
+    }
+
+    // Nothing on the page named a chart, so this is not one. Whatever it is,
+    // it is at least itself, and settings kept against it stay put.
+    return `${ID}:${url.origin}${url.pathname}`;
   },
 
   transposeOffset(doc) {

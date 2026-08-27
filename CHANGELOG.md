@@ -31,8 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   which chords fall under which key needs no reconstructing. It reads the key
   the page is being played in rather than the one the chart was written in,
   which on a transposed chart are different and stated in the same line, and
-  it gives a chart the same name whether or not it has been transposed, so
-  that transposing one does not lose the settings kept against it.
+  it names a chart by what identifies it to the site rather than by the
+  address it was reached at, so that transposing one — or reaching it another
+  way — does not lose the settings kept against it.
 - Key inference, for charts that state no key. Every key is scored on how many
   of the chart's chords it accounts for, on whether the chart opens and closes
   on its tonic, and on whether it holds a chord only one of two relative keys

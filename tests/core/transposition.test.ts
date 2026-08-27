@@ -31,16 +31,11 @@ describe.each(TRANSPOSITION_SAMPLES)('$label', ({ from, to, pairs }) => {
   const written = keyNamed(from);
   const transposed = keyNamed(to);
 
-  it.each(pairs)('names %s in the written key as it names %s in the transposed one', (a, b) => {
-    expect(nameOf(b, transposed)).toBe(nameOf(a, written));
-  });
-
   // Which is the point of the default policy. Deferring to the chart's own
   // spelling cannot promise this, because the spellings being deferred to are
   // whatever the transposer happened to write.
-  it('names every pair alike', () => {
-    const differing = pairs.filter(([a, b]) => nameOf(a, written) !== nameOf(b, transposed));
-    expect(differing).toEqual([]);
+  it.each(pairs)('names %s in the written key as it names %s in the transposed one', (a, b) => {
+    expect(nameOf(b, transposed)).toBe(nameOf(a, written));
   });
 
   // A bar line, an accent, a rhythm note: the site transposes a chart by

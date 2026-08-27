@@ -16,10 +16,10 @@ export const SELECTORS = {
   chart: CHART,
 
   /**
-   * Chord slots, inside the chart and nowhere else. Not every one holds a
-   * chord — see the chord parser.
+   * Chord slots, as found within the chart. Not every one holds a chord —
+   * see the chord parser.
    */
-  chord: `${CHART} p.line span.chord`,
+  chord: 'p.line span.chord',
 
   /** A stated key, of which a chart may have none, one, or one per section. */
   key: 'p.key',

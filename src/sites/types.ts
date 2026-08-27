@@ -59,7 +59,17 @@ export interface SiteAdapter {
    * The same chart transposed is the same chart, so this must not move when
    * the reader transposes it — otherwise a key they set by hand is lost the
    * moment they press a button, and from where they are sitting nothing about
-   * the song changed.
+   * the song changed. Nor may it move between the addresses one chart is
+   * reachable at, or between the page's own name for itself and the one in
+   * the address bar.
+   *
+   * An address is a poor name to reach for, whatever the temptation: it
+   * carries the host, the shape of the path, the parameters saying how the
+   * chart is being shown, and a percent-encoding that differs between the
+   * places a title can sit in one. Every one of those is a way for two names
+   * of one chart to disagree. What an adapter should hand back is what
+   * identifies the chart to the site, prefixed by {@link SiteAdapter.id} so
+   * that two sites cannot collide.
    */
   pageId(doc: Document, url: URL): string;
 
