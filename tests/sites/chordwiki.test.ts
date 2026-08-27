@@ -333,6 +333,16 @@ describe('the stated key', () => {
     ['Key: ♭B', null],
     ['Key: #C', null],
     ['Key: ＃F', null],
+    // A character outside the basic plane is written in two units, and
+    // reading it as two would take both halves off as punctuation.
+    ['Key: 𠮟C', null],
+    ['Key: C𠮟', null],
+    ['Key: あC', null],
+    ['Key: Cあ', null],
+    // Which is not the same as a character outside the basic plane being
+    // something a name is stopped at: `𠮟` is a letter, and what stops a
+    // name is what is not around it.
+    ['Key: (𠮟)', null],
     // What is around a name still comes off.
     ['Key: (C)', 'C'],
     ['Key: 「Gm」', 'Gm'],

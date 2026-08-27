@@ -92,8 +92,19 @@ function partOfAName(char: string): boolean {
  * found yet, and stopping is the answer at both ends.
  */
 function nameIn(captured: string): string {
+  // Character by character and not unit by unit. A character outside the
+  // basic plane is written in two units, and asking about half of one asks
+  // about a piece of nothing: `\p{L}` does not match a lone surrogate, so
+  // both halves would come off as punctuation and `𠮟C` would read as C —
+  // the very reading the far end was taught to refuse. `continuesAName`
+  // takes its character off the front of a string and so has always counted
+  // this way; the two ends have to count the same way as well as ask the
+  // same question.
   let at = 0;
-  while (at < captured.length && !partOfAName(captured.charAt(at))) at++;
+  for (const char of captured) {
+    if (partOfAName(char)) break;
+    at += char.length;
+  }
 
   return captured.slice(at);
 }
