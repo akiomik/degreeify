@@ -111,6 +111,24 @@ describe('matching a page', () => {
 });
 
 describe('reading a chart', () => {
+  // A selector matches on names and attributes, which a document that is not
+  // HTML carries as readily as one that is — and its elements are not
+  // `HTMLElement`s. The content script is matched by address rather than by
+  // content type, so such a document reaches this adapter; asserting the type
+  // instead of asking it would put nothing wrong here and something wrong far
+  // away, in whichever caller first reached for `style` to hold a column
+  // still.
+  it('reads no chords out of a document that is not HTML', () => {
+    const feed = new DOMParser().parseFromString(
+      '<div class="main"><p class="line"><span class="chord">C</span></p></div>',
+      'text/xml',
+    );
+
+    // The selectors do match, which is what makes the answer worth pinning.
+    expect(feed.querySelectorAll('div.main p.line span.chord')).toHaveLength(1);
+    expect(chordwiki.readChart(feed)).toEqual([]);
+  });
+
   it('returns the chords in the order they are written', () => {
     expect(chordsOf(chartOf('chordwiki-basic'))).toEqual([
       'C',
@@ -385,6 +403,34 @@ describe('how far the chart has been transposed', () => {
     expect(chordwiki.transposeOffset(doc)).toBeNull();
   });
 
+  // A page may carry the form more than once — one control laid out for a
+  // narrow window and one for a wide one is ordinary — and only the copy
+  // being shown need arrive marked. Both are the site's, so the one that says
+  // something is the one to take: stopping at the first would report nothing
+  // about a chart that has plainly been transposed.
+  it('reads the first control that says how far the chart has moved', () => {
+    const doc = parse(`
+      <div id="key"><select name="key"><option value="0">0</option></select></div>
+      <div id="key"><select name="key"><option value="6" selected>+6</option></select></div>
+      <div class="main"></div>
+    `);
+
+    expect(chordwiki.transposeOffset(doc)).toBe(6);
+  });
+
+  // Including where the first says something that cannot be read. A control
+  // saying nothing this understands has told us nothing, and another copy of
+  // the same form may yet say it.
+  it('passes over a control whose marked option cannot be read', () => {
+    const doc = parse(`
+      <div id="key"><select name="key"><option value="six" selected>+6</option></select></div>
+      <div id="key"><select name="key"><option value="6" selected>+6</option></select></div>
+      <div class="main"></div>
+    `);
+
+    expect(chordwiki.transposeOffset(doc)).toBe(6);
+  });
+
   // The same, where the chart body comes first. Neither order is the site's
   // to promise.
   it("reads the site's control where the chart body precedes it", () => {
@@ -642,6 +688,12 @@ describe('what a chart is called', () => {
       // chart gets two names.
       ['an unread title with a bracket', '(%FC', '%28%FC', 'unread:%28%FC'],
       ['an unread title with a tilde', '~%FC', '%7E%FC', 'unread:%7E%FC'],
+      // The character a decoder stands in with is one a title may hold, and
+      // an address spelling it properly is saying it rather than failing to.
+      // Only where more come back than were written is something being stood
+      // in for.
+      ['a replacement character of its own', '%EF%BF%BD', '%EF%BF%BD', 'chart:\uFFFD'],
+      ['one written and one stood in for', '%EF%BF%BD%FC', '%EF%BF%BD%FC', 'unread:%EF%BF%BD%FC'],
     ];
 
     it.each(encodings)('reads %s the same in either place', (_what, path, query, name) => {

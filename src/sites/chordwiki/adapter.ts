@@ -164,6 +164,16 @@ const PLUS = /\+/gu;
 /** What a percent-escape that is not text decodes to, whatever it was. */
 const REPLACEMENT_CHARACTER = '\uFFFD';
 
+/**
+ * The replacement character as an address may write it, being a character a
+ * title is allowed to contain like any other. Properly escaped, or standing
+ * in the address as itself — a path may hold it either way.
+ */
+const WRITTEN_REPLACEMENT = /%EF%BF%BD|\uFFFD/giu;
+
+/** How many times `character` occurs in `text`. */
+const timesIn = (text: string, character: string): number => text.split(character).length - 1;
+
 /** The title in a transposed chart's address, as written rather than as read. */
 const WRITTEN_TITLE = new RegExp(`[?&]${TITLE_PARAM}=([^&]*)`, 'u');
 
@@ -202,7 +212,12 @@ function titleNamed(written: string): string | null {
   // unread instead — spelled one way, since the two places it can sit do not
   // spell it the same, and kept apart from the titles that could be read,
   // since one of those can be spelled the same as an unread one.
-  if (decoded.includes(REPLACEMENT_CHARACTER)) {
+  //
+  // Counted rather than looked for, because the character the decoder puts
+  // there is one a title may contain: an address that spells it properly is
+  // saying it, not failing to. Only where more come back than were written is
+  // something being stood in for.
+  if (timesIn(decoded, REPLACEMENT_CHARACTER) > (written.match(WRITTEN_REPLACEMENT)?.length ?? 0)) {
     return `${UNREAD_NAMESPACE}:${oneSpelling(written)}`;
   }
 
@@ -396,7 +411,17 @@ export const chordwiki: SiteAdapter = {
       const text = (element.textContent ?? '').trim();
 
       if (!element.matches(SELECTORS.key)) {
-        items.push({ kind: 'chord', node: { element: element as HTMLElement, text } });
+        // Asked rather than asserted. A selector matches on names and
+        // attributes, which a document that is not HTML can carry as readily
+        // as one that is — and its elements are not `HTMLElement`s. The
+        // content script is matched by address rather than by content type,
+        // which is why `pageId` guards the head, and the same document
+        // reaches this. Asserted here instead, nothing would go wrong until a
+        // caller reached for `style` to hold a column still, a long way from
+        // the line that was wrong.
+        if (element instanceof HTMLElement) {
+          items.push({ kind: 'chord', node: { element, text } });
+        }
         continue;
       }
 
@@ -455,12 +480,12 @@ export const chordwiki: SiteAdapter = {
   },
 
   transposeOffset(doc) {
-    // A control outside the chart body, and the first of those. A chart body
-    // is written by whoever wrote the chart, so a control put there is one
+    // Controls outside the chart body, and every one of them. A chart body is
+    // written by whoever wrote the chart, so a control put there is one
     // reader's text — and taking it would let a chart shift the key a reader
     // had set by hand to somewhere the chart is not. The head is out of reach
     // here in a way it is not for an address, the control being part of the
-    // page proper, so what is asked of it is where it is not.
+    // page proper, so what is asked of a control is where it is not.
     //
     // Asked that way rather than by taking the first on the page. The site's
     // own control comes before the chart today, and a page served without one
@@ -468,44 +493,51 @@ export const chordwiki: SiteAdapter = {
     // first on the page being whatever the chart body holds. Then the reading
     // that is meant to be closed to a chart is open again, on a page nobody
     // was looking at.
-    const control = [...doc.querySelectorAll(SELECTORS.transpose)].find(
-      (candidate) => !candidate.closest(SELECTORS.chart),
-    );
+    for (const control of doc.querySelectorAll(SELECTORS.transpose)) {
+      if (control.closest(SELECTORS.chart)) continue;
 
-    // Which option the page arrived with marked, rather than which one the
-    // DOM says is selected. The page arrives marked and changing the control
-    // submits the form, so what the page states is what is being shown and
-    // there is no moment at which a reader has moved it and the page has not
-    // caught up. It is also the only reading that does not need the DOM to
-    // agree about `selectedIndex`, which happy-dom does not: given this
-    // markup it reports the option before the marked one.
-    //
-    // The last of them where a page marks more than one, which is not valid
-    // and is what a browser shows — reading the first would report a
-    // transposition nobody is looking at.
-    //
-    // Nothing at all where none is marked, and deliberately not the first
-    // option. The first option is what the control would send, not what the
-    // page is showing, and those come apart here: the site lists its options
-    // from `+6` down to `-5`, so falling back to the first would answer six
-    // for every untransposed chart on the site and shift a reader's key by a
-    // tritone. Where the page has not said, saying so is the answer a caller
-    // can do something about.
-    const marked = [
-      ...(control?.querySelectorAll<HTMLOptionElement>(SELECTORS.transposeSelected) ?? []),
-    ].at(-1);
+      // Which option the page arrived with marked, rather than which one the
+      // DOM says is selected. The page arrives marked and changing the
+      // control submits the form, so what the page states is what is being
+      // shown and there is no moment at which a reader has moved it and the
+      // page has not caught up. It is also the only reading that does not
+      // need the DOM to agree about `selectedIndex`, which happy-dom does
+      // not: given this markup it reports the option before the marked one.
+      //
+      // The last of them where a page marks more than one, which is not valid
+      // and is what a browser shows — reading the first would report a
+      // transposition nobody is looking at.
+      //
+      // Nothing where none is marked, and deliberately not the first option.
+      // The first option is what the control would send, not what the page is
+      // showing, and those come apart here: the site lists its options from
+      // `+6` down to `-5`, so falling back to the first would answer six for
+      // every untransposed chart on the site and shift a reader's key by a
+      // tritone.
+      const marked = [
+        ...control.querySelectorAll<HTMLOptionElement>(SELECTORS.transposeSelected),
+      ].at(-1);
 
-    // The option's value, and not the `value` attribute it may not have: an
-    // option written without one takes its text for its value, so
-    // `<option selected>+6` is a transposition of six and reading the
-    // attribute would call it nothing at all — a key shifted by nothing,
-    // silently, which is the failure this file keeps warning about.
-    const offset = marked && semitones(marked.value);
+      // The option's value, and not the `value` attribute it may not have: an
+      // option written without one takes its text for its value, so
+      // `<option selected>+6` is a transposition of six and reading the
+      // attribute would call it nothing at all — a key shifted by nothing,
+      // silently, which is the failure this file keeps warning about.
+      const offset = marked && semitones(marked.value);
+      if (offset !== null && offset !== undefined) return offset;
+
+      // On to the next rather than done. A page may carry the form more than
+      // once — one control laid out for a narrow window and one for a wide
+      // one is ordinary — and only the copy being shown need be marked. Both
+      // are the site's, so the one that says something is the one to take;
+      // stopping at the first would report nothing about a chart that has
+      // plainly been transposed.
+    }
 
     // Nothing, rather than none: a page with no such control, or one whose
     // marked option says nothing, has not told us the chart is untransposed —
     // it has told us nothing, and a caller shifting a key by this had better
     // know which it is looking at.
-    return offset ?? null;
+    return null;
   },
 };
