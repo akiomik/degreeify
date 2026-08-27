@@ -323,9 +323,19 @@ describe('the stated key', () => {
     ['Key: Cー', null],
     ['Key: C−', null],
     ['Key: C－', null],
-    // A dash in front of one is punctuation, being nothing the name was
-    // stopped at.
-    ['Key: -C', 'C'],
+    // A dash in front of one is not punctuation either. Both ends of a name
+    // are asked the same question, and a name beginning with something a
+    // name is made of has not been found yet.
+    ['Key: -C', null],
+    // An accidental in front is the case that makes the two ends have to
+    // agree: read as punctuation it would be dropped, and `♭B` would be B —
+    // a section named a semitone from where the page is, silently.
+    ['Key: ♭B', null],
+    ['Key: #C', null],
+    ['Key: ＃F', null],
+    // What is around a name still comes off.
+    ['Key: (C)', 'C'],
+    ['Key: 「Gm」', 'Gm'],
     // And a dash with the spaces a chart writes it with stops the capture
     // before it, which is where the observed lines are.
     ['Key: C - Am', 'C'],
@@ -854,6 +864,14 @@ describe('what a chart is called', () => {
       // chart gets two names.
       ['an unread title with a bracket', '(%FC', '%28%FC', 'unread:%28%FC'],
       ['an unread title with a tilde', '~%FC', '%7E%FC', 'unread:%7E%FC'],
+      // An address may escape a character that needs no escaping, and a
+      // title spelled two ways is a chart with two names — the failure this
+      // table is here for, arriving from the address rather than from the
+      // difference between the two places a title sits.
+      ['an escape of a letter', 'A%FC', 'A%FC', 'unread:A%FC'],
+      ['the same letter escaped', '%41%FC', '%41%FC', 'unread:A%FC'],
+      ['the same letter escaped in lower case', '%61%FC', '%61%FC', 'unread:a%FC'],
+      ['an escape of a digit', '%31%FC', '%31%FC', 'unread:1%FC'],
       // The character a decoder stands in with is one a title may hold, and
       // an address spelling it properly is saying it rather than failing to.
       // Only where more come back than were written is something being stood

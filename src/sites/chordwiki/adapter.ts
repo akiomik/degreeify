@@ -58,17 +58,6 @@ const PLAYED = /\bPlay\s*[:：]\s*([^\s/／]+)/iu;
 const WRITTEN = /^Key\s*[:：]\s*([^\s/／]+)/iu;
 const TRANSPOSED = /\bOriginal\s+Key\s*[:：]/iu;
 
-/**
- * Anything in front of the key name that cannot be part of one.
- *
- * A line writes a key with something around it more often than it looks:
- * `Key: (C)`, `Key: C, D`. What is captured runs to the next space or slash,
- * so the punctuation comes with it and the name is then no name — and a key
- * that cannot be read stops the naming for the rest of the section, so a
- * single stray bracket costs a chart from there on.
- */
-const NOT_PART_OF_A_NAME = /^[^\p{L}\p{N}]+/u;
-
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
 
 /**
@@ -79,6 +68,35 @@ const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
  * so that a spelling added there cannot go missing here.
  */
 const NAMES_CARRY = ACCIDENTAL_CHARS + DASH_MARKS + DASH_LOOKALIKES;
+
+/** Whether a character is part of a key's name rather than something around it. */
+function partOfAName(char: string): boolean {
+  return LETTER_OR_DIGIT.test(char) || NAMES_CARRY.includes(char);
+}
+
+/**
+ * A captured name with what is in front of it taken off.
+ *
+ * A line writes a key with something around it more often than it looks:
+ * `Key: (C)`, `Key: C, D`. What is captured runs to the next space or slash,
+ * so the punctuation comes with it and the name is then no name — and a key
+ * that cannot be read stops the naming for the rest of the section, so a
+ * single stray bracket costs a chart from there on.
+ *
+ * What comes off is asked with the same question the far end is asked with,
+ * and that matters more than it reads. Taking off everything that is not a
+ * letter or a digit takes an accidental with it: `♭B` would be read as B,
+ * a whole section named a semitone from where the page is, with nothing
+ * anywhere to say so — while `C♭♭♭` at the other end is correctly no key at
+ * all. A name that begins with something a name is made of has not been
+ * found yet, and stopping is the answer at both ends.
+ */
+function nameIn(captured: string): string {
+  let at = 0;
+  while (at < captured.length && !partOfAName(captured.charAt(at))) at++;
+
+  return captured.slice(at);
+}
 
 /**
  * Whether a name was stopped in the middle of itself, asked of the one
@@ -110,9 +128,8 @@ const NAMES_CARRY = ACCIDENTAL_CHARS + DASH_MARKS + DASH_LOOKALIKES;
  */
 function continuesAName(text: string): boolean {
   const [first] = text;
-  if (!first) return false;
 
-  return LETTER_OR_DIGIT.test(first) || NAMES_CARRY.includes(first);
+  return first !== undefined && partOfAName(first);
 }
 
 /**
@@ -129,7 +146,7 @@ function continuesAName(text: string): boolean {
  * and stopping is what the section deserves.
  */
 function keyNamed(captured: string): Key | null {
-  const name = captured.replace(NOT_PART_OF_A_NAME, '');
+  const name = nameIn(captured);
 
   for (let end = name.length; end > 0; end--) {
     const key = parseKey(name.slice(0, end));
@@ -335,11 +352,25 @@ function eachByteEscaped(text: string): string {
  * addresses for one chart arrive at one spelling, and two charts still do
  * not.
  */
+/**
+ * One escape, spelled the way this spells the character it stands for.
+ *
+ * An address may escape a character that needs no escaping, and then the two
+ * addresses for one chart hold the same title in two spellings: `A%FC` and
+ * `%41%FC` are the same title, and were two names for it. Where an escape
+ * stands for a character this would write plainly, it is written plainly.
+ */
+function escapeSpelled(written: string): string {
+  const spelled = String.fromCharCode(Number.parseInt(written.slice(1), 16));
+
+  return SPELLED_PLAINLY.test(spelled) ? spelled : written.toUpperCase();
+}
+
 function oneSpelling(text: string): string {
   return text
     .replace(PLUS, ' ')
     .split(ESCAPE)
-    .map((part, index) => (index % 2 ? part.toUpperCase() : eachByteEscaped(part)))
+    .map((part, index) => (index % 2 ? escapeSpelled(part) : eachByteEscaped(part)))
     .join('');
 }
 
