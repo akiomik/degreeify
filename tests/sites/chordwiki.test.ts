@@ -127,6 +127,11 @@ describe('reading a chart', () => {
     // The selectors do match, which is what makes the answer worth pinning.
     expect(feed.querySelectorAll('div.main p.line span.chord')).toHaveLength(1);
     expect(chordwiki.readChart(feed)).toEqual([]);
+
+    // And the page is not called a chart, which is the same answer said
+    // earlier. A page announced as a chart and then read as none is the
+    // extension having nothing to say and no way to say why.
+    expect(chordwiki.isChordPage(feed)).toBe(false);
   });
 
   it('returns the chords in the order they are written', () => {
@@ -431,6 +436,37 @@ describe('how far the chart has been transposed', () => {
     expect(chordwiki.transposeOffset(doc)).toBe(6);
   });
 
+  // Which wrapper holds the chart is `chartIn`'s to say and it is not always
+  // the first. A page laying its own control out beside the chart, in a
+  // wrapper of the same kind, must not have that control taken for a chart's
+  // — that would lose every transposition on the site at once.
+  it("reads the site's control from a wrapper that holds no chart", () => {
+    const doc = parse(`
+      <div class="main">
+        <div id="key"><select name="key"><option value="6" selected>+6</option></select></div>
+      </div>
+      <div class="main"><p class="line"><span class="chord">C</span></p></div>
+    `);
+
+    expect(chordwiki.transposeOffset(doc)).toBe(6);
+  });
+
+  // And the chart in that arrangement is still a chart, so what it writes is
+  // still one reader's text.
+  it('still passes over a control planted in the chart beside it', () => {
+    const doc = parse(`
+      <div class="main">
+        <div id="key"><select name="key"><option value="6" selected>+6</option></select></div>
+      </div>
+      <div class="main">
+        <p class="line"><span class="chord">C</span></p>
+        <div id="key"><select name="key"><option value="7" selected>+7</option></select></div>
+      </div>
+    `);
+
+    expect(chordwiki.transposeOffset(doc)).toBe(6);
+  });
+
   // The same, where the chart body comes first. Neither order is the site's
   // to promise.
   it("reads the site's control where the chart body precedes it", () => {
@@ -646,6 +682,27 @@ describe('what a chart is called', () => {
 
     it.each(sameChart)('names it the same %s', (_what, id) => {
       expect(id()).toBe(sameChart[0]?.[1]());
+    });
+
+    // A title written into a path has its slashes escaped, so a bare one is
+    // the path's own and what follows it is somewhere else on the site.
+    // Reading everything after `/wiki/` as a title puts those two on one
+    // name, which is two charts sharing one chart's settings — the same
+    // failure the other way round from the one this block is mostly about.
+    it('does not read a chart called a/b out of a path with two parts', () => {
+      const deep = named(bare, 'https://ja.chordwiki.org/wiki/a/b');
+
+      expect(named(bare, 'https://ja.chordwiki.org/wiki/a%2Fb')).toBe('chordwiki:chart:a/b');
+      expect(deep).toBe('chordwiki:page:https://ja.chordwiki.org/wiki/a/b');
+      expect(chordwiki.matches(new URL('https://ja.chordwiki.org/wiki/a/b'))).toBe(false);
+    });
+
+    // A slash on the end is the address's rather than a second part, so it is
+    // still one title and still the same chart.
+    it('reads a title with a slash after it', () => {
+      expect(named(bare, 'https://ja.chordwiki.org/wiki/Rock%20Roll/')).toBe(
+        named(bare, 'https://ja.chordwiki.org/wiki/Rock%20Roll'),
+      );
     });
 
     // One decoder for both, because two is what the round before this was.

@@ -139,7 +139,15 @@ function isChartAddress(url: URL): boolean {
   const host = url.hostname;
   if (host !== HOST && !host.endsWith(`.${HOST}`)) return false;
 
-  if (url.pathname.startsWith(CHART_PATH)) return true;
+  // One segment, and the whole of one. A path is read as a title written
+  // into it, and a title written into a path has its slashes escaped — so
+  // `/wiki/a%2Fb` is a chart called `a/b` and `/wiki/a/b` is somewhere else
+  // on the site. Taking everything after `/wiki/` would read them as one
+  // chart, which is two charts sharing one chart's settings. Trailing slashes
+  // are the address's rather than the title's and are not counted.
+  if (url.pathname.startsWith(CHART_PATH)) {
+    return !url.pathname.slice(CHART_PATH.length).replace(TRAILING_SLASHES, '').includes('/');
+  }
   if (url.pathname !== TRANSPOSED_CHART_PATH) return false;
 
   // That address serves more than charts — editing one, its history, a diff
@@ -325,9 +333,49 @@ function chartNamed(url: URL): string | null {
  */
 function chartIn(doc: Document): Element | null {
   for (const candidate of doc.querySelectorAll(SELECTORS.chart)) {
-    if (candidate.querySelector(SELECTORS.chord)) return candidate;
+    // A chord slot `readChart` can do something with, and not merely one that
+    // matches. A selector matches on names and attributes, which a document
+    // that is not HTML carries as readily as one that is, and `readChart`
+    // keeps only the slots that are `HTMLElement`s — so accepting a wrapper
+    // on a match alone is how a page comes back as a chart with no chords in
+    // it, which is the extension having nothing to say and saying nothing
+    // about why.
+    for (const chord of candidate.querySelectorAll(SELECTORS.chord)) {
+      if (chord instanceof HTMLElement) return candidate;
+    }
   }
   return null;
+}
+
+/**
+ * The controls on a page that could be the site's, in the order to try them.
+ *
+ * Outside every wrapper a chart can be written into, where there is such a
+ * control — which on this site there is, the form sitting above the chart.
+ * Nothing a chart's author writes can reach outside one, so this is the
+ * reading a chart cannot touch, and it is the one to prefer.
+ *
+ * Failing that, outside the chart. A wrapper is not a chart because it could
+ * hold one: which wrapper does is {@link chartIn}'s to say, and a page
+ * wrapping its own control the way it wraps its chart — one control laid out
+ * beside a chart in a second wrapper is not a strange thing to do — would
+ * otherwise put the site's own control out of reach and lose every
+ * transposition on the site.
+ *
+ * And nothing at all where there is no chart. That is what keeps the second
+ * reading from being a way around the first: an author's markup sits inside
+ * the wrapper the site put their chart in, so a wrapper they write is one
+ * nested in it and the chart still contains everything they wrote. A page
+ * with no chart in it has nothing this answer could be about anyway.
+ */
+function controlsWorthReading(doc: Document): Element[] {
+  const controls = [...doc.querySelectorAll(SELECTORS.transpose)];
+
+  const beyondReach = controls.filter((control) => !control.closest(SELECTORS.chart));
+  if (beyondReach.length > 0) return beyondReach;
+
+  const chart = chartIn(doc);
+  return chart ? controls.filter((control) => !chart.contains(control)) : [];
 }
 
 /**
@@ -493,9 +541,8 @@ export const chordwiki: SiteAdapter = {
     // first on the page being whatever the chart body holds. Then the reading
     // that is meant to be closed to a chart is open again, on a page nobody
     // was looking at.
-    for (const control of doc.querySelectorAll(SELECTORS.transpose)) {
-      if (control.closest(SELECTORS.chart)) continue;
-
+    //
+    for (const control of controlsWorthReading(doc)) {
       // Which option the page arrived with marked, rather than which one the
       // DOM says is selected. The page arrives marked and changing the
       // control submits the form, so what the page states is what is being
