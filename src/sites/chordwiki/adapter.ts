@@ -15,6 +15,10 @@ const TRANSPOSED_CHART_PATH = '/wiki.cgi';
 /** Where the address of a transposed chart keeps the chart's title. */
 const TITLE_PARAM = 't';
 
+/** What that address says is being done with the chart, of which only one is reading it. */
+const ACTION_PARAM = 'c';
+const VIEWING_ACTION = 'view';
+
 /**
  * What the page is being played in, which on a transposed chart is not what
  * it was written in.
@@ -65,19 +69,43 @@ function absolute(href: string | null | undefined, base: URL): URL | null {
   }
 }
 
-/** Text with its percent-encoding undone, or nothing where that is not possible. */
-function decoded(text: string): string | null {
-  try {
-    return decodeURIComponent(text);
-  } catch {
-    return null;
-  }
-}
-
 function isChartAddress(url: URL): boolean {
   const host = url.hostname;
   if (host !== HOST && !host.endsWith(`.${HOST}`)) return false;
-  return url.pathname === TRANSPOSED_CHART_PATH || url.pathname.startsWith(CHART_PATH);
+
+  if (url.pathname.startsWith(CHART_PATH)) return true;
+  if (url.pathname !== TRANSPOSED_CHART_PATH) return false;
+
+  // That address serves more than charts — editing one, its history, a diff
+  // — and all of them name the chart they are about. A page that is not the
+  // chart must not claim the chart's settings.
+  const action = url.searchParams.get(ACTION_PARAM);
+  return action === null || action === VIEWING_ACTION;
+}
+
+/**
+ * The separator a synthesised query would otherwise be cut at.
+ *
+ * A `#` cannot reach this — a URL keeps it out of the path — and a second `=`
+ * is part of a value rather than the end of one, so an `&` is the whole of
+ * what has to be got out of the way.
+ */
+const QUERY_SEPARATOR = /&/g;
+
+/**
+ * Text decoded as a form encodes it: a plus is a space, and a broken escape
+ * is a replacement character rather than a thrown error.
+ *
+ * One decoder, applied to both places a title can sit in an address, because
+ * two decoders is what the last round of this was. `decodeURIComponent` reads
+ * a plus as a plus and throws on a broken escape, and a query read that way
+ * would call `Rock+Roll` two different charts depending on which address a
+ * reader arrived at — and lose the chart's name altogether the first time a
+ * title carried a stray percent sign.
+ */
+function formDecoded(text: string): string {
+  const escaped = text.replace(QUERY_SEPARATOR, '%26');
+  return new URLSearchParams(`${TITLE_PARAM}=${escaped}`).get(TITLE_PARAM) ?? '';
 }
 
 /**
@@ -98,8 +126,33 @@ function isChartAddress(url: URL): boolean {
 function chartNamed(url: URL): string | null {
   if (!isChartAddress(url)) return null;
 
-  if (url.pathname === TRANSPOSED_CHART_PATH) return url.searchParams.get(TITLE_PARAM);
-  return decoded(url.pathname.slice(CHART_PATH.length));
+  if (url.pathname === TRANSPOSED_CHART_PATH) return url.searchParams.get(TITLE_PARAM) || null;
+
+  // Trailing slashes are the site's, not the chart's: a chart reached with
+  // one and without it is the same chart, and would otherwise have a third
+  // name on top of the two the two addresses already give it.
+  const title = formDecoded(url.pathname.slice(CHART_PATH.length)).replace(/\/+$/u, '');
+  return title || null;
+}
+
+/**
+ * The chart on the page, or nothing where there is none.
+ *
+ * The wrapper holding chords, rather than the first wrapper. The site could
+ * put page furniture in another of these tomorrow, and taking the first would
+ * then answer that the page is not a chart and read nothing from it — a
+ * failure that looks exactly like the extension being switched off, which is
+ * the kind that goes unnoticed longest.
+ *
+ * Everything read out of a chart comes off this one element, so that whether
+ * a page is a chart and which chart it is cannot be answers about different
+ * parts of it.
+ */
+function chartIn(doc: Document): Element | null {
+  for (const candidate of doc.querySelectorAll(SELECTORS.chart)) {
+    if (candidate.querySelector(SELECTORS.chord)) return candidate;
+  }
+  return null;
 }
 
 export const chordwiki: SiteAdapter = {
@@ -108,19 +161,14 @@ export const chordwiki: SiteAdapter = {
   matches: isChartAddress,
 
   isChordPage(doc) {
-    return doc.querySelector(SELECTORS.chart)?.querySelector(SELECTORS.chord) != null;
+    return chartIn(doc) !== null;
   },
 
   readChart(doc) {
-    // No wrapper, no chart. Reading the page at large instead would be a
+    // No chart, nothing to read. Reading the page at large instead would be a
     // chord chart's worth of rewriting let loose on whatever else is on it,
-    // the first time the site renames this.
-    //
-    // The one element, rather than the selector, so that this and the
-    // question of whether the page is a chart at all cannot answer about
-    // different parts of it — which they would the moment a page carried two
-    // of these.
-    const chart = doc.querySelector(SELECTORS.chart);
+    // the first time the site renames the wrapper.
+    const chart = chartIn(doc);
     if (!chart) return [];
 
     // Document order is guaranteed, which is why the keys and the chords are

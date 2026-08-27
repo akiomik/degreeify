@@ -16,8 +16,10 @@ export const SELECTORS = {
   chart: CHART,
 
   /**
-   * Chord slots, as found within the chart. Not every one holds a chord —
-   * see the chord parser.
+   * Chord slots, relative to the chart element and never to the document: a
+   * slot the site puts elsewhere on the page is not part of the chart, and
+   * this said so by carrying the wrapper until the wrapper became an element
+   * resolved once and asked directly.
    */
   chord: 'p.line span.chord',
 

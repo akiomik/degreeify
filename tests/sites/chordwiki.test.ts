@@ -18,6 +18,20 @@ const load = (name: string): Document =>
 
 const parse = (html: string): Document => new DOMParser().parseFromString(html, 'text/html');
 
+/**
+ * A chart stating one key line and holding one chord.
+ *
+ * With a chord in it because a chart is found by looking for them: a wrapper
+ * with no chord slot anywhere in it is not a chart, whatever else it holds.
+ */
+const chartStating = (line: string): Document =>
+  parse(`
+    <div class="main">
+      <p class="key">${line}</p>
+      <p class="line"><span class="chord">C</span></p>
+    </div>
+  `);
+
 const chartOf = (name: string): ChartItem[] => chordwiki.readChart(load(name));
 
 const chordsOf = (items: readonly ChartItem[]): string[] =>
@@ -130,19 +144,23 @@ describe('reading a chart', () => {
     expect(chordwiki.readChart(outside)).toEqual([]);
   });
 
-  // Where a page carries two of the wrapper, both questions have to be about
-  // the same one. Asked with a selector rather than an element, one would say
-  // the page is a chart because of the first and the other read the second.
-  it('reads the chart it decided the page was, where a page carries two', () => {
+  // The chart is the wrapper with chords in it, not the first wrapper. Taking
+  // the first would answer that a page with furniture in one of these is no
+  // chart and read nothing from it — which looks exactly like the extension
+  // being switched off, and is the kind of failure that goes unnoticed
+  // longest.
+  it('finds the chart where a page carries more than one wrapper', () => {
     const doc = parse(`
       <div class="main"><p>Something else the site put in one of these.</p></div>
       <div class="main">
         <p class="key">Key: C</p>
-        <p class="line"><span class="chord">C</span></p>
+        <p class="line"><span class="chord">Am7</span></p>
       </div>
     `);
 
-    expect(chordwiki.isChordPage(doc)).toBe(chordwiki.readChart(doc).length > 0);
+    expect(chordwiki.isChordPage(doc)).toBe(true);
+    expect(keysOf(chordwiki.readChart(doc))).toEqual(['C']);
+    expect(chordsOf(chordwiki.readChart(doc))).toEqual(['Am7']);
   });
 
   it('reads only what is inside the chart', () => {
@@ -216,8 +234,7 @@ describe('the stated key', () => {
     ['Original Key: Am / Capo: 5 / Play: Em', 'Em'],
     ['ORIGINAL KEY: AM / CAPO: 5 / PLAY: EM', null],
   ])('reads the words of %j whatever case they are in, giving %s', (line, expected) => {
-    const doc = parse(`<div class="main"><p class="key">${line}</p></div>`);
-    expect(keysOf(chordwiki.readChart(doc))).toEqual([expected]);
+    expect(keysOf(chordwiki.readChart(chartStating(line)))).toEqual([expected]);
   });
 
   // The separators come in both widths, and a line written in the wide ones
@@ -227,8 +244,7 @@ describe('the stated key', () => {
     ['Original Key：Am ／ Capo：5 ／ Play：Em', 'Em'],
     ['Play：F#／Capo：3', 'F#'],
   ])('reads %j, written with the wide separators, as %s', (line, expected) => {
-    const doc = parse(`<div class="main"><p class="key">${line}</p></div>`);
-    expect(keysOf(chordwiki.readChart(doc))).toEqual([expected]);
+    expect(keysOf(chordwiki.readChart(chartStating(line)))).toEqual([expected]);
   });
 
   // An empty one says nothing, which is not the same as saying something that
@@ -257,8 +273,7 @@ describe('the stated key', () => {
     ['Key: C / Display: Foo', 'C'],
     ['Monkey: C', null],
   ])('does not find a word inside another in %j', (line, expected) => {
-    const doc = parse(`<div class="main"><p class="key">${line}</p></div>`);
-    expect(keysOf(chordwiki.readChart(doc))).toEqual([expected]);
+    expect(keysOf(chordwiki.readChart(chartStating(line)))).toEqual([expected]);
   });
 });
 
@@ -361,6 +376,27 @@ describe('what a chart is called', () => {
       expect(id()).toBe(sameChart[0]?.[1]());
     });
 
+    // One decoder for both, because two is what the round before this was.
+    // A title is written into an address one way and read out of it another
+    // as soon as the two places it can sit are read by different rules —
+    // and a broken escape took the name away entirely, host and all.
+    const encodings: [what: string, path: string, query: string, title: string][] = [
+      ['a space', 'Rock%20Roll', 'Rock+Roll', 'Rock Roll'],
+      ['a plus for a space', 'Rock+Roll', 'Rock+Roll', 'Rock Roll'],
+      ['an ampersand', 'Rock%20%26%20Roll', 'Rock+%26+Roll', 'Rock & Roll'],
+      ['a stray percent sign', '100%', '100%', '100%'],
+      ['an escape that is not text', '%C6%FC', '%C6%FC', '\uFFFD\uFFFD'],
+      ['a trailing slash', 'Rock%20Roll/', 'Rock+Roll', 'Rock Roll'],
+    ];
+
+    it.each(encodings)('reads %s the same in either place', (_what, path, query, title) => {
+      const inPath = named(bare, `https://ja.chordwiki.org/wiki/${path}`);
+      const inParam = named(bare, `https://ja.chordwiki.org/wiki.cgi?t=${query}&key=6`);
+
+      expect(inPath).toBe(inParam);
+      expect(inPath).toBe(`chordwiki:${title}`);
+    });
+
     it('names a different chart differently', () => {
       expect(named(bare, 'https://ja.chordwiki.org/wiki/Rock%20%26%20Rolling')).not.toBe(
         named(bare, 'https://ja.chordwiki.org/wiki/Rock%20%26%20Roll'),
@@ -392,6 +428,17 @@ describe('what a chart is called', () => {
         named(stating({}), 'https://ja.chordwiki.org/wiki/Test%20Song'),
       );
     });
+  });
+
+  // That address serves more than charts, and all of them name the chart they
+  // are about. A page that is not the chart must not claim the chart's
+  // settings.
+  it.each(['edit', 'history', 'diff'])('does not let a page doing %s claim the chart', (action) => {
+    const doing = `https://ja.chordwiki.org/wiki.cgi?c=${action}&t=Test%20Song`;
+    const reading = 'https://ja.chordwiki.org/wiki.cgi?c=view&t=Test%20Song';
+
+    expect(chordwiki.matches(new URL(doing))).toBe(false);
+    expect(named(stating({}), doing)).not.toBe(named(stating({}), reading));
   });
 
   it('names a page that is no chart after itself, and keeps naming it that', () => {
