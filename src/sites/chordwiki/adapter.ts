@@ -195,15 +195,26 @@ const timesIn = (text: string, character: string): number => text.split(characte
  * As written, because a title that cannot be read is kept in the spelling it
  * was written in, and reading it here would take that away.
  */
-const WRITTEN_TITLE = `${TITLE_PARAM}=`;
 const QUERY_FIELDS = /&/u;
+const NAME_ENDS = '=';
 
 function writtenTitleIn(search: string): string | undefined {
-  const field = search
-    .slice(1)
-    .split(QUERY_FIELDS)
-    .find((part) => part.startsWith(WRITTEN_TITLE));
-  return field?.slice(WRITTEN_TITLE.length);
+  for (const field of search.slice(1).split(QUERY_FIELDS)) {
+    // The name the parser reads rather than the name as it stands. A name is
+    // escaped like anything else in a query, so `%74=Attacker` is a field
+    // called `t` — and comparing the text passes it over and takes a later
+    // `t=` that no parser ever reaches. Handing the field to the parser is
+    // what keeps the two from being able to disagree about which field this
+    // is. Only the value is taken as written, and only because a title that
+    // cannot be read has to keep the spelling it was written in.
+    const [name] = new URLSearchParams(field).keys();
+    if (name !== TITLE_PARAM) continue;
+
+    const at = field.indexOf(NAME_ENDS);
+    return at < 0 ? '' : field.slice(at + 1);
+  }
+
+  return undefined;
 }
 
 /** Slashes the address ends with, which belong to the address. */

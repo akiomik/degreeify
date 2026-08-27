@@ -723,12 +723,27 @@ describe('what a chart is called', () => {
       expect(chordwiki.pageId(bare, url)).toBe(`chordwiki:chart:${url.searchParams.get('t')}`);
     });
 
-    // And where a query names it twice, the first — which is the one the
-    // parser answers with.
-    it('takes the first of two titles, as the query parser does', () => {
-      const url = new URL('https://ja.chordwiki.org/wiki.cgi?t=First&t=Second');
+    // Which field is the title is the parser's to say, and a name is escaped
+    // like anything else in a query — `%74=` is a field called `t`. Asserted
+    // against the parser rather than against a string, so the two cannot come
+    // apart again by some spelling nobody thought of.
+    it.each([
+      ['names it twice', 'https://ja.chordwiki.org/wiki.cgi?t=First&t=Second'],
+      ['escapes the name', 'https://ja.chordwiki.org/wiki.cgi?c=view&%74=Attacker&t=Victim'],
+      ['escapes the only name', 'https://ja.chordwiki.org/wiki.cgi?%74=Only'],
+      ['writes a plus in the name', 'https://ja.chordwiki.org/wiki.cgi?a+b=x&t=Real'],
+    ])('takes the title the parser does, where the query %s', (_what, href) => {
+      const url = new URL(href);
 
       expect(chordwiki.pageId(bare, url)).toBe(`chordwiki:chart:${url.searchParams.get('t')}`);
+    });
+
+    // A field with no value is a field naming no chart, which is the same
+    // answer the parser gives.
+    it('names no chart where the title field has no value', () => {
+      expect(chordwiki.pageId(bare, new URL('https://ja.chordwiki.org/wiki.cgi?t'))).toBe(
+        'chordwiki:page:https://ja.chordwiki.org/wiki.cgi?t',
+      );
     });
 
     // A slash on the end is the address's rather than a second part, so it is
