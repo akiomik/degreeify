@@ -29,12 +29,16 @@ export interface ApplyOptions {
   readonly notation?: Notation;
   readonly spelling?: SpellingPolicy;
   /**
-   * The key to read a chart in that states none of its own.
+   * A person's answer about what key this chart is in.
    *
-   * A person's answer, where there is one to be had. It stands in for the
-   * inference rather than overruling the chart: a chart that says what key it
-   * is in is believed, because it is the chart in front of the reader and
-   * this is not.
+   * Taken over the chart's own where the chart states at most one key, and
+   * over the inference always. An override that cannot override is not one,
+   * and one of the reasons to set a key is a chart whose stated key is read
+   * correctly and is not the key its reader wants it in.
+   *
+   * Not taken where the chart states several. That is a chart that changes
+   * key, and one answer for a whole page cannot be right for every section of
+   * it.
    */
   readonly key?: Key | null;
   /**
@@ -249,7 +253,6 @@ function openingKey(chart: readonly ChartItem[], given: Key | null | undefined):
   if (read) return { key: read, source: 'page', follows: true };
 
   if (stated.length > 1) return { key: null, source: null, follows: true };
-  if (given) return { key: given, source: 'manual', follows: false };
 
   const guess = inferKey(chordsIn(chart));
   const inferred = guess ? guess.key : null;

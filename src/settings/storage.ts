@@ -141,11 +141,21 @@ export async function saveSettings(settings: Settings): Promise<void> {
  * has to follow the popup without being asked twice.
  */
 export function watchSettings(onChange: (settings: Settings) => void): () => void {
-  const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
+  const listener = (
+    changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+    area: string,
+  ) => {
     if (area !== 'local') return;
 
     const change = changes[SETTINGS_KEY];
     if (!change) return;
+
+    // A stamp moving is not a change anybody asked for. A page marks the key
+    // it used as used today, and every page open on the site would otherwise
+    // hear about it and read, restore, measure and rewrite itself over a
+    // field nothing displays — a flicker on the tab that caused it, and the
+    // same work again on every other one.
+    if (onlyStampsMoved(change.oldValue, change.newValue)) return;
 
     onChange(
       isSettings(change.newValue) ? { ...DEFAULT_SETTINGS, ...change.newValue } : DEFAULT_SETTINGS,
@@ -197,9 +207,14 @@ export async function writeDetection(key: string, detection: Detection): Promise
 export async function pruneDetections(most = MOST_DETECTIONS): Promise<void> {
   const all = await browser.storage.local.get(null);
 
+  // Every record, and not only the ones this build can read. A record written
+  // in another shape is one nothing will ever read again, and leaving it out
+  // of the count leaves it in storage for good — a bump to the version would
+  // otherwise strand every record ever written while a fresh fifty pile up
+  // beside them.
   const records = Object.entries(all)
-    .filter(([key, value]) => key.startsWith(DETECTION_PREFIX) && isDetection(value))
-    .map(([key, value]) => ({ key, updatedAt: (value as Detection).updatedAt }))
+    .filter(([key]) => key.startsWith(DETECTION_PREFIX))
+    .map(([key, value]) => ({ key, updatedAt: isDetection(value) ? value.updatedAt : 0 }))
     .sort((a, b) => b.updatedAt - a.updatedAt);
 
   const stale = records.slice(most).map((record) => record.key);
@@ -232,6 +247,28 @@ export function prunedOverrides(
 
 /** A day, which is how often a page's last-used stamp is worth rewriting. */
 export const USED_AT_GRANULARITY = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether two settings differ in nothing but when a key was last used.
+ *
+ * The stamps decide which keys are dropped when there are too many, so they
+ * are part of the settings; they are not something a reader chose, and
+ * nothing shows them.
+ */
+function onlyStampsMoved(before: unknown, after: unknown): boolean {
+  if (!isSettings(before) || !isSettings(after)) return false;
+
+  return JSON.stringify(withoutStamps(before)) === JSON.stringify(withoutStamps(after));
+}
+
+function withoutStamps(settings: Settings) {
+  const keys = Object.entries(settings.keyOverrides).map(([page, { tonic, mode }]) => [
+    page,
+    { tonic, mode },
+  ]);
+
+  return { ...settings, keyOverrides: Object.fromEntries(keys) };
+}
 
 function isSettings(value: unknown): value is Settings {
   return isRecord(value) && value.version === SCHEMA_VERSION;

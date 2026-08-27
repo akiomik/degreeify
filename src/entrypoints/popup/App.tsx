@@ -1,4 +1,4 @@
-import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { createSignal, For, getOwner, onCleanup, onMount, runWithOwner, Show } from 'solid-js';
 import { browser } from 'wxt/browser';
 import type { SpellingPolicy } from '@/core/degree';
 import { CANONICAL_TONIC, formatKey, type Key, type Mode } from '@/core/key';
@@ -28,7 +28,20 @@ function App() {
   const [settings, setSettings] = createSignal<Settings | null>(null);
   const [detection, setDetection] = createSignal<Detection | null>(null);
 
+  // Which mode the tonics on offer are named for, whether or not a key has
+  // been set yet. Without it a reader wanting F# minor would have to set a
+  // major key first — rewriting the whole page against a tonic they did not
+  // mean — and three tonics would never be offered at all, since the two
+  // modes do not name the same pitches the same way.
+  const [pendingMode, setPendingMode] = createSignal<Mode>('major');
+
   onMount(async () => {
+    // Held on to before anything is awaited. Solid knows which component a
+    // cleanup belongs to only while the call stack is still inside it, and
+    // the first `await` below leaves it — a cleanup registered after that
+    // belongs to nobody and is never run.
+    const owner = getOwner();
+
     // The settings first, and on their own. They are not about any page, and
     // a popup that could not work out which page it was opened on must still
     // show them — the alternative is a popup with a title and nothing else,
@@ -44,7 +57,9 @@ function App() {
       // every time something here is changed. Read once, the line this popup
       // exists for would go on describing the page as it was before the
       // reader touched it.
-      onCleanup(watchDetection(key, setDetection));
+      const stop = watchDetection(key, setDetection);
+      if (owner) runWithOwner(owner, () => onCleanup(stop));
+      else stop();
     }
 
     // Here rather than in the content script, which runs on every page a
@@ -63,6 +78,9 @@ function App() {
     const found = detection();
     return current && found ? overrideFor(current, found.pageId, found.transposeOffset) : null;
   };
+
+  /** The mode the tonics are being named for. */
+  const mode = (): Mode => override()?.mode ?? pendingMode();
 
   const canOverride = (): boolean => {
     const found = detection();
@@ -126,7 +144,7 @@ function App() {
                 <>
                   <p class={styles.reading}>{reading(found(), current().enabled)}</p>
 
-                  <Show when={found().unreadKeys > 0}>
+                  <Show when={found().unreadKeys > 0 && found().source !== 'manual'}>
                     <p class={styles.warning}>
                       {found().unreadKeys} of {found().statedKeys} key declarations could not be
                       read. Those sections are left as the chart wrote them.
@@ -144,12 +162,12 @@ function App() {
                           value={override() ? formatNoteOf(override()) : ''}
                           onChange={(event) => {
                             const tonic = event.currentTarget.value;
-                            if (tonic) void setOverride(tonic, override()?.mode ?? 'major');
+                            if (tonic) void setOverride(tonic, mode());
                             else void clearOverride();
                           }}
                         >
                           <option value="">Read from the chart</option>
-                          <For each={CANONICAL_TONIC[override()?.mode ?? 'major']}>
+                          <For each={CANONICAL_TONIC[mode()]}>
                             {(tonic) => <option value={tonic}>{tonic}</option>}
                           </For>
                         </select>
@@ -158,12 +176,17 @@ function App() {
                       <label class={styles.field}>
                         <span>Mode</span>
                         <select
-                          value={override()?.mode ?? 'major'}
-                          disabled={!override()}
+                          value={mode()}
                           onChange={(event) => {
-                            const mode = event.currentTarget.value as Mode;
-                            const tonic = override();
-                            if (tonic) void setOverride(formatNoteOf(tonic), mode);
+                            const chosen = event.currentTarget.value as Mode;
+                            setPendingMode(chosen);
+
+                            // Where a key is already set, changing the mode
+                            // changes it. Where none is, this is a choice
+                            // about which tonics to offer and nothing has
+                            // been asked for yet.
+                            const current = override();
+                            if (current) void setOverride(formatNoteOf(current), chosen);
                           }}
                         >
                           <option value="major">major</option>

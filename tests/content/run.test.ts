@@ -182,6 +182,40 @@ describe('a setting changed while the page is still being read', () => {
   });
 });
 
+describe('a setting changed while the first reading is being loaded', () => {
+  // Listening first is necessary and not sufficient: awaited rather than
+  // queued, the settings read before the change are the ones handed over
+  // last, and they win. A reader who turned the names off inside that window
+  // would watch them stay on until they reloaded the page.
+  it('wins over the settings the page had started reading', async () => {
+    const real = browser.storage.local.get.bind(browser.storage.local);
+    // Sampled when it is asked and handed back late, which is what a slow
+    // read is. Read late instead, it would see the change and the point would
+    // be lost: what is pinned here is a read that answers with what was there
+    // before the reader touched anything.
+    const slow = vi.spyOn(browser.storage.local, 'get').mockImplementation((async (
+      query: never,
+    ) => {
+      const value = await real(query);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      return value;
+    }) as never);
+
+    const doc = load('chordwiki-basic');
+    const running = run(doc, chordwiki, new URL(ADDRESS));
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    slow.mockRestore();
+    await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
+
+    const stop = await running;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(shown(doc)[0]).toBe('C');
+    stop();
+  });
+});
+
 describe('a page that could not write down what it found', () => {
   // One rejected write must not be the last thing the page ever does. A
   // promise that has rejected passes over every continuation after it, so a

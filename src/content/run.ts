@@ -52,11 +52,15 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   const stored = recordKey(url.href);
 
   // Listening before reading, so that a change made while the page is still
-  // loading is not the one change nothing hears. Reading the settings takes a
-  // turn of the loop, and a reader who reaches the popup inside it would find
-  // the page ignoring what they had just asked for until they reloaded it.
+  // loading is not the one change nothing hears.
+  //
+  // And the reading queued rather than awaited, so that a change arriving
+  // during it is queued behind it and not in front of it. Awaited, the
+  // settings from before the change would be the ones handed over last and
+  // would be the ones that won — a reader who turned the names off inside
+  // that window would watch them stay on until they reloaded the page.
   let showing = Promise.resolve();
-  const queue = (settings: Settings) => {
+  const queue = (settings: () => Settings | Promise<Settings>) => {
     // Queued behind whatever is already running. Two runs at once would have
     // one restoring the page while the other is measuring it, and the widths
     // the second locked would be the widths the first had written.
@@ -66,13 +70,20 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
     // extension reloaded out from under the page — would leave the chain
     // rejected for good, and the page would stop following the settings
     // silently and for the rest of its life.
-    const next = () => show(doc, adapter, settings, pageId, stored);
+    const next = async () => show(doc, adapter, await settings(), pageId, stored);
     showing = showing.then(next, next);
     return showing;
   };
 
-  const stop = watchSettings(queue);
-  await queue(await loadSettings());
+  const stop = watchSettings((settings) => {
+    // Nothing is waiting on this one. A run that rejects with nobody attached
+    // is an unhandled rejection, which in a content script is a line in a
+    // console the reader will never open — the recovery is above, and this is
+    // only about not shouting about it.
+    void queue(() => settings).catch(() => {});
+  });
+
+  await queue(loadSettings);
 
   return stop;
 }

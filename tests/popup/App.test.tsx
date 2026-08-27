@@ -204,6 +204,21 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // Solid knows which component a cleanup belongs to only while the call
+  // stack is still inside it, and reading storage leaves it. Registered after
+  // that, the cleanup belongs to nobody and the listener outlives the popup
+  // that made it.
+  it('stops following the record when it is taken down', async () => {
+    const removing = vi.spyOn(browser.storage.onChanged, 'removeListener');
+    await onATab(ADDRESS, detection());
+    const { dispose } = await open();
+
+    dispose();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(removing).toHaveBeenCalled();
+  });
+
   // A record is written by a content script and read by a popup, and an
   // extension is updated with pages already open. A record from another shape
   // read as though it were this one is a popup counting `undefined` chords.
@@ -218,6 +233,50 @@ describe('the popup on a chart', () => {
     const { root, dispose } = await open();
 
     expect(root.textContent).toContain('Open a ChordWiki chord chart');
+    dispose();
+  });
+
+  // The tonics of the two modes are not the same list, so a reader wanting a
+  // minor key has to be able to say so before choosing one. Otherwise the
+  // only way there is through a major key they did not mean — which rewrites
+  // the whole page against the wrong tonic on the way — and `C#`, `F#` and
+  // `G#` are never offered at all.
+  it('offers the minor tonics once minor is chosen, with no key set yet', async () => {
+    await onATab(ADDRESS, detection({ statedKeys: 0, key: null, source: null }));
+    const { root, dispose } = await open();
+
+    const [tonics, modes] = [...root.querySelectorAll('select')];
+    expect([...(tonics?.options ?? [])].map((option) => option.value)).toContain('Gb');
+    expect(modes?.disabled).toBe(false);
+
+    if (!modes) throw new Error('there is a mode control');
+    modes.value = 'minor';
+    modes.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const offered = [...(root.querySelector('select')?.options ?? [])].map((o) => o.value);
+    expect(offered).toContain('F#');
+    expect(offered).not.toContain('Gb');
+    dispose();
+  });
+
+  // Setting a key names the chart end to end, so a line saying a section was
+  // left alone is false — and sits directly under a line saying how many
+  // chords were named.
+  it('does not warn about an unread key line that a key set by hand answered', async () => {
+    await onATab(
+      ADDRESS,
+      detection({
+        statedKeys: 1,
+        unreadKeys: 1,
+        source: 'manual',
+        key: { tonic: 'G', mode: 'major' },
+      }),
+    );
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('set by hand');
+    expect(root.textContent).not.toContain('could not be read');
     dispose();
   });
 

@@ -13,7 +13,8 @@ names, so a chart reads as `I - VIm - IV - V` instead of `C - Am - F - G`.
 - Reads the key from the chart itself, including charts that change key
   part-way through, and follows ChordWiki's own transposition.
 - Turns off from the popup, restoring the original chord names exactly.
-- Lets you set the key by hand when the page does not declare one.
+- Lets you set the key by hand, whether or not the page declares one — for a
+  chart that changes key, the chart is followed instead.
 
 ## Using it
 
