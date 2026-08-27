@@ -8,7 +8,16 @@ const ID = 'chordwiki';
 
 const HOST = 'chordwiki.org';
 
-/** Where a chart lives. */
+/**
+ * Where a chart lives.
+ *
+ * Not `/amp/<title>`, though the site once served a chart there and the
+ * archives still hold those pages, chord slots and all. It answers `301` to
+ * `/wiki/<title>` now — checked 2026-08-27 — so no document is ever created
+ * at that address and the content script is never handed one. Recognising it
+ * here would be a branch nothing can reach, holding open an assumption the
+ * site has stopped keeping.
+ */
 const CHART_PATH = '/wiki/';
 
 /** Where the site sends a reader who transposes one. */
