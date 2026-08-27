@@ -342,17 +342,6 @@ function eachByteEscaped(text: string): string {
 }
 
 /**
- * A title written the one way, for a title that could not be read.
- *
- * The same title is written differently in the two places it can sit — a
- * space is `%20` in a path and a plus in a parameter, an ampersand stands as
- * itself in one and is escaped in the other — and unread, those differences
- * are all that would be left to compare. What comes back here is every
- * escape as it stands, upper-cased, and everything else escaped: two
- * addresses for one chart arrive at one spelling, and two charts still do
- * not.
- */
-/**
  * One escape, spelled the way this spells the character it stands for.
  *
  * An address may escape a character that needs no escaping, and then the two
@@ -366,6 +355,17 @@ function escapeSpelled(written: string): string {
   return SPELLED_PLAINLY.test(spelled) ? spelled : written.toUpperCase();
 }
 
+/**
+ * A title written the one way, for a title that could not be read.
+ *
+ * The same title is written differently in the two places it can sit — a
+ * space is `%20` in a path and a plus in a parameter, an ampersand stands as
+ * itself in one and is escaped in the other — and unread, those differences
+ * are all that would be left to compare. What comes back here is every
+ * escape as it stands, upper-cased, and everything else escaped: two
+ * addresses for one chart arrive at one spelling, and two charts still do
+ * not.
+ */
 function oneSpelling(text: string): string {
   return text
     .replace(PLUS, ' ')
@@ -625,20 +625,8 @@ export const chordwiki: SiteAdapter = {
   },
 
   transposeOffset(doc) {
-    // Controls outside the chart body, and every one of them. A chart body is
-    // written by whoever wrote the chart, so a control put there is one
-    // reader's text — and taking it would let a chart shift the key a reader
-    // had set by hand to somewhere the chart is not. The head is out of reach
-    // here in a way it is not for an address, the control being part of the
-    // page proper, so what is asked of a control is where it is not.
-    //
-    // Asked that way rather than by taking the first on the page. The site's
-    // own control comes before the chart today, and a page served without one
-    // — another template, a print view, the markup changing — would leave the
-    // first on the page being whatever the chart body holds. Then the reading
-    // that is meant to be closed to a chart is open again, on a page nobody
-    // was looking at.
-    //
+    // Which controls could be the site's, and in what order to try them, is
+    // `controlsWorthReading`'s to say and is argued there.
     for (const control of controlsWorthReading(doc)) {
       // Which option the page arrived with marked, rather than which one the
       // DOM says is selected. The page arrives marked and changing the
