@@ -3,16 +3,28 @@ import { render } from 'solid-js/web';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
+import { parseNote } from '@/core/pitch';
 import App from '@/entrypoints/popup/App';
+import { withOverride } from '@/settings/overrides';
 import {
   DEFAULT_SETTINGS,
   type Detection,
+  loadSettings,
   recordKey,
   SCHEMA_VERSION,
   saveSettings,
 } from '@/settings/storage';
 
 const ADDRESS = 'https://ja.chordwiki.org/wiki/Test%20Song';
+
+const note = (name: string) => {
+  const parsed = parseNote(name);
+  if (!parsed) throw new Error(`${name} is not a note`);
+  return parsed;
+};
+
+const KEY_OF_G = { tonic: note('G'), mode: 'major' } as const;
+const KEY_OF_C_MINOR = { tonic: note('C'), mode: 'minor' } as const;
 
 const detection = (over: Partial<Detection> = {}): Detection => ({
   version: SCHEMA_VERSION,
@@ -217,6 +229,109 @@ describe('the popup on a chart', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(removing).toHaveBeenCalled();
+  });
+
+  // The record may be written between the read being asked for and its answer
+  // arriving. Read first and watched afterwards, a reader who opened the
+  // popup while a chart was still loading would be told there is no chart
+  // here, and told it for as long as they left the popup open.
+  it('shows a record that arrives while it is still reading', async () => {
+    const real = browser.storage.local.get.bind(browser.storage.local);
+    vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+      const value = await real(query);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return value;
+    }) as never);
+
+    await onATab(ADDRESS);
+    const opening = open();
+
+    // Late enough that the read for the record has been asked for and has not
+    // answered yet, which is the window this is about: earlier and the read
+    // finds it anyway, later and the watcher is all there is.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const key = recordKey(ADDRESS);
+    if (!key) throw new Error('that is an address');
+    await browser.storage.local.set({ [key]: detection() });
+
+    const { root, dispose } = await opening;
+    for (let tick = 0; tick < 50 && !root.textContent?.includes('—'); tick++) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+
+    expect(root.textContent).toContain('C — from the chart');
+    dispose();
+  });
+
+  // The settings gate the whole of the rest of the popup, so a read that
+  // throws is a heading and nothing else — no toggle, and no way to reach a
+  // setting that was never about a page.
+  it('shows what it can when the settings cannot be read', async () => {
+    vi.spyOn(browser.storage.local, 'get').mockRejectedValue(new Error('context invalidated'));
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+
+    expect(root.querySelector('input[type="checkbox"]')).not.toBeNull();
+    expect(root.querySelectorAll('select')).toHaveLength(2);
+    dispose();
+  });
+
+  // A control showing a setting that was not kept tells a reader their answer
+  // was taken when it was not, and the only other trace is a line in a
+  // console they will never open.
+  it('says so when a change could not be saved', async () => {
+    await onATab(ADDRESS, detection());
+    const { root, dispose } = await open();
+
+    vi.spyOn(browser.storage.local, 'set').mockRejectedValue(new Error('quota exceeded'));
+    const toggle = root.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    if (!toggle) throw new Error('there is a toggle');
+    toggle.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(root.textContent).toContain('could not be saved');
+    expect(toggle.checked).toBe(true);
+    dispose();
+  });
+
+  // A key already set is still set, and the control that removes it lives
+  // beside the one that sets it — so a chart edited to declare a second key
+  // leaves the reader with a key they cannot reach.
+  it('can still forget a key set for a chart that can no longer take one', async () => {
+    await saveSettings(withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', KEY_OF_G, 0, 1));
+    await onATab(ADDRESS, detection({ statedKeys: 7 }));
+
+    const { root, dispose } = await open();
+    const button = root.querySelector('button');
+    expect(button?.textContent).toContain('Forget the key');
+
+    button?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect((await loadSettings()).keyOverrides).toEqual({});
+    dispose();
+  });
+
+  // The mode a key was in stays on offer after it is cleared. Otherwise a
+  // reader clearing a minor key to choose another minor tonic finds the
+  // control back on major, three of the tonics gone, and the next one they
+  // choose saved as a major key.
+  it('goes on offering the minor tonics after a minor key is cleared', async () => {
+    await saveSettings(
+      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', KEY_OF_C_MINOR, 0, 1),
+    );
+    await onATab(ADDRESS, detection({ statedKeys: 0, key: null, source: null }));
+
+    const { root, dispose } = await open();
+    const button = root.querySelector('button');
+    button?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const offered = [...(root.querySelector('select')?.options ?? [])].map((o) => o.value);
+    expect(offered).toContain('F#');
+    expect(offered).not.toContain('Gb');
+    dispose();
   });
 
   // A record is written by a content script and read by a popup, and an

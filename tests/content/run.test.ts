@@ -45,6 +45,11 @@ const start = async (doc: Document, address = ADDRESS) => {
 
 beforeEach(() => {
   fakeBrowser.reset();
+
+  // Storage is faked per test and the spies over it are not: a spy left in
+  // place is the same spy the next `spyOn` hands back, carrying every call
+  // the test before it made.
+  vi.restoreAllMocks();
 });
 
 describe('running on a chart', () => {
@@ -212,6 +217,69 @@ describe('a setting changed while the first reading is being loaded', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(shown(doc)[0]).toBe('C');
+    stop();
+  });
+});
+
+describe('a settings change about somewhere else', () => {
+  const OTHER = 'chordwiki:chart:Another Song';
+
+  /**
+   * How many times the page has written down what it found.
+   *
+   * Which is what reading the page again costs: a restore, a re-measure, a
+   * rewrite and a record. Counted through the record because that is the one
+   * part of it a test can see from outside.
+   */
+  const readings = (wrote: { mock: { calls: unknown[][] } }) =>
+    wrote.mock.calls.filter(([items]) =>
+      Object.keys(items as Record<string, unknown>).some((name) => name.startsWith('detected:')),
+    ).length;
+
+  // A key set for one chart is heard by every page open on the site. Each of
+  // them reading, restoring, measuring and rewriting itself over a key that
+  // is not theirs is a flicker on every other tab, every time.
+  it('does not make the page read itself again', async () => {
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+    const wrote = vi.spyOn(browser.storage.local, 'set');
+
+    await saveSettings(withOverride(DEFAULT_SETTINGS, OTHER, key('G'), 0, Date.now()));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(readings(wrote)).toBe(0);
+    stop();
+  });
+
+  // Nor does a stamp moving, which is written by whichever page used the key
+  // and is displayed nowhere.
+  it('does not make the page read itself again for a stamp either', async () => {
+    await saveSettings(withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', key('G'), 0, 1));
+
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+    const wrote = vi.spyOn(browser.storage.local, 'set');
+
+    await saveSettings(
+      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', key('G'), 0, Date.now()),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(readings(wrote)).toBe(0);
+    stop();
+  });
+
+  // And a change that does reach this page still does.
+  it('reads itself again where the change is about this chart', async () => {
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+
+    await saveSettings(
+      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', key('G'), 0, Date.now()),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(shown(doc)[0]).toBe('IV');
     stop();
   });
 });

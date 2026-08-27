@@ -6,6 +6,7 @@ import type { Notation } from '@/core/notation';
 import { parseNote } from '@/core/pitch';
 import { overrideFor, withOverride, withoutOverride } from '@/settings/overrides';
 import {
+  DEFAULT_SETTINGS,
   type Detection,
   loadSettings,
   pruneDetections,
@@ -35,6 +36,8 @@ function App() {
   // modes do not name the same pitches the same way.
   const [pendingMode, setPendingMode] = createSignal<Mode>('major');
 
+  const [failed, setFailed] = createSignal(false);
+
   onMount(async () => {
     // Held on to before anything is awaited. Solid knows which component a
     // cleanup belongs to only while the call stack is still inside it, and
@@ -46,30 +49,69 @@ function App() {
     // a popup that could not work out which page it was opened on must still
     // show them — the alternative is a popup with a title and nothing else,
     // and no way to reach a setting that has nothing to do with the tab.
-    setSettings(await loadSettings());
+    //
+    // Which is also why the read cannot be allowed to throw: it gates the
+    // whole of the rest of this. A storage read that fails — an extension
+    // reloaded out from under an open popup — would leave a heading and
+    // nothing else, which is the state `addressInFront` is wrapped against
+    // three lines down.
+    setSettings(await loadSettings().catch(() => DEFAULT_SETTINGS));
 
     const key = await addressInFront();
     if (key) {
-      setDetection((await readDetection(key)) ?? null);
-
-      // A record read once is a record about to be out of date: the content
-      // script writes a new one whenever it reads the page again, which is
-      // every time something here is changed. Read once, the line this popup
-      // exists for would go on describing the page as it was before the
-      // reader touched it.
+      // Listening before reading, for the reason the content script does:
+      // the record may be written between the read being asked for and its
+      // answer arriving. A reader who opens the popup while a chart is still
+      // loading would otherwise be told there is no chart here, and told it
+      // for as long as the popup stays open.
+      //
+      // A record read once is out of date the moment the page is read again,
+      // which is every time something here is changed.
       const stop = watchDetection(key, setDetection);
       if (owner) runWithOwner(owner, () => onCleanup(stop));
       else stop();
+
+      const found = await readDetection(key).catch(() => null);
+
+      // Only where nothing has arrived in the meantime. What the watcher
+      // heard is newer than what the read was sent to fetch.
+      setDetection((current) => current ?? found);
     }
 
     // Here rather than in the content script, which runs on every page a
     // reader opens. Tidying belongs where somebody asked for something.
-    await pruneDetections();
+    await pruneDetections().catch(() => {});
   });
 
-  const update = async (next: Settings) => {
-    setSettings(next);
-    await saveSettings(next);
+  /**
+   * Changes a setting, and shows what was actually kept.
+   *
+   * Read again before writing, for the reason the content script reads again
+   * before stamping a key as used: a popup holds its copy for as long as it
+   * is open, and a page marks a key as used while it is. Written back from
+   * the copy, those stamps go back — and they are what decides which key is
+   * dropped when there are too many.
+   *
+   * Written before shown, because a control showing a setting that was not
+   * kept is a reader told their answer was taken when it was not. Where the
+   * write fails there is nothing to show but that it failed.
+   */
+  const update = async (change: (settings: Settings) => Settings) => {
+    try {
+      const next = change(await loadSettings());
+      await saveSettings(next);
+
+      setSettings(next);
+      setFailed(false);
+    } catch {
+      setFailed(true);
+
+      // And the controls put back to what is kept. A checkbox a reader
+      // clicked shows what they clicked until something says otherwise, and
+      // nothing here has changed — so the same settings are handed back under
+      // a new identity, which is what makes the controls read them again.
+      setSettings((shown) => (shown ? { ...shown } : shown));
+    }
   };
 
   /** The key set for this chart, as the chart is being shown. */
@@ -95,20 +137,28 @@ function App() {
   };
 
   const setOverride = async (tonic: string, mode: Mode) => {
-    const current = settings();
     const found = detection();
     const note = parseNote(tonic);
-    if (!current || !found || !note || found.transposeOffset === null) return;
+    if (!found || !note || found.transposeOffset === null) return;
 
-    await update(
-      withOverride(current, found.pageId, { tonic: note, mode }, found.transposeOffset, Date.now()),
+    const { pageId, transposeOffset } = found;
+    await update((settings) =>
+      withOverride(settings, pageId, { tonic: note, mode }, transposeOffset, Date.now()),
     );
   };
 
   const clearOverride = async () => {
-    const current = settings();
     const found = detection();
-    if (current && found) await update(withoutOverride(current, found.pageId));
+    if (!found) return;
+
+    // The mode the key was in stays on offer. A reader clearing a key to
+    // choose another tonic in the same mode would otherwise find the control
+    // back on major and three of the minor tonics gone from the list — and
+    // the next tonic they chose saved as a major key.
+    const cleared = override();
+    if (cleared) setPendingMode(cleared.mode);
+
+    await update((settings) => withoutOverride(settings, found.pageId));
   };
 
   return (
@@ -118,6 +168,10 @@ function App() {
       <Show when={settings()}>
         {(current) => (
           <>
+            <Show when={failed()}>
+              <p class={styles.warning}>That could not be saved. Nothing has changed.</p>
+            </Show>
+
             {/*
              * Outside what is known about the page, because it is not about
              * the page. A reader who switched the names off, or who is on a
@@ -129,9 +183,10 @@ function App() {
               <input
                 type="checkbox"
                 checked={current().enabled}
-                onChange={(event) =>
-                  void update({ ...current(), enabled: event.currentTarget.checked })
-                }
+                onChange={(event) => {
+                  const enabled = event.currentTarget.checked;
+                  void update((settings) => ({ ...settings, enabled }));
+                }}
               />
               <span>Show degree names</span>
             </label>
@@ -153,7 +208,25 @@ function App() {
 
                   <Show
                     when={canOverride()}
-                    fallback={<p class={styles.note}>{whyNotOverridable(found())}</p>}
+                    fallback={
+                      <>
+                        <p class={styles.note}>{whyNotOverridable(found())}</p>
+
+                        {/*
+                         * A key already set is still set, and this is the
+                         * only thing that can remove it. A chart edited to
+                         * declare a second key, or a page that stops saying
+                         * how far it has been transposed, would otherwise
+                         * leave a reader with a key they cannot reach —
+                         * inert, but taking a place among the ones kept.
+                         */}
+                        <Show when={override()}>
+                          <button type="button" onClick={() => void clearOverride()}>
+                            Forget the key set for this chart
+                          </button>
+                        </Show>
+                      </>
+                    }
                   >
                     <div class={styles.row}>
                       <label class={styles.field}>
@@ -211,9 +284,10 @@ function App() {
               <span>Numerals</span>
               <select
                 value={current().notation}
-                onChange={(event) =>
-                  void update({ ...current(), notation: event.currentTarget.value as Notation })
-                }
+                onChange={(event) => {
+                  const notation = event.currentTarget.value as Notation;
+                  void update((settings) => ({ ...settings, notation }));
+                }}
               >
                 <option value="roman-ascii">I II III (fixed width)</option>
                 <option value="roman-unicode">Ⅰ Ⅱ Ⅲ (one character)</option>
@@ -224,12 +298,10 @@ function App() {
               <span>Spelling</span>
               <select
                 value={current().spelling}
-                onChange={(event) =>
-                  void update({
-                    ...current(),
-                    spelling: event.currentTarget.value as SpellingPolicy,
-                  })
-                }
+                onChange={(event) => {
+                  const spelling = event.currentTarget.value as SpellingPolicy;
+                  void update((settings) => ({ ...settings, spelling }));
+                }}
               >
                 <option value="canonical">Consistent</option>
                 <option value="source">As the chart spells it</option>

@@ -59,6 +59,13 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   // settings from before the change would be the ones handed over last and
   // would be the ones that won — a reader who turned the names off inside
   // that window would watch them stay on until they reloaded the page.
+  // What the page was last shown for. A settings change that does not change
+  // any of it is a change about somewhere else — a key set for another chart,
+  // or a stamp saying when one was last used — and reading, restoring,
+  // measuring and rewriting this page over it would be a flicker on every
+  // other tab open on the site, every time a reader set a key on one.
+  let showed: string | null = null;
+
   let showing = Promise.resolve();
   const queue = (settings: () => Settings | Promise<Settings>) => {
     // Queued behind whatever is already running. Two runs at once would have
@@ -70,7 +77,14 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
     // extension reloaded out from under the page — would leave the chain
     // rejected for good, and the page would stop following the settings
     // silently and for the rest of its life.
-    const next = async () => show(doc, adapter, await settings(), pageId, stored);
+    const next = async () => {
+      const current = await settings();
+      const wanted = matters(current, pageId);
+      if (wanted === showed) return;
+
+      showed = wanted;
+      await show(doc, adapter, current, pageId, stored);
+    };
     showing = showing.then(next, next);
     return showing;
   };
@@ -86,6 +100,24 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   await queue(loadSettings);
 
   return stop;
+}
+
+/**
+ * Everything about the settings that this page is shown from.
+ *
+ * The key kept for this chart without the stamp saying when it was last used:
+ * the stamp is written by whichever page used it, is displayed nowhere, and
+ * would otherwise be a change every open tab hears about.
+ */
+function matters(settings: Settings, pageId: string): string {
+  const kept = settings.keyOverrides[pageId];
+
+  return JSON.stringify({
+    enabled: settings.enabled,
+    notation: settings.notation,
+    spelling: settings.spelling,
+    key: kept ? { tonic: kept.tonic, mode: kept.mode } : null,
+  });
 }
 
 async function show(

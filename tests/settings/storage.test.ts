@@ -104,47 +104,6 @@ describe('following a change to the settings', () => {
   });
 });
 
-describe('a settings change that only moves a stamp', () => {
-  // A page marks the key it used as used today. Every page open on the site
-  // hears about a settings write, and one that read, restored, measured and
-  // rewrote itself over a field nothing displays would flicker on the tab
-  // that caused it and do the same work again on every other one.
-  it('is not passed on to anyone watching', async () => {
-    const settings = {
-      ...DEFAULT_SETTINGS,
-      keyOverrides: { page: { tonic: 'C', mode: 'major' as const, usedAt: 1 } },
-    };
-    await saveSettings(settings);
-
-    const seen = vi.fn();
-    const stop = watchSettings(seen);
-    await saveSettings({
-      ...settings,
-      keyOverrides: { page: { tonic: 'C', mode: 'major', usedAt: 2 } },
-    });
-
-    expect(seen).not.toHaveBeenCalled();
-    stop();
-  });
-
-  it('is passed on where the key itself changed', async () => {
-    await saveSettings({
-      ...DEFAULT_SETTINGS,
-      keyOverrides: { page: { tonic: 'C', mode: 'major', usedAt: 1 } },
-    });
-
-    const seen = vi.fn();
-    const stop = watchSettings(seen);
-    await saveSettings({
-      ...DEFAULT_SETTINGS,
-      keyOverrides: { page: { tonic: 'D', mode: 'major', usedAt: 1 } },
-    });
-
-    expect(seen).toHaveBeenCalled();
-    stop();
-  });
-});
-
 describe('what was found on a page', () => {
   it('comes back as it was written', async () => {
     const key = recordKey('https://ja.chordwiki.org/wiki/Song');
