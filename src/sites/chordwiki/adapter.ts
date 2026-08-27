@@ -461,12 +461,30 @@ export const chordwiki: SiteAdapter = {
     // transposition of six and reading the attribute would call it nothing at
     // all — a key shifted by nothing, silently, which is the failure this
     // file keeps warning about.
-    // The last of them and not the first. More than one marked option is not
-    // valid, and where a page writes more than one a browser shows the last —
-    // so reading the first would report a transposition nobody is looking at,
-    // and a key would be shifted to somewhere the chart is not.
-    const marked = [...doc.querySelectorAll<HTMLOptionElement>(SELECTORS.transposeSelected)].at(-1);
-    const offset = marked && semitones(marked.value);
+    // The site's control, and not whichever one the page holds most of. What
+    // follows it is the chart body, and a chart body is written by whoever
+    // wrote the chart — so a control put there is one reader's text, and
+    // taking it would let a chart shift the key a reader had set by hand to
+    // somewhere the chart is not. The head is out of reach here in a way it
+    // is not for an address, the control being part of the page proper, so
+    // the site's is the first rather than the one in a trusted place.
+    const control = doc.querySelector(SELECTORS.transpose);
+
+    // Within it, the last marked option and not the first. More than one is
+    // not valid, and where a control arrives with more than one a browser
+    // shows the last — so reading the first would report a transposition
+    // nobody is looking at.
+    //
+    // Falling back to the first option where none is marked, which is what a
+    // browser shows and what the control would send. Today the site marks one
+    // on every page, so this stands against the day it stops: declining there
+    // would be this file's own warning come true, a chart read and then
+    // quietly not named, with nothing on the page to say why.
+    const shown =
+      [...(control?.querySelectorAll<HTMLOptionElement>(SELECTORS.transposeSelected) ?? [])].at(
+        -1,
+      ) ?? control?.querySelector<HTMLOptionElement>(SELECTORS.transposeOption);
+    const offset = shown && semitones(shown.value);
 
     // Nothing, rather than none: a page with no such control, or one whose
     // marked option says nothing, has not told us the chart is untransposed —

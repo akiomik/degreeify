@@ -354,6 +354,37 @@ describe('how far the chart has been transposed', () => {
     );
   });
 
+  // The site's control sits above the chart, and what follows it is the chart
+  // body — written by whoever wrote the chart. A control planted there is one
+  // reader's text, and reading it would let a chart shift the key a reader
+  // set by hand to somewhere the chart is not. The same threat the name of a
+  // chart is held against, on the one reading that was open to it.
+  it("reads the site's control and not one planted in the chart", () => {
+    const doc = parse(`
+      <div id="key"><select name="key"><option value="0" selected>0</option></select></div>
+      <div class="main">
+        <div id="key"><select name="key"><option value="7" selected>+7</option></select></div>
+      </div>
+    `);
+
+    expect(chordwiki.transposeOffset(doc)).toBe(0);
+  });
+
+  // A control arriving with none of its options marked is showing its first,
+  // and that is what it would send. Declining there would be this file's own
+  // warning come true: a chart read and then quietly not named, with nothing
+  // on the page to say why.
+  it('reads the first option where the control marks none, as a browser does', () => {
+    const doc = parse(
+      '<div id="key"><select name="key"><option value="0">0</option><option value="6">+6</option></select></div>',
+    );
+
+    expect(chordwiki.transposeOffset(doc)).toBe(0);
+    expect(chordwiki.transposeOffset(doc)).toBe(
+      Number(doc.querySelector<HTMLSelectElement>('select')?.value),
+    );
+  });
+
   it('reads an option written without a value from its text', () => {
     expect(
       chordwiki.transposeOffset(

@@ -43,18 +43,27 @@ export const SELECTORS = {
   chartItems: `${KEY}, ${CHORD}`,
 
   /**
-   * Named for what the next one is built from, and because a reader wanting
-   * to know what this file depends on should find the control here.
+   * The control a reader transposes a chart with, of which the site's own is
+   * the first: it sits above the chart, and what comes after it is the chart
+   * body, written by whoever wrote the chart.
    */
   transpose: TRANSPOSE,
 
   /**
-   * The options that control arrived with. More than one is not valid, and
-   * where a page writes more than one a browser takes the last, so the caller
-   * must too — reading the first would report a transposition the reader is
-   * not looking at.
+   * The options that control arrived marked with, relative to the control and
+   * never to the document. More than one is not valid, and where a page
+   * writes more than one a browser takes the last, so the caller must too —
+   * reading the first would report a transposition the reader is not looking
+   * at.
    */
-  transposeSelected: `${TRANSPOSE} option[selected]`,
+  transposeSelected: 'option[selected]',
+
+  /**
+   * Every option of it, in the order the control offers them, and relative to
+   * it for the same reason. A control arriving with none of them marked is
+   * showing its first, and that is what it will send.
+   */
+  transposeOption: 'option',
 
   /**
    * The address the site considers this chart to live at, transposed or not.
