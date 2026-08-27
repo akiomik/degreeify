@@ -1,0 +1,74 @@
+<!doctype html>
+<!--
+  Hand-written. This reproduces the structure of a ChordWiki chart page — the
+  tags, the class names, the nesting, the shape of the transposition form —
+  and nothing else. It is not a copy of any page, and CONTRIBUTING.md explains
+  why no such copy may be committed: a real chart carries song lyrics.
+
+  There are no lyrics here. Every word slot holds beat and bar marks. The
+  chords are invented to exercise the adapter and the parser, and the title
+  and artist are placeholders.
+
+  This one is a chart as it arrives: one stated key, no transposition.
+-->
+<html lang="ja">
+  <head>
+    <title>Test Song - Test Artist</title>
+    <link rel="canonical" href="https://ja.chordwiki.org/wiki/Test%20Song" />
+    <meta property="og:url" content="https://ja.chordwiki.org/wiki/Test%20Song" />
+  </head>
+  <body>
+    <div id="key">
+      <form action="/wiki.cgi" method="get">
+        <input type="hidden" name="c" value="view" />
+        <input type="hidden" name="t" value="Test Song" />
+        <select size="1" name="key" onchange="this.form.submit();">
+          <option value="6">+6</option>
+          <option value="1">+1</option>
+          <option value="0" selected="">0</option>
+          <option value="-1">-1</option>
+          <option value="-5">-5</option>
+        </select>
+        <select size="1" name="symbol" onchange="this.form.submit();">
+          <option value="sharp">♯</option>
+          <option value="" selected="">-</option>
+          <option value="flat">♭</option>
+        </select>
+      </form>
+    </div>
+
+    <div class="main">
+      <h1 class="title">Test Song</h1>
+      <h2 class="subtitle">Test Artist</h2>
+      <div>
+        <p class="line comment"><strong>BPM=120 4/4</strong></p>
+        <p class="key">Key: C</p>
+        <p class="line">
+          <span class="wordtop">|</span>
+          <span class="chord" onclick="javascript:popupImage('/cd/C.png', event);">C</span>
+          <span class="word">---- ---- |</span>
+          <span class="chord" onclick="javascript:popupImage('/cd/Am7.png', event);">Am7</span>
+          <span class="word">---- ---- |</span>
+        </p>
+        <p class="line">
+          <span class="wordtop">|</span>
+          <span class="chord">FM7(#11)</span>
+          <span class="word">---- ---- |</span>
+          <span class="chord">G7-9</span>
+          <span class="word">---- ---- |</span>
+        </p>
+        <p class="line">
+          <span class="wordtop">|</span>
+          <span class="chord">Dm7/G</span>
+          <span class="word">---- |</span>
+          <span class="chord">N.C.</span>
+          <span class="word">---- |</span>
+          <span class="chord"></span>
+          <span class="word">---- |</span>
+          <span class="chord">Ebim</span>
+          <span class="word">---- |</span>
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

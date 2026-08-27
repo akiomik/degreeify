@@ -60,12 +60,38 @@ When writing a fixture:
 - Open the file with an English comment stating that it is a hand-written
   reproduction and not a copy of a real page.
 
+The HTML fixtures are excluded from Biome. They reproduce another site's
+markup, faults and all — inline handlers on elements that take no keyboard,
+among others — and being told about those is being told about the site rather
+than about this project. Formatting them would obscure what they reproduce.
+`transposition-pairs.ts` is ours and is linted like anything else.
+
+### What fixtures cannot tell you
+
+A fixture reproduces the structure this project believes a site has. It cannot
+say whether the site still has it. Every selector in a site adapter is
+therefore unverified against the live site as far as CI is concerned: the day
+a class name changes, the fixtures keep passing and the extension quietly does
+nothing on every page.
+
+Nothing in this repository can close that, since closing it would mean
+committing a copy of a real page. What is asked instead is that anyone
+changing a selector — or reviewing a change to one — check it against a page
+saved locally and kept out of the repository, and say in the pull request
+which pages were checked and what they showed. A claim about a selector is
+worth what the check behind it was worth.
+
 ### Non-English test data
 
-As an explicit exception to the English-only rule, test data may hold real
-tokens from a supported site verbatim — for example `(3連)`, `(2拍3連)`, `＞`.
+As an explicit exception to the English-only rule, test data may hold tokens
+in the language of a supported site — for example `(3連)`, `(2拍3連)`, `＞`.
 The parser is required to pass these through untouched, and verifying that
 needs the real strings.
+
+The same applies to a token a site could write rather than one it has been
+seen to write, where the point of the case is that it is not in English: a
+Japanese site labelling a field in Japanese is the reason a reader is not
+allowed to assume an English label, and the case cannot say so in English.
 
 The exception covers **data only**. Comments, identifiers, and test names stay
 in English, and non-English strings appear only as observed input or expected

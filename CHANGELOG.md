@@ -33,3 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   chord of their scale. Where nothing chooses between the leading candidates
   the guess is declined, leaving the chart in chord names rather than
   relabelling it against the wrong tonic.
+- A reader for ChordWiki charts, and the shape every later site fits: the
+  chords in document order together with the keys they are read in, so that
+  which chords fall under which key needs no reconstructing. It reads the key
+  the page is being played in rather than the one the chart was written in,
+  which on a transposed chart are different and stated in the same line, and
+  it names a chart by what identifies it to the site rather than by the
+  address it was reached at, so that transposing one — or reaching it another
+  way — does not lose the settings kept against it.
