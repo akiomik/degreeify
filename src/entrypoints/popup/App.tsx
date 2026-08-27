@@ -1,4 +1,4 @@
-import { createSignal, For, onMount, Show } from 'solid-js';
+import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { browser } from 'wxt/browser';
 import type { SpellingPolicy } from '@/core/degree';
 import { CANONICAL_TONIC, formatKey, type Key, type Mode } from '@/core/key';
@@ -13,6 +13,7 @@ import {
   recordKey,
   type Settings,
   saveSettings,
+  watchDetection,
 } from '@/settings/storage';
 import styles from './App.module.css';
 
@@ -33,7 +34,18 @@ function App() {
     // show them — the alternative is a popup with a title and nothing else,
     // and no way to reach a setting that has nothing to do with the tab.
     setSettings(await loadSettings());
-    setDetection(await pageInFront());
+
+    const key = await addressInFront();
+    if (key) {
+      setDetection((await readDetection(key)) ?? null);
+
+      // A record read once is a record about to be out of date: the content
+      // script writes a new one whenever it reads the page again, which is
+      // every time something here is changed. Read once, the line this popup
+      // exists for would go on describing the page as it was before the
+      // reader touched it.
+      onCleanup(watchDetection(key, setDetection));
+    }
 
     // Here rather than in the content script, which runs on every page a
     // reader opens. Tidying belongs where somebody asked for something.
@@ -54,7 +66,14 @@ function App() {
 
   const canOverride = (): boolean => {
     const found = detection();
-    return found !== null && found.statedKeys <= MOST_STATED_KEYS_TO_OVERRIDE;
+    if (!found || found.statedKeys > MOST_STATED_KEYS_TO_OVERRIDE) return false;
+
+    // A key is kept as the key of the untransposed chart, so setting one
+    // needs to know how far the chart has been transposed. Where the page
+    // does not say, there is nothing to offer: a control that took a key and
+    // saved none would leave a reader looking at a key they had chosen and a
+    // page that had never heard of it.
+    return found.transposeOffset !== null;
   };
 
   const setOverride = async (tonic: string, mode: Mode) => {
@@ -81,24 +100,31 @@ function App() {
       <Show when={settings()}>
         {(current) => (
           <>
+            {/*
+             * Outside what is known about the page, because it is not about
+             * the page. A reader who switched the names off, or who is on a
+             * chart whose content script has not written its record yet, has
+             * to be able to switch them back on — and this is the control
+             * they came for.
+             */}
+            <label class={styles.row}>
+              <input
+                type="checkbox"
+                checked={current().enabled}
+                onChange={(event) =>
+                  void update({ ...current(), enabled: event.currentTarget.checked })
+                }
+              />
+              <span>Show degree names</span>
+            </label>
+
             <Show
               when={detection()}
               fallback={<p class={styles.note}>Open a ChordWiki chord chart to use Degreeify.</p>}
             >
               {(found) => (
                 <>
-                  <label class={styles.row}>
-                    <input
-                      type="checkbox"
-                      checked={current().enabled}
-                      onChange={(event) =>
-                        void update({ ...current(), enabled: event.currentTarget.checked })
-                      }
-                    />
-                    <span>Show degree names</span>
-                  </label>
-
-                  <p class={styles.reading}>{reading(found())}</p>
+                  <p class={styles.reading}>{reading(found(), current().enabled)}</p>
 
                   <Show when={found().unreadKeys > 0}>
                     <p class={styles.warning}>
@@ -109,12 +135,7 @@ function App() {
 
                   <Show
                     when={canOverride()}
-                    fallback={
-                      <p class={styles.note}>
-                        This chart states {found().statedKeys} keys, so it cannot be read in one key
-                        set by hand.
-                      </p>
-                    }
+                    fallback={<p class={styles.note}>{whyNotOverridable(found())}</p>}
                   >
                     <div class={styles.row}>
                       <label class={styles.field}>
@@ -199,7 +220,7 @@ function App() {
 }
 
 /**
- * What was found on the page the popup was opened over, if it is one.
+ * The address of the page the popup was opened over, if it has one.
  *
  * Nothing, for every way of not being on a chart: a tab this extension has no
  * permission for, which reports no address at all; a page on the site that is
@@ -212,19 +233,17 @@ function App() {
  * renders nothing at all: no key, no toggle, and no way to reach the settings
  * that were never about the page.
  */
-async function pageInFront(): Promise<Detection | null> {
+async function addressInFront(): Promise<string | null> {
   try {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    const key = recordKey(tab?.url);
-
-    return key ? await readDetection(key) : null;
+    return recordKey(tab?.url);
   } catch {
     return null;
   }
 }
 
 /** What the popup says about the key a chart was read in. */
-function reading(found: Detection): string {
+function reading(found: Detection, enabled: boolean): string {
   if (!found.key) {
     return found.statedKeys > 0
       ? 'This chart states a key this could not read.'
@@ -240,7 +259,23 @@ function reading(found: Detection): string {
         : 'guessed from the chords';
   const sections = found.statedKeys > 1 ? `, ${found.statedKeys} sections` : '';
 
-  return `${key} — ${where}${sections}. ${found.named} chords named.`;
+  // What the page says, and not what it would say. The chart is read whether
+  // or not the names are shown, so with them off this count is of names that
+  // are not on the page — and a reader looking at a chart in chord names,
+  // told that six chords are named, would be right to wonder which six.
+  const chords = enabled ? `${found.named} chords named.` : `${found.named} chords would be named.`;
+
+  return `${key} — ${where}${sections}. ${chords}`;
+}
+
+/**
+ * Why the key cannot be set for this chart, which is not always the same
+ * reason.
+ */
+function whyNotOverridable(found: Detection): string {
+  return found.statedKeys > MOST_STATED_KEYS_TO_OVERRIDE
+    ? `This chart states ${found.statedKeys} keys, so it cannot be read in one key set by hand.`
+    : 'This page does not say how far the chart has been transposed, so a key set here could not be kept.';
 }
 
 function formatNoteOf(key: Key | null): string {

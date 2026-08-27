@@ -21,6 +21,7 @@ beforeEach(() => {
 });
 
 const detection = (updatedAt: number): Detection => ({
+  version: SCHEMA_VERSION,
   pageId: 'chordwiki:chart:Test Song',
   key: { tonic: 'C', mode: 'major' },
   source: 'page',

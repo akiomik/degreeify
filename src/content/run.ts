@@ -5,6 +5,7 @@ import {
   type Detection,
   loadSettings,
   recordKey,
+  SCHEMA_VERSION,
   type Settings,
   saveSettings,
   USED_AT_GRANULARITY,
@@ -50,15 +51,30 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   const pageId = adapter.pageId(doc, url);
   const stored = recordKey(url.href);
 
-  let showing = show(doc, adapter, await loadSettings(), pageId, stored);
-  await showing;
-
-  return watchSettings((settings) => {
+  // Listening before reading, so that a change made while the page is still
+  // loading is not the one change nothing hears. Reading the settings takes a
+  // turn of the loop, and a reader who reaches the popup inside it would find
+  // the page ignoring what they had just asked for until they reloaded it.
+  let showing = Promise.resolve();
+  const queue = (settings: Settings) => {
     // Queued behind whatever is already running. Two runs at once would have
     // one restoring the page while the other is measuring it, and the widths
     // the second locked would be the widths the first had written.
-    showing = showing.then(() => show(doc, adapter, settings, pageId, stored));
-  });
+    //
+    // The same continuation on both sides, because a rejected promise passes
+    // over every `then` after it: one failed write — a full quota, an
+    // extension reloaded out from under the page — would leave the chain
+    // rejected for good, and the page would stop following the settings
+    // silently and for the rest of its life.
+    const next = () => show(doc, adapter, settings, pageId, stored);
+    showing = showing.then(next, next);
+    return showing;
+  };
+
+  const stop = watchSettings(queue);
+  await queue(await loadSettings());
+
+  return stop;
 }
 
 async function show(
@@ -84,7 +100,7 @@ async function show(
   });
 
   if (stored) await writeDetection(stored, record(pageId, report, offset));
-  if (key && settings.enabled) await touchOverride(settings, pageId);
+  if (key && settings.enabled) await touchOverride(pageId);
 }
 
 /**
@@ -94,7 +110,13 @@ async function show(
  * to be written; it does not have to be written on every page a reader opens,
  * which would be a storage write for every chart they look at.
  */
-async function touchOverride(settings: Settings, pageId: string): Promise<void> {
+async function touchOverride(pageId: string): Promise<void> {
+  // Read again rather than written from the settings this page was shown
+  // with. Those were read before the page was measured and named, and a
+  // reader can reach the popup in that time — writing the whole object back
+  // from a copy that old would undo whatever they had just changed, and the
+  // only sign of it would be a setting that went back on its own.
+  const settings = await loadSettings();
   const stored = settings.keyOverrides[pageId];
   if (!stored) return;
 
@@ -109,6 +131,7 @@ async function touchOverride(settings: Settings, pageId: string): Promise<void> 
 
 function record(pageId: string, report: ApplyReport, offset: number | null): Detection {
   return {
+    version: SCHEMA_VERSION,
     pageId,
     key: report.key ? { tonic: formatNote(report.key.tonic), mode: report.key.mode } : null,
     source: report.source,

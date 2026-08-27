@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { run } from '@/content/run';
 import type { Key, Mode } from '@/core/key';
@@ -125,6 +126,81 @@ describe('following the settings', () => {
     await Promise.resolve();
 
     expect(shown(doc)[1]).toBe('VIm7');
+  });
+});
+
+describe('a setting changed while the page is still being read', () => {
+  // The page is read, measured and named before anything is written back, and
+  // a reader can reach the popup in that time. Written back from the settings
+  // this page started with, whatever they changed would be undone — and the
+  // only sign of it would be a setting that went back on its own.
+  it('is not undone by the page writing down that it used a key', async () => {
+    const yesterday = Date.now() - 25 * 60 * 60 * 1000;
+    await saveSettings(
+      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', key('G'), 0, yesterday),
+    );
+
+    const doc = load('chordwiki-basic');
+    const running = run(doc, chordwiki, new URL(ADDRESS));
+
+    await saveSettings({ ...(await loadSettings()), enabled: false, notation: 'roman-unicode' });
+    (await running)();
+
+    const settings = await loadSettings();
+    expect(settings.enabled).toBe(false);
+    expect(settings.notation).toBe('roman-unicode');
+  });
+
+  // A reader can reach the popup while the page is still being read, and the
+  // last thing that reading does is write down what it found. Told to listen
+  // only after all of that, a change made in the meantime is heard by nobody
+  // and the page goes on showing what it was asked for before. The write is
+  // slowed here so the change lands squarely inside that window.
+  it('is followed even where it happened while the page was still being read', async () => {
+    const real = browser.storage.local.set.bind(browser.storage.local);
+    const slow = vi.spyOn(browser.storage.local, 'set').mockImplementation((async (
+      items: Record<string, unknown>,
+    ) => {
+      if (Object.keys(items).some((key) => key.startsWith('detected:'))) {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      }
+      return real(items);
+    }) as never);
+
+    const doc = load('chordwiki-basic');
+    const running = run(doc, chordwiki, new URL(ADDRESS));
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
+    slow.mockRestore();
+
+    const stop = await running;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(shown(doc)[0]).toBe('C');
+    stop();
+  });
+});
+
+describe('a page that could not write down what it found', () => {
+  // One rejected write must not be the last thing the page ever does. A
+  // promise that has rejected passes over every continuation after it, so a
+  // chain built only of `then` would stop following the settings for good —
+  // silently, and for the rest of the page's life.
+  it('goes on following the settings', async () => {
+    const doc = load('chordwiki-basic');
+    const failing = vi
+      .spyOn(browser.storage.local, 'set')
+      .mockRejectedValueOnce(new Error('quota exceeded'));
+
+    const stop = await run(doc, chordwiki, new URL(ADDRESS)).catch(() => () => {});
+    failing.mockRestore();
+
+    await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(shown(doc)[0]).toBe('C');
+    stop();
   });
 });
 

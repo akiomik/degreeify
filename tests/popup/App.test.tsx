@@ -4,11 +4,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import App from '@/entrypoints/popup/App';
-import { DEFAULT_SETTINGS, type Detection, recordKey, saveSettings } from '@/settings/storage';
+import {
+  DEFAULT_SETTINGS,
+  type Detection,
+  recordKey,
+  SCHEMA_VERSION,
+  saveSettings,
+} from '@/settings/storage';
 
 const ADDRESS = 'https://ja.chordwiki.org/wiki/Test%20Song';
 
 const detection = (over: Partial<Detection> = {}): Detection => ({
+  version: SCHEMA_VERSION,
   pageId: 'chordwiki:chart:Test Song',
   key: { tonic: 'C', mode: 'major' },
   source: 'page',
@@ -81,6 +88,18 @@ describe('the popup on a tab that is not a chart', () => {
     expect(root.querySelectorAll('select')).toHaveLength(2);
     dispose();
   });
+
+  // The names being shown at all is not about the page either. A reader who
+  // switched them off, or who opened the popup on a chart before its content
+  // script had written anything, has to be able to switch them back on —
+  // which is the control they came for.
+  it('still offers to turn the names off', async () => {
+    await onATab(undefined);
+    const { root, dispose } = await open();
+
+    expect(root.querySelector('input[type="checkbox"]')).not.toBeNull();
+    dispose();
+  });
 });
 
 describe('the popup where it cannot work out which tab it is on', () => {
@@ -140,6 +159,65 @@ describe('the popup on a chart', () => {
     const { root, dispose } = await open();
 
     expect(root.querySelectorAll('select')).toHaveLength(4);
+    dispose();
+  });
+
+  // A key is kept as the key of the untransposed chart, so setting one needs
+  // to know how far the chart has been transposed. A control that took a key
+  // and saved none would leave a reader looking at a key they had chosen and
+  // a page that had never heard of it.
+  it('does not offer a key where the page does not say how far it has been transposed', async () => {
+    await onATab(ADDRESS, detection({ transposeOffset: null }));
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('does not say how far the chart has been transposed');
+    expect(root.querySelectorAll('select')).toHaveLength(2);
+    dispose();
+  });
+
+  // The chart is read whether or not the names are shown, so with them off
+  // this count is of names that are not on the page.
+  it('says the names would be written rather than that they were', async () => {
+    await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
+    await onATab(ADDRESS, detection());
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('6 chords would be named');
+    dispose();
+  });
+
+  // The content script writes a new record every time it reads the page,
+  // which is every time something here changes. Read once, the line this
+  // popup exists for would go on describing the page as the reader found it.
+  it('follows the record when the page is read again', async () => {
+    await onATab(ADDRESS, detection({ key: null, source: null, named: 0, statedKeys: 0 }));
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('states no key');
+
+    const key = recordKey(ADDRESS);
+    if (!key) throw new Error('that is an address');
+    await browser.storage.local.set({ [key]: detection({ source: 'manual', named: 6 }) });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(root.textContent).toContain('C — set by hand');
+    dispose();
+  });
+
+  // A record is written by a content script and read by a popup, and an
+  // extension is updated with pages already open. A record from another shape
+  // read as though it were this one is a popup counting `undefined` chords.
+  it('ignores a record written in a shape it does not know', async () => {
+    await onATab(ADDRESS);
+    const key = recordKey(ADDRESS);
+    if (!key) throw new Error('that is an address');
+    await browser.storage.local.set({
+      [key]: { ...detection(), version: SCHEMA_VERSION + 1 },
+    });
+
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('Open a ChordWiki chord chart');
     dispose();
   });
 

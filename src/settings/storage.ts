@@ -65,6 +65,16 @@ export const DEFAULT_SETTINGS: Settings = {
 /** What a content script found on a page, for the popup to show. */
 export interface Detection {
   /**
+   * The shape this was written in, checked the way the settings are.
+   *
+   * A record is written by a content script and read by a popup, and an
+   * extension is updated with pages already open: the two are not always the
+   * same build. Without this a record from another shape is read as though it
+   * were this one, and what a reader sees is a popup counting `undefined`
+   * chords and hiding a control because `undefined <= 1` is false.
+   */
+  readonly version: number;
+  /**
    * What the site adapter calls this chart, which is what a key set for it is
    * kept under.
    *
@@ -151,6 +161,27 @@ export async function readDetection(key: string): Promise<Detection | null> {
   return isDetection(stored) ? stored : null;
 }
 
+/**
+ * Calls back whenever what was found on this page changes.
+ *
+ * A popup opened before a content script has finished, or one whose reader
+ * has just changed the key, is looking at a record that is about to be
+ * replaced. Read once, the line the popup exists for would go on describing
+ * the page as it was before the reader touched it — and would contradict the
+ * control they had just used.
+ */
+export function watchDetection(key: string, onChange: (detection: Detection) => void): () => void {
+  const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
+    if (area !== 'local') return;
+
+    const change = changes[key];
+    if (change && isDetection(change.newValue)) onChange(change.newValue);
+  };
+
+  browser.storage.onChanged.addListener(listener);
+  return () => browser.storage.onChanged.removeListener(listener);
+}
+
 export async function writeDetection(key: string, detection: Detection): Promise<void> {
   await browser.storage.local.set({ [key]: detection });
 }
@@ -207,7 +238,7 @@ function isSettings(value: unknown): value is Settings {
 }
 
 function isDetection(value: unknown): value is Detection {
-  return isRecord(value) && typeof value.pageId === 'string';
+  return isRecord(value) && value.version === SCHEMA_VERSION && typeof value.pageId === 'string';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
