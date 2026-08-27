@@ -320,6 +320,10 @@ describe('the stated key', () => {
     // confidently a minor third away from what was meant.
     ['Key: C-', null],
     ['Key: C-Dur', null],
+    // A plus says something after a name for the same reason a dash does,
+    // and there is no augmented key for it to be saying.
+    ['Key: C+', null],
+    ['Key: C＋', null],
     ['Key: Cー', null],
     ['Key: C−', null],
     ['Key: C－', null],
@@ -1060,6 +1064,40 @@ describe('what a chart is called', () => {
     expect(named(page, 'https://ja.chordwiki.org/wiki.cgi?c=edit&t=Song%20A')).not.toBe(
       named(page, 'https://ja.chordwiki.org/wiki.cgi?c=edit&t=Song%20B'),
     );
+  });
+
+  // Which path serves what is the site's to change, and a `/wiki/` path that
+  // rewrites to the same program carries the parameter just as well. Asked
+  // on one path only, one page has two names and one of them is a chart's.
+  it.each([
+    'https://ja.chordwiki.org/wiki/Test%20Song?c=edit',
+    'https://ja.chordwiki.org/wiki/Test%20Song?c=history',
+    'https://ja.chordwiki.org/wiki/Test%20Song/?c=diff',
+  ])('does not take %s for the chart', (href) => {
+    expect(named(bare, href)).toBe(`chordwiki:page:${new URL(href).href}`);
+    expect(chordwiki.matches(new URL(href))).toBe(false);
+  });
+
+  // A query may name a parameter twice and the reader before this one is
+  // free to resolve that either way. Taken as the first, `c=view&c=edit` is
+  // an editing page on a chart's settings, reached by a link somebody sends
+  // — which is what asking the title this way already prevents.
+  it.each([
+    'https://ja.chordwiki.org/wiki.cgi?c=view&c=edit&t=Song',
+    'https://ja.chordwiki.org/wiki.cgi?c=edit&c=view&t=Song',
+    'https://ja.chordwiki.org/wiki/Song?c=view&c=edit',
+  ])('does not take %s for the chart either', (href) => {
+    expect(named(bare, href)).toBe(`chordwiki:page:${new URL(href).href}`);
+  });
+
+  // And the view a reader is actually sent to is still a chart.
+  it.each([
+    'https://ja.chordwiki.org/wiki.cgi?c=view&t=Song',
+    'https://ja.chordwiki.org/wiki.cgi?c=view&c=view&t=Song',
+    'https://ja.chordwiki.org/wiki.cgi?t=Song&key=6&symbol=flat',
+    'https://ja.chordwiki.org/wiki/Song?key=6',
+  ])('still takes %s for the chart', (href) => {
+    expect(named(bare, href)).toBe('chordwiki:chart:Song');
   });
 });
 

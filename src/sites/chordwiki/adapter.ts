@@ -1,4 +1,4 @@
-import { DASH_LOOKALIKES, DASH_MARKS } from '@/core/chord';
+import { DASH_LOOKALIKES, DASH_MARKS, PLUS_MARKS } from '@/core/chord';
 import { type Key, parseKey } from '@/core/key';
 import { ACCIDENTAL_CHARS } from '@/core/pitch';
 import type { ChartItem, SiteAdapter } from '../types';
@@ -67,7 +67,7 @@ const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
  * Taken from where notes and chords are read rather than written out again,
  * so that a spelling added there cannot go missing here.
  */
-const NAMES_CARRY = ACCIDENTAL_CHARS + DASH_MARKS + DASH_LOOKALIKES;
+const NAMES_CARRY = ACCIDENTAL_CHARS + DASH_MARKS + DASH_LOOKALIKES + PLUS_MARKS;
 
 /** Whether a character is part of a key's name rather than something around it. */
 function partOfAName(char: string): boolean {
@@ -198,9 +198,36 @@ function absolute(href: string | null | undefined, base: URL): URL | null {
   }
 }
 
+/** Slashes the address ends with, which belong to the address. */
+const TRAILING_SLASHES = /\/+$/u;
+
+/**
+ * Whether an address asks for the chart rather than something about it.
+ *
+ * The site serves more than charts — editing one, its history, a diff — and
+ * all of them name the chart they are about. A page that is not the chart
+ * must not claim the chart's settings.
+ *
+ * Asked of every address and not only of the one the parameter is usually
+ * written on. Which path serves what is the site's to change, and a `/wiki/`
+ * path that rewrites to the same program would carry the parameter just as
+ * well: `/wiki/Test?c=edit` was a chart while `wiki.cgi?c=edit&t=Test` was
+ * not, which is one page under two names and one of them wrong.
+ *
+ * Every value of it and not the first. A query may name a parameter twice,
+ * the reader before this one is free to resolve that either way, and `?c=view&c=edit`
+ * taken as viewing is a link somebody sends that puts an editing page on a
+ * chart's settings. What the title is asked in the same situation took three
+ * rounds to get right; there is no reason to learn it twice.
+ */
+function isViewing(url: URL): boolean {
+  return url.searchParams.getAll(ACTION_PARAM).every((action) => action === VIEWING_ACTION);
+}
+
 function isChartAddress(url: URL): boolean {
   const host = url.hostname;
   if (host !== HOST && !host.endsWith(`.${HOST}`)) return false;
+  if (!isViewing(url)) return false;
 
   // One segment, and the whole of one. A path is read as a title written
   // into it, and a title written into a path has its slashes escaped — so
@@ -211,13 +238,8 @@ function isChartAddress(url: URL): boolean {
   if (url.pathname.startsWith(CHART_PATH)) {
     return !url.pathname.slice(CHART_PATH.length).replace(TRAILING_SLASHES, '').includes('/');
   }
-  if (url.pathname !== TRANSPOSED_CHART_PATH) return false;
 
-  // That address serves more than charts — editing one, its history, a diff
-  // — and all of them name the chart they are about. A page that is not the
-  // chart must not claim the chart's settings.
-  const action = url.searchParams.get(ACTION_PARAM);
-  return action === null || action === VIEWING_ACTION;
+  return url.pathname === TRANSPOSED_CHART_PATH;
 }
 
 /**
@@ -278,9 +300,6 @@ function writtenTitleIn(url: URL): string | undefined {
   const ends = field.indexOf(NAME_ENDS);
   return ends < 0 ? '' : field.slice(ends + 1);
 }
-
-/** Slashes the address ends with, which belong to the address. */
-const TRAILING_SLASHES = /\/+$/u;
 
 /**
  * Text decoded as a form encodes it: a plus is a space, and a broken escape
