@@ -424,6 +424,8 @@ describe('what a chart is called', () => {
     // and a broken escape took the name away entirely, host and all.
     const encodings: [what: string, path: string, query: string, title: string][] = [
       ['a space', 'Rock%20Roll', 'Rock+Roll', 'Rock Roll'],
+      // Which is how the site writes one: a chart called `SWEET MEMORIES`
+      // lives at `/wiki/SWEET+MEMORIES`.
       ['a plus for a space', 'Rock+Roll', 'Rock+Roll', 'Rock Roll'],
       ['an ampersand', 'Rock%20%26%20Roll', 'Rock+%26+Roll', 'Rock & Roll'],
       ['a stray percent sign', '100%', '100%', '100%'],

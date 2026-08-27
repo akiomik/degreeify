@@ -145,10 +145,15 @@ const TRAILING_SLASHES = /\/+$/u;
  * title carried a stray percent sign.
  *
  * That a path is read the same way is the site's doing and not an assumption.
- * It writes a space into a path segment as a plus, which is a thing a path is
- * not obliged to mean and this one does:
+ * A plus in a path is not obliged to mean a space, and in this one it does.
+ * The site says so itself, in the address it gives for a chart whose title
+ * has a space in it:
  *
- *     <a href="/tag/WEST+GROUND">WEST GROUND</a>
+ *     <input name="t" value="SWEET MEMORIES">
+ *     <link rel="canonical" href="https://ja.chordwiki.org/wiki/SWEET+MEMORIES">
+ *
+ * and it writes its tags the same way, `/tag/WEST+GROUND` linking the words
+ * `WEST GROUND`.
  */
 function formDecoded(text: string): string {
   const escaped = text.replace(QUERY_SEPARATOR, '%26');
