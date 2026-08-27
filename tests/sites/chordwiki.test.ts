@@ -340,6 +340,20 @@ describe('how far the chart has been transposed', () => {
     ).toBe(expected);
   });
 
+  // More than one is not valid markup, and where a page writes more than one
+  // a browser shows the last. Reading the first would report a transposition
+  // nobody is looking at, and shift a key to somewhere the chart is not.
+  it('reads the last marked option, as a browser does', () => {
+    const doc = parse(
+      '<div id="key"><select name="key"><option value="0" selected>0</option><option value="6" selected>+6</option></select></div>',
+    );
+
+    expect(chordwiki.transposeOffset(doc)).toBe(6);
+    expect(chordwiki.transposeOffset(doc)).toBe(
+      Number(doc.querySelector<HTMLSelectElement>('select')?.value),
+    );
+  });
+
   it('reads an option written without a value from its text', () => {
     expect(
       chordwiki.transposeOffset(
@@ -467,37 +481,54 @@ describe('what a chart is called', () => {
     // A title is written into an address one way and read out of it another
     // as soon as the two places it can sit are read by different rules —
     // and a broken escape took the name away entirely, host and all.
-    const encodings: [what: string, path: string, query: string, title: string][] = [
-      ['a space', 'Rock%20Roll', 'Rock+Roll', 'Rock Roll'],
+    // What is expected is the whole name and not only the title, because a
+    // title that cannot be read is not named the same way as one that can:
+    // `%FC` is a title somebody can type, and it is not the title an address
+    // spelling `%FC` is failing to say.
+    const encodings: [what: string, path: string, query: string, name: string][] = [
+      ['a space', 'Rock%20Roll', 'Rock+Roll', 'chart:Rock Roll'],
       // Which is how the site writes one: a chart called `SWEET MEMORIES`
       // lives at `/wiki/SWEET+MEMORIES`.
-      ['a plus for a space', 'Rock+Roll', 'Rock+Roll', 'Rock Roll'],
-      ['an ampersand', 'Rock%20%26%20Roll', 'Rock+%26+Roll', 'Rock & Roll'],
-      ['a stray percent sign', '100%', '100%', '100%'],
-      ['a trailing slash', 'Rock%20Roll/', 'Rock+Roll', 'Rock Roll'],
+      ['a plus for a space', 'Rock+Roll', 'Rock+Roll', 'chart:Rock Roll'],
+      ['an ampersand', 'Rock%20%26%20Roll', 'Rock+%26+Roll', 'chart:Rock & Roll'],
+      ['a stray percent sign', '100%', '100%', 'chart:100%'],
+      ['a trailing slash', 'Rock%20Roll/', 'Rock+Roll', 'chart:Rock Roll'],
       // Which is the address's and not the title's. Taken off the title
       // instead, a chart whose name really does end in one would lose it here
       // and keep it at the other address.
-      ['a slash of its own', 'Rock%20Roll%2F', 'Rock+Roll%2F', 'Rock Roll/'],
+      ['a slash of its own', 'Rock%20Roll%2F', 'Rock+Roll%2F', 'chart:Rock Roll/'],
       // An escape that is not text decodes to the same character whatever it
       // was, so decoding one is how two charts come to share a name. Where
       // that happens the title is kept unread instead: unreadable, and still
       // two charts.
-      ['an escape kept unread', '%C6%FC', '%C6%FC', '%C6%FC'],
+      ['an escape kept unread', '%C6%FC', '%C6%FC', 'unread:%C6%FC'],
       // And kept unread the one way. The two places a title sits do not
       // spell it the same, so what is left when it cannot be read is not the
       // same either — a space and an ampersand are written one way in a path
       // and another in a parameter.
-      ['an unread title with a space', '%C6%FC%20Rock', '%C6%FC+Rock', '%C6%FC%20Rock'],
-      ['an unread title with an ampersand', 'Rock&%FC', 'Rock%26%FC', 'Rock%26%FC'],
+      ['an unread title with a space', '%C6%FC%20Rock', '%C6%FC+Rock', 'unread:%C6%FC%20Rock'],
+      ['an unread title with an ampersand', 'Rock&%FC', 'Rock%26%FC', 'unread:Rock%26%FC'],
+      // The escaping routines disagree about these, and disagreeing is how one
+      // chart gets two names.
+      ['an unread title with a bracket', '(%FC', '%28%FC', 'unread:%28%FC'],
+      ['an unread title with a tilde', '~%FC', '%7E%FC', 'unread:%7E%FC'],
     ];
 
-    it.each(encodings)('reads %s the same in either place', (_what, path, query, title) => {
+    it.each(encodings)('reads %s the same in either place', (_what, path, query, name) => {
       const inPath = named(bare, `https://ja.chordwiki.org/wiki/${path}`);
       const inParam = named(bare, `https://ja.chordwiki.org/wiki.cgi?t=${query}&key=6`);
 
       expect(inPath).toBe(inParam);
-      expect(inPath).toBe(`chordwiki:chart:${title}`);
+      expect(inPath).toBe(`chordwiki:${name}`);
+    });
+
+    // A title that could not be read is spelled with the same characters a
+    // title that could be read may contain, so the two have to be told apart
+    // by something other than how they look.
+    it('does not let a title it can read stand in for one it cannot', () => {
+      expect(named(bare, 'https://ja.chordwiki.org/wiki/%25FC')).not.toBe(
+        named(bare, 'https://ja.chordwiki.org/wiki/%FC'),
+      );
     });
 
     it('names a different chart differently', () => {
@@ -516,6 +547,24 @@ describe('what a chart is called', () => {
         const page = parse(`
           <html>
             <head><link rel="${rel}" href="https://ja.chordwiki.org/wiki/Rock%20Roll" /></head>
+            <body><div class="main"></div></body>
+          </html>
+        `);
+
+        expect(named(page, 'https://ja.chordwiki.org/wiki/Somewhere%20Else')).toBe(
+          'chordwiki:chart:Rock Roll',
+        );
+      },
+    );
+
+    // Said the other way, and matched without regard to case for the same
+    // reason: missing it drops the name back onto the address.
+    it.each(['og:url', 'OG:URL', 'og:URL'])(
+      'takes the site at its word where the meta says property=%j',
+      (property) => {
+        const page = parse(`
+          <html>
+            <head><meta property="${property}" content="https://ja.chordwiki.org/wiki/Rock%20Roll" /></head>
             <body><div class="main"></div></body>
           </html>
         `);

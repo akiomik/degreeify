@@ -48,7 +48,12 @@ export const SELECTORS = {
    */
   transpose: TRANSPOSE,
 
-  /** The option that control arrived with, which is how far the chart has been transposed. */
+  /**
+   * The options that control arrived with. More than one is not valid, and
+   * where a page writes more than one a browser takes the last, so the caller
+   * must too — reading the first would report a transposition the reader is
+   * not looking at.
+   */
   transposeSelected: `${TRANSPOSE} option[selected]`,
 
   /**
@@ -61,5 +66,15 @@ export const SELECTORS = {
    * when the chart is transposed.
    */
   canonical: 'link[rel~="canonical" i]',
-  openGraphUrl: 'meta[property="og:url"]',
+  /**
+   * The same address said another way. Matched without regard to case for the
+   * reason the link above is: missing it drops a chart's name back onto the
+   * address it was reached at, which moves when the chart is transposed.
+   *
+   * Matched as a list of one word, though the attribute holds a single value.
+   * That reads oddly and is exact — a value of one word is a list of one word
+   * — and it is the only form the DOM the tests run in honours the flag with:
+   * happy-dom takes `[a~="b" i]` and ignores the flag on `[a="b" i]`.
+   */
+  openGraphUrl: 'meta[property~="og:url" i]',
 } as const;

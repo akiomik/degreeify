@@ -192,21 +192,48 @@ const TRAILING_SLASHES = /\/+$/u;
  * and it writes its tags the same way, `/tag/WEST+GROUND` linking the words
  * `WEST GROUND`.
  */
-function formDecoded(text: string): string {
-  const escaped = text.replace(QUERY_SEPARATOR, '%26');
-  const decoded = new URLSearchParams(`${TITLE_PARAM}=${escaped}`).get(TITLE_PARAM) ?? '';
+function titleNamed(written: string): string | null {
+  const query = written.replace(QUERY_SEPARATOR, '%26');
+  const decoded = new URLSearchParams(`${TITLE_PARAM}=${query}`).get(TITLE_PARAM) ?? '';
 
   // Every escape that is not text decodes to the same character, so two
   // charts written in some encoding this is not would come back as one name
   // and share one chart's settings. Where that happens the title is kept
-  // unread — but spelled one way, since the two places it can sit do not
-  // spell it the same and handing back what was written would name one chart
-  // twice.
-  return decoded.includes(REPLACEMENT_CHARACTER) ? oneSpelling(text) : decoded;
+  // unread instead — spelled one way, since the two places it can sit do not
+  // spell it the same, and kept apart from the titles that could be read,
+  // since one of those can be spelled the same as an unread one.
+  if (decoded.includes(REPLACEMENT_CHARACTER)) {
+    return `${UNREAD_NAMESPACE}:${oneSpelling(written)}`;
+  }
+
+  return decoded ? `${CHART_NAMESPACE}:${decoded}` : null;
 }
 
 /** An escape, which is kept as it stands rather than read. */
 const ESCAPE = /(%[0-9A-Fa-f]{2})/u;
+
+/** What an address may spell a byte with, out of all the bytes there are. */
+const SPELLED_PLAINLY = /[A-Za-z0-9]/u;
+
+/**
+ * Text with every byte spelled the one way an address can spell it.
+ *
+ * Byte by byte, and everything but a letter or a digit escaped, rather than
+ * by whichever of the several escaping routines is to hand. They disagree —
+ * a form escapes `(` and `~` where `encodeURIComponent` leaves them — and
+ * disagreeing is the whole failure being avoided: a title spelled one way in
+ * a path and another in a parameter is one chart under two names.
+ */
+function eachByteEscaped(text: string): string {
+  return [...new TextEncoder().encode(text)]
+    .map((byte) => {
+      const spelled = String.fromCharCode(byte);
+      return SPELLED_PLAINLY.test(spelled)
+        ? spelled
+        : `%${byte.toString(16).toUpperCase().padStart(2, '0')}`;
+    })
+    .join('');
+}
 
 /**
  * A title written the one way, for a title that could not be read.
@@ -223,7 +250,7 @@ function oneSpelling(text: string): string {
   return text
     .replace(PLUS, ' ')
     .split(ESCAPE)
-    .map((part, index) => (index % 2 ? part.toUpperCase() : encodeURIComponent(part)))
+    .map((part, index) => (index % 2 ? part.toUpperCase() : eachByteEscaped(part)))
     .join('');
 }
 
@@ -258,7 +285,7 @@ function chartNamed(url: URL): string | null {
       ? WRITTEN_TITLE.exec(url.search)?.[1]
       : url.pathname.slice(CHART_PATH.length).replace(TRAILING_SLASHES, '');
 
-  return (written && formDecoded(written)) || null;
+  return written ? titleNamed(written) : null;
 }
 
 /**
@@ -328,6 +355,17 @@ function semitones(value: string): number | null {
 const CHART_NAMESPACE = 'chart';
 const PAGE_NAMESPACE = 'page';
 
+/**
+ * A chart whose title could not be read, named by what its address spells
+ * rather than by what that spells.
+ *
+ * Apart from the others for the same reason they are apart from each other: a
+ * title that could not be read comes back as escapes, and a title that could
+ * be read can contain those same characters. `%FC` is a title somebody can
+ * type, and it is not the title an address spelling `%FC` is failing to say.
+ */
+const UNREAD_NAMESPACE = 'unread';
+
 export const chordwiki: SiteAdapter = {
   id: ID,
 
@@ -390,7 +428,7 @@ export const chordwiki: SiteAdapter = {
       for (const href of stated) {
         const address = absolute(href, url);
         const title = address && chartNamed(address);
-        if (title) return `${ID}:${CHART_NAMESPACE}:${title}`;
+        if (title) return `${ID}:${title}`;
       }
     }
 
@@ -414,7 +452,11 @@ export const chordwiki: SiteAdapter = {
     // transposition of six and reading the attribute would call it nothing at
     // all — a key shifted by nothing, silently, which is the failure this
     // file keeps warning about.
-    const marked = doc.querySelector<HTMLOptionElement>(SELECTORS.transposeSelected);
+    // The last of them and not the first. More than one marked option is not
+    // valid, and where a page writes more than one a browser shows the last —
+    // so reading the first would report a transposition nobody is looking at,
+    // and a key would be shifted to somewhere the chart is not.
+    const marked = [...doc.querySelectorAll<HTMLOptionElement>(SELECTORS.transposeSelected)].at(-1);
     const offset = marked && semitones(marked.value);
 
     // Nothing, rather than none: a page with no such control, or one whose
