@@ -43,9 +43,9 @@ export const SELECTORS = {
   chartItems: `${KEY}, ${CHORD}`,
 
   /**
-   * The control a reader transposes a chart with, of which the site's own is
-   * the first: it sits above the chart, and what comes after it is the chart
-   * body, written by whoever wrote the chart.
+   * The control a reader transposes a chart with. The site's own is outside
+   * the chart body — which is how it is told from one written into a chart,
+   * a chart body being written by whoever wrote the chart.
    */
   transpose: TRANSPOSE,
 

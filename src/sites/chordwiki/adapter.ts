@@ -274,18 +274,25 @@ function chartNamed(url: URL): string | null {
 
   // Taken as written from either place and decoded once, so that what is done
   // about an escape that is not text is done about it wherever it was found.
-  //
-  // Trailing slashes come off the address rather than off the title: they are
-  // the site's, not the chart's, and a chart reached with one and without it
-  // is the same chart. Taken off afterwards they would take a real one with
-  // them — `/wiki/Foo%2F` names a chart whose title ends in a slash, and the
-  // other address for it would keep what this one had thrown away.
   const written =
     url.pathname === TRANSPOSED_CHART_PATH
       ? WRITTEN_TITLE.exec(url.search)?.[1]
-      : url.pathname.slice(CHART_PATH.length).replace(TRAILING_SLASHES, '');
+      : url.pathname.slice(CHART_PATH.length);
 
-  return written ? titleNamed(written) : null;
+  // Trailing slashes come off the address rather than off the title: they are
+  // the site's, not the chart's, and a chart reached with one and without it
+  // is the same chart.
+  //
+  // Off both spellings and not just the path. The form the site submits
+  // writes a slash as `%2F`, so a bare one at the end of a parameter is the
+  // address's in the way it is in a path — and stripping it in one place only
+  // is how a chart comes to have two names, which is the whole of what this
+  // function is for. It has to happen before the escapes are read, too: taken
+  // off afterwards it would take a real slash with it, and `/wiki/Foo%2F`
+  // names a chart whose title ends in one.
+  const title = written?.replace(TRAILING_SLASHES, '');
+
+  return title ? titleNamed(title) : null;
 }
 
 /**
@@ -448,14 +455,22 @@ export const chordwiki: SiteAdapter = {
   },
 
   transposeOffset(doc) {
-    // The site's control, and not whichever one the page holds most of. What
-    // follows it is the chart body, and a chart body is written by whoever
-    // wrote the chart — so a control put there is one reader's text, and
-    // taking it would let a chart shift the key a reader had set by hand to
-    // somewhere the chart is not. The head is out of reach here in a way it
-    // is not for an address, the control being part of the page proper, so
-    // the site's is the first rather than the one in a trusted place.
-    const control = doc.querySelector(SELECTORS.transpose);
+    // A control outside the chart body, and the first of those. A chart body
+    // is written by whoever wrote the chart, so a control put there is one
+    // reader's text — and taking it would let a chart shift the key a reader
+    // had set by hand to somewhere the chart is not. The head is out of reach
+    // here in a way it is not for an address, the control being part of the
+    // page proper, so what is asked of it is where it is not.
+    //
+    // Asked that way rather than by taking the first on the page. The site's
+    // own control comes before the chart today, and a page served without one
+    // — another template, a print view, the markup changing — would leave the
+    // first on the page being whatever the chart body holds. Then the reading
+    // that is meant to be closed to a chart is open again, on a page nobody
+    // was looking at.
+    const control = [...doc.querySelectorAll(SELECTORS.transpose)].find(
+      (candidate) => !candidate.closest(SELECTORS.chart),
+    );
 
     // Which option the page arrived with marked, rather than which one the
     // DOM says is selected. The page arrives marked and changing the control

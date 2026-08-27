@@ -370,6 +370,34 @@ describe('how far the chart has been transposed', () => {
     expect(chordwiki.transposeOffset(doc)).toBe(0);
   });
 
+  // Told apart by where it is and not by which came first. A page carrying no
+  // control of the site's — another template, a print view, the markup
+  // changing — would otherwise leave the first on the page being whatever the
+  // chart body holds, and the reading meant to be closed to a chart would be
+  // open again on a page nobody was looking at.
+  it('says nothing where the only control is one planted in the chart', () => {
+    const doc = parse(`
+      <div class="main">
+        <div id="key"><select name="key"><option value="7" selected>+7</option></select></div>
+      </div>
+    `);
+
+    expect(chordwiki.transposeOffset(doc)).toBeNull();
+  });
+
+  // The same, where the chart body comes first. Neither order is the site's
+  // to promise.
+  it("reads the site's control where the chart body precedes it", () => {
+    const doc = parse(`
+      <div class="main">
+        <div id="key"><select name="key"><option value="7" selected>+7</option></select></div>
+      </div>
+      <div id="key"><select name="key"><option value="-5" selected>-5</option></select></div>
+    `);
+
+    expect(chordwiki.transposeOffset(doc)).toBe(-5);
+  });
+
   // A control that marks none of its options has not said how far the chart
   // in front of it has been transposed. Its first option is what it would
   // send, which is a different question — and on this site a different
@@ -589,7 +617,12 @@ describe('what a chart is called', () => {
       ['a plus for a space', 'Rock+Roll', 'Rock+Roll', 'chart:Rock Roll'],
       ['an ampersand', 'Rock%20%26%20Roll', 'Rock+%26+Roll', 'chart:Rock & Roll'],
       ['a stray percent sign', '100%', '100%', 'chart:100%'],
-      ['a trailing slash', 'Rock%20Roll/', 'Rock+Roll', 'chart:Rock Roll'],
+      // A slash on the end of either spelling, which is the address's. Written
+      // out on both sides on purpose: with one side spelling the title
+      // without it, the pair passes whether or not the other side takes it
+      // off, and stripping it in one place only is how a chart gets two
+      // names.
+      ['a trailing slash', 'Rock%20Roll/', 'Rock+Roll/', 'chart:Rock Roll'],
       // Which is the address's and not the title's. Taken off the title
       // instead, a chart whose name really does end in one would lose it here
       // and keep it at the other address.

@@ -66,6 +66,21 @@ among others — and being told about those is being told about the site rather
 than about this project. Formatting them would obscure what they reproduce.
 `transposition-pairs.ts` is ours and is linted like anything else.
 
+### What fixtures cannot tell you
+
+A fixture reproduces the structure this project believes a site has. It cannot
+say whether the site still has it. Every selector in a site adapter is
+therefore unverified against the live site as far as CI is concerned: the day
+a class name changes, the fixtures keep passing and the extension quietly does
+nothing on every page.
+
+Nothing in this repository can close that, since closing it would mean
+committing a copy of a real page. What is asked instead is that anyone
+changing a selector — or reviewing a change to one — check it against a page
+saved locally and kept out of the repository, and say in the pull request
+which pages were checked and what they showed. A claim about a selector is
+worth what the check behind it was worth.
+
 ### Non-English test data
 
 As an explicit exception to the English-only rule, test data may hold real
