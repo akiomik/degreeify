@@ -158,6 +158,9 @@ function isChartAddress(url: URL): boolean {
  */
 const QUERY_SEPARATOR = /&/g;
 
+/** The plus a form writes a space as. */
+const PLUS = /\+/gu;
+
 /** What a percent-escape that is not text decodes to, whatever it was. */
 const REPLACEMENT_CHARACTER = '\uFFFD';
 
@@ -195,9 +198,33 @@ function formDecoded(text: string): string {
 
   // Every escape that is not text decodes to the same character, so two
   // charts written in some encoding this is not would come back as one name
-  // and share one chart's settings. Where that happens the address is handed
-  // back as it was written: unreadable, but still telling two charts apart.
-  return decoded.includes(REPLACEMENT_CHARACTER) ? text : decoded;
+  // and share one chart's settings. Where that happens the title is kept
+  // unread — but spelled one way, since the two places it can sit do not
+  // spell it the same and handing back what was written would name one chart
+  // twice.
+  return decoded.includes(REPLACEMENT_CHARACTER) ? oneSpelling(text) : decoded;
+}
+
+/** An escape, which is kept as it stands rather than read. */
+const ESCAPE = /(%[0-9A-Fa-f]{2})/u;
+
+/**
+ * A title written the one way, for a title that could not be read.
+ *
+ * The same title is written differently in the two places it can sit — a
+ * space is `%20` in a path and a plus in a parameter, an ampersand stands as
+ * itself in one and is escaped in the other — and unread, those differences
+ * are all that would be left to compare. What comes back here is every
+ * escape as it stands, upper-cased, and everything else escaped: two
+ * addresses for one chart arrive at one spelling, and two charts still do
+ * not.
+ */
+function oneSpelling(text: string): string {
+  return text
+    .replace(PLUS, ' ')
+    .split(ESCAPE)
+    .map((part, index) => (index % 2 ? part.toUpperCase() : encodeURIComponent(part)))
+    .join('');
 }
 
 /**

@@ -51,7 +51,15 @@ export const SELECTORS = {
   /** The option that control arrived with, which is how far the chart has been transposed. */
   transposeSelected: `${TRANSPOSE} option[selected]`,
 
-  /** The address the site considers this chart to live at, transposed or not. */
-  canonical: 'link[rel="canonical"]',
+  /**
+   * The address the site considers this chart to live at, transposed or not.
+   *
+   * A `rel` is a list of words and the words are not case-sensitive, so
+   * `Canonical` and `canonical alternate` are both this link. Asking for the
+   * exact text misses them, and missing this link is not nothing: the name a
+   * chart is given falls back to the address it was reached at, which moves
+   * when the chart is transposed.
+   */
+  canonical: 'link[rel~="canonical" i]',
   openGraphUrl: 'meta[property="og:url"]',
 } as const;

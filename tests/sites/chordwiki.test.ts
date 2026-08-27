@@ -481,9 +481,15 @@ describe('what a chart is called', () => {
       ['a slash of its own', 'Rock%20Roll%2F', 'Rock+Roll%2F', 'Rock Roll/'],
       // An escape that is not text decodes to the same character whatever it
       // was, so decoding one is how two charts come to share a name. Where
-      // that happens the address is kept as written instead: unreadable, and
-      // still two charts.
-      ['an escape kept as written', '%C6%FC', '%C6%FC', '%C6%FC'],
+      // that happens the title is kept unread instead: unreadable, and still
+      // two charts.
+      ['an escape kept unread', '%C6%FC', '%C6%FC', '%C6%FC'],
+      // And kept unread the one way. The two places a title sits do not
+      // spell it the same, so what is left when it cannot be read is not the
+      // same either — a space and an ampersand are written one way in a path
+      // and another in a parameter.
+      ['an unread title with a space', '%C6%FC%20Rock', '%C6%FC+Rock', '%C6%FC%20Rock'],
+      ['an unread title with an ampersand', 'Rock&%FC', 'Rock%26%FC', 'Rock%26%FC'],
     ];
 
     it.each(encodings)('reads %s the same in either place', (_what, path, query, title) => {
@@ -499,6 +505,26 @@ describe('what a chart is called', () => {
         named(bare, 'https://ja.chordwiki.org/wiki/Rock%20%26%20Roll'),
       );
     });
+
+    // A `rel` is a list of words and the words are not case-sensitive, so
+    // these are all this link. Missing one is not nothing: the name falls
+    // back to the address the chart was reached at, which moves when the
+    // chart is transposed — the drift this whole section is about.
+    it.each(['canonical', 'Canonical', 'CANONICAL', 'canonical alternate', 'alternate canonical'])(
+      'takes the site at its word where the link says rel=%j',
+      (rel) => {
+        const page = parse(`
+          <html>
+            <head><link rel="${rel}" href="https://ja.chordwiki.org/wiki/Rock%20Roll" /></head>
+            <body><div class="main"></div></body>
+          </html>
+        `);
+
+        expect(named(page, 'https://ja.chordwiki.org/wiki/Somewhere%20Else')).toBe(
+          'chordwiki:chart:Rock Roll',
+        );
+      },
+    );
 
     // Including two whose addresses cannot be read. Decoding them would make
     // them one name and one set of settings.
