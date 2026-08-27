@@ -116,8 +116,20 @@ describe('reading a chart', () => {
     expect(items.filter((item) => item.kind === 'chord')).toHaveLength(11);
   });
 
-  // A chord slot outside the chart is not part of the chart. Nothing on the
-  // site puts one there today, which is exactly when a guard is cheap.
+  // A chord slot outside the chart is not part of the chart, and a page with
+  // no chart in it is not a chart. Nothing on the site puts a slot outside
+  // one today, which is exactly when a guard is cheap: the day the wrapper is
+  // renamed, reading the page at large would turn a chord chart's worth of
+  // rewriting loose on whatever else is on it.
+  it('reads nothing at all from a page with no chart in it', () => {
+    const outside = parse(
+      '<div class="related"><p class="line"><span class="chord">Bb</span></p></div>',
+    );
+
+    expect(chordwiki.isChordPage(outside)).toBe(false);
+    expect(chordwiki.readChart(outside)).toEqual([]);
+  });
+
   it('reads only what is inside the chart', () => {
     const doc = parse(`
       <div class="related"><p class="line"><span class="chord">Bb</span></p></div>
@@ -128,6 +140,18 @@ describe('reading a chart', () => {
     `);
 
     expect(chordsOf(chordwiki.readChart(doc))).toEqual(['C']);
+  });
+
+  // What a slot says, rather than how the page happens to have laid it out.
+  // The element is what gets rewritten and what the original is restored
+  // from; this is for reading, and a caller comparing it against something
+  // should not have to know about the site's indentation.
+  it('gives a slot without the whitespace around it', () => {
+    const doc = parse(
+      '<div class="main"><p class="line"><span class="chord">\n  Am7\n</span></p></div>',
+    );
+
+    expect(chordsOf(chordwiki.readChart(doc))).toEqual(['Am7']);
   });
 
   it('hands back the element each chord sits in, which is what gets rewritten', () => {
@@ -164,15 +188,31 @@ describe('the stated key', () => {
   // The three shapes are the site's, but the case of the words in them is
   // not something to depend on. Reading one of them regardless of case and
   // the others only as written would leave a shouted line naming nothing.
+  // The words are read whatever case they are in. The key itself is not: a
+  // note is written in capitals, and `key: c` naming nothing is the note
+  // reader's answer rather than an oversight here.
   it.each([
     ['Key: C', 'C'],
-    ['key: c', null],
     ['KEY: C', 'C'],
+    ['key: C', 'C'],
+    ['key: c', null],
     ['Original Key: C / Play: F#', 'F#'],
     ['ORIGINAL KEY: C / PLAY: F#', 'F#'],
     ['Original Key: Am / Capo: 5 / Play: Em', 'Em'],
     ['ORIGINAL KEY: AM / CAPO: 5 / PLAY: EM', null],
-  ])('reads %j as %s however it is capitalised', (line, expected) => {
+  ])('reads the words of %j whatever case they are in, giving %s', (line, expected) => {
+    const doc = parse(`<div class="main"><p class="key">${line}</p></div>`);
+    expect(keysOf(chordwiki.readChart(doc))).toEqual([expected]);
+  });
+
+  // Each word has to begin where it says it does. A line ending `Display:`
+  // holds `play:`, and one beginning `Monkey:` holds `key:` — either read as
+  // what it is not takes a section of the chart with it, since a key that
+  // could not be read stops the naming until the chart states another.
+  it.each([
+    ['Key: C / Display: Foo', 'C'],
+    ['Monkey: C', null],
+  ])('does not find a word inside another in %j', (line, expected) => {
     const doc = parse(`<div class="main"><p class="key">${line}</p></div>`);
     expect(keysOf(chordwiki.readChart(doc))).toEqual([expected]);
   });
@@ -190,8 +230,17 @@ describe('how far the chart has been transposed', () => {
     expect(chordwiki.transposeOffset(load(fixture))).toBe(offset);
   });
 
-  it('reads nothing as nothing', () => {
-    expect(chordwiki.transposeOffset(parse('<div class="main"></div>'))).toBe(0);
+  // Not knowing and knowing it is untransposed are different answers, and a
+  // key kept against the chart untransposed is shifted by this to be shown:
+  // shifting by nothing because nothing was known would show a reader a key
+  // the chart is not in.
+  it('says nothing where the page says nothing', () => {
+    expect(chordwiki.transposeOffset(parse('<div class="main"></div>'))).toBeNull();
+    expect(
+      chordwiki.transposeOffset(
+        parse('<div id="key"><select name="key"><option selected>+6</option></select></div>'),
+      ),
+    ).toBeNull();
   });
 });
 
@@ -214,19 +263,34 @@ describe('what a chart is called', () => {
     );
   });
 
-  // The fallback has to keep the same promise the stated address does. What
-  // is in the bar for a transposed chart says how it is being shown as well
-  // as which chart it is, and only the second of those belongs in a name.
+  // The fallback has to keep the same promise the stated address does, and
+  // the two addresses a chart is reachable at put its title in different
+  // places — in the path, or in a parameter of the one a reader is sent to on
+  // transposing. Comparing two transposed addresses against each other would
+  // have missed that: they agree with one another and not with the chart.
   it('does not move on the fallback either', () => {
     const page = parse('<div class="main"></div>');
-    const written = new URL('https://ja.chordwiki.org/wiki.cgi?c=view&t=Test%20Song&key=0');
-    const transposed = new URL(
+    const addresses = [
+      'https://ja.chordwiki.org/wiki/Test%20Song',
+      'https://ja.chordwiki.org/wiki.cgi?c=view&t=Test%20Song',
       'https://ja.chordwiki.org/wiki.cgi?c=view&t=Test%20Song&key=6&symbol=flat',
-    );
+      'https://ja.chordwiki.org/wiki/Test%20Song#verse',
+    ];
 
-    expect(chordwiki.pageId(page, transposed)).toBe(chordwiki.pageId(page, written));
-    expect(chordwiki.pageId(page, transposed)).toBe(
-      'https://ja.chordwiki.org/wiki.cgi?c=view&t=Test+Song',
+    for (const href of addresses) {
+      expect(chordwiki.pageId(page, new URL(href))).toBe(
+        'https://ja.chordwiki.org/wiki/Test%20Song',
+      );
+    }
+  });
+
+  // A page can put anything it likes in that link, and building an address
+  // out of it throws where it is not one. In a content script an uncaught
+  // throw takes every chord on the page with it.
+  it('falls through rather than throwing on an address that is not one', () => {
+    const broken = parse('<link rel="canonical" href="https://[" /><div class="main"></div>');
+    expect(chordwiki.pageId(broken, new URL('https://ja.chordwiki.org/wiki/Test'))).toBe(
+      'https://ja.chordwiki.org/wiki/Test',
     );
   });
 });

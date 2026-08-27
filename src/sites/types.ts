@@ -43,7 +43,15 @@ export interface SiteAdapter {
    */
   isChordPage(doc: Document): boolean;
 
-  readChart(root: ParentNode): ChartItem[];
+  /**
+   * The chart, or nothing where the page has none.
+   *
+   * A whole document, rather than the part of one the chart is in: where that
+   * part is depends on the site, so finding it is the adapter's to do — and
+   * an adapter that cannot find it must say so rather than read the page at
+   * large, which is a chord chart's worth of damage to whatever else is on it.
+   */
+  readChart(doc: Document): ChartItem[];
 
   /**
    * A stable name for the chart, for settings to be saved against.
@@ -57,7 +65,13 @@ export interface SiteAdapter {
 
   /**
    * How far the page has transposed the chart from what it was written in,
-   * in semitones. Zero when it has not.
+   * in semitones — zero when it has not, and nothing when the page does not
+   * say.
+   *
+   * Those last two are not the same answer and must not be given as one. A
+   * key a reader set by hand is kept against the chart untransposed and
+   * shifted by this to be shown, and shifting by nothing because nothing was
+   * known would show them a key the chart is not in.
    */
-  transposeOffset(doc: Document): number;
+  transposeOffset(doc: Document): number | null;
 }
