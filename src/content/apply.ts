@@ -60,12 +60,17 @@ export interface ApplyReport {
   /**
    * The key the chart was read in, and where that key came from.
    *
-   * The first of them where the chart states its own, which is what a person
-   * looking at the page is being shown; the key it was given or the key its
-   * chords point at where it states none. Null where the chart could not be
-   * read in any key, which is the answer a caller has to be able to tell from
-   * "read in C" — a chart showing no degree names and a chart showing them
-   * look different to a reader and identical to an extension that is off.
+   * The first key the chart states that could be read — which is not always
+   * the first it states, and is deliberately the one reported: a chart whose
+   * opening declaration is unreadable and whose second says `G` was read in
+   * G, and saying so is more use than naming a line nothing could be done
+   * with. Where the chart states no key this is the key it was given or the
+   * key its chords point at.
+   *
+   * Null where the chart could not be read in any key, which is the answer a
+   * caller has to be able to tell from "read in C" — a chart showing no
+   * degree names and a chart showing them look different to a reader and
+   * identical to an extension that is off.
    */
   readonly key: Key | null;
   readonly source: KeySource | null;
@@ -135,7 +140,7 @@ export function apply(
   let unreadKeys = 0;
   let statedKeys = 0;
 
-  let current = opening.opening;
+  let current = opening.follows ? null : opening.key;
 
   for (const item of chart) {
     if (item.kind === 'key') {
@@ -214,34 +219,38 @@ function nameOf(
 function openingKey(chart: readonly ChartItem[], given: Key | null | undefined): Reading {
   const stated = chart.filter((item) => item.kind === 'key');
   const read = stated.find((item) => item.key)?.key;
-  if (read) return { key: read, source: 'page', opening: null, follows: true };
+  if (read) return { key: read, source: 'page', follows: true };
 
-  if (stated.length > 1) return { key: null, source: null, opening: null, follows: true };
-  if (given) return { key: given, source: 'manual', opening: given, follows: false };
+  if (stated.length > 1) return { key: null, source: null, follows: true };
+  if (given) return { key: given, source: 'manual', follows: false };
 
   const guess = inferKey(chordsIn(chart));
   const inferred = guess ? guess.key : null;
-  return {
-    key: inferred,
-    source: inferred ? 'inferred' : null,
-    opening: inferred,
-    follows: inferred === null,
-  };
+  return { key: inferred, source: inferred ? 'inferred' : null, follows: inferred === null };
 }
 
 interface Reading {
   /** What the chart is in, for a caller with somewhere to show it. */
   readonly key: Key | null;
   readonly source: KeySource | null;
-  /** What the fold starts on, which is nothing where the chart states its own. */
-  readonly opening: Key | null;
   /**
    * Whether the chart's own key lines are what the reading follows.
    *
-   * False only where a key from outside is standing in for the one line the
-   * chart states and this could not read. That line is the same line the key
-   * is standing in for, so letting it clear the reading would take the given
-   * key away at the first thing it was given for.
+   * True is the ordinary case and says two things at once: the chart's
+   * statements move the reading, and nothing is being read until the first of
+   * them — a chord above the chart's first key line is one the chart has said
+   * nothing about yet.
+   *
+   * False only where a key from outside is standing in for a chart that says
+   * nothing this can use. Then there is nothing to wait for and nothing to
+   * follow: the key covers the chart from its first slot, and the one line
+   * the chart does state is the line it is standing in for, so letting that
+   * line clear the reading would take the key away at the first thing it was
+   * given for.
+   *
+   * What the fold starts on follows from this rather than being carried
+   * alongside it. Two fields that have to agree are two fields that can stop
+   * agreeing, and the day this grows a fifth case is the day they would.
    */
   readonly follows: boolean;
 }

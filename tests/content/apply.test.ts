@@ -156,7 +156,7 @@ describe('applying degree names', () => {
   });
 });
 
-describe('a key the chart states and this cannot read', () => {
+describe('one of several key lines this cannot read', () => {
   /** A chart whose second key line says something that is not a key. */
   const unreadable = () =>
     parse(`
@@ -184,7 +184,7 @@ describe('a key the chart states and this cannot read', () => {
   });
 });
 
-describe('a key line the chart states and this cannot read', () => {
+describe('the only key line a chart states, and this cannot read it', () => {
   /** A chart whose only key line says something that is not a key. */
   const unreadableOnly = () =>
     parse(`
@@ -236,6 +236,37 @@ describe('a key line the chart states and this cannot read', () => {
   });
 });
 
+// A key given from outside is a claim about the whole page; a key the chart
+// states is a claim from where it is stated onwards. So the two reach a chord
+// written above the first key line differently, and that difference is the
+// reason the reading has to know which of them it is following.
+describe("a chord above the chart's first key line", () => {
+  const aboveTheKeyLine = (line: string) =>
+    parse(`
+      <div class="main">
+        <p class="line"><span class="chord">G7</span></p>
+        <p class="key">${line}</p>
+        <p class="line"><span class="chord">C</span></p>
+      </div>
+    `);
+
+  it('is named where a key given from outside is standing in for the chart', () => {
+    const doc = aboveTheKeyLine('Key: 未定');
+    const report = apply(doc, chordwiki, { key: key('C') });
+
+    expect(shown(doc)).toEqual(['V7', 'I']);
+    expect(report.source).toBe('manual');
+  });
+
+  it('is left alone where the chart states a key of its own', () => {
+    const doc = aboveTheKeyLine('Key: C');
+    const report = apply(doc, chordwiki, { key: key('C') });
+
+    expect(shown(doc)).toEqual(['G7', 'I']);
+    expect(report.source).toBe('page');
+  });
+});
+
 describe('the key the chart was read in', () => {
   it('is the one the chart states, said to have come from the page', () => {
     const { report } = run('chordwiki-basic');
@@ -250,6 +281,25 @@ describe('the key the chart was read in', () => {
     const { report } = run('chordwiki-modulation');
 
     expect(report.key && formatKey(report.key)).toBe('Gm');
+  });
+
+  // Not the first it states. A chart whose opening declaration is unreadable
+  // and whose second says `G` was read in G, and saying so is more use than
+  // naming a line nothing could be done with.
+  it('is the first one that could be read', () => {
+    const doc = parse(`
+      <div class="main">
+        <p class="key">Key: 未定</p>
+        <p class="line"><span class="chord">C</span></p>
+        <p class="key">Key: G</p>
+        <p class="line"><span class="chord">C</span></p>
+      </div>
+    `);
+    const report = apply(doc, chordwiki);
+
+    expect(shown(doc)).toEqual(['C', 'IV']);
+    expect(report.key && formatKey(report.key)).toBe('G');
+    expect(report.source).toBe('page');
   });
 
   it('is nothing where the chart could not be read in any key', () => {
