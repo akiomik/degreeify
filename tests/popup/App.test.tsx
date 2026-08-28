@@ -534,6 +534,40 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // A record that arrives on its own is a record. Asking again for one the
+  // popup is already showing is round trips whose answers it throws away —
+  // `fetchRecord` prefers what arrived — and the read failing is not the same
+  // as the popup missing something.
+  it('stops asking for a record the watcher brought it', async () => {
+    await onATab(ADDRESS);
+
+    const real = browser.storage.local.get.bind(browser.storage.local);
+    const key = recordKey(ADDRESS);
+    if (!key) throw new Error('that is an address');
+
+    let broken = true;
+    const get = vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+      if (broken && query === key) throw new Error('context invalidated');
+      return real(query);
+    }) as never);
+
+    const { root, dispose } = await open();
+    broken = false;
+
+    // Written the way a content script writes it, so the popup hears about it
+    // rather than reading it.
+    await browser.storage.local.set({ [key]: detection() });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(root.textContent).toContain('C — from the chart');
+
+    const asked = get.mock.calls.filter(([query]) => query === key).length;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(get.mock.calls.filter(([query]) => query === key)).toHaveLength(asked);
+    dispose();
+  });
+
   // And is not asked again where there is nothing to ask about. A page that
   // is not a chart has no record and never will.
   it('does not keep asking for a record where the read said there is none', async () => {

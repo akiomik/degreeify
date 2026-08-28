@@ -176,7 +176,17 @@ function App() {
   const place = (key: string) => {
     where = key;
     lost = true;
-    listen(() => watchDetection(key, setDetection));
+
+    listen(() =>
+      watchDetection(key, (found) => {
+        // Nothing missing any more, whatever became of the read. A record
+        // that arrives on its own is a record, and asking again for one the
+        // popup is already showing is three round trips whose answers it
+        // would throw away.
+        lost = false;
+        setDetection(found);
+      }),
+    );
   };
 
   /**
