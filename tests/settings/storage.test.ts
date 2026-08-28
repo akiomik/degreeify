@@ -188,6 +188,19 @@ describe('the settings and the stamps written together', () => {
     expect(await loadStamps()).toEqual({ one: 9, two: 2 });
   });
 
+  // Failing to forget one is not failing to save. The caller tells a reader
+  // that nothing was kept, which would be untrue: the settings are written,
+  // the page is already following them, and what is left behind is a record
+  // nothing reads that the next write clears.
+  it('are saved even where the stamps that have gone cannot be removed', async () => {
+    await saveKept(DEFAULT_SETTINGS, { one: 1, two: 2 }, {});
+    vi.spyOn(browser.storage.local, 'remove').mockRejectedValue(new Error('quota exceeded'));
+
+    await saveKept({ ...DEFAULT_SETTINGS, enabled: false }, { one: 1 }, { one: 1, two: 2 });
+
+    expect((await loadSettings()).enabled).toBe(false);
+  });
+
   // A stamp for a chart that has no key left is a record nothing reads.
   it('forget a stamp whose key has gone', async () => {
     await saveKept(DEFAULT_SETTINGS, { one: 1, two: 2 }, {});
@@ -216,6 +229,25 @@ describe('reading a setting this build has no name for', () => {
     expect(settings.enabled).toBe(false);
     expect(settings.notation).toBe(DEFAULT_SETTINGS.notation);
     expect(settings.spelling).toBe(DEFAULT_SETTINGS.spelling);
+  });
+
+  // Reading and being told about a change are the same question asked twice.
+  // An extension updated under an open page leaves the old content script
+  // listening, and the new popup can write a value that build has no name
+  // for — handed straight on, it throws where naming the chart happens and
+  // the page falls back to chord names with nothing to say why.
+  it('falls back the same way when it is told about a change', async () => {
+    const seen = vi.fn();
+    const stop = watchSettings(seen);
+
+    await browser.storage.local.set({
+      settings: { ...DEFAULT_SETTINGS, notation: 'roman-numerals-in-a-circle' },
+    });
+
+    expect(seen).toHaveBeenCalledWith(
+      expect.objectContaining({ notation: DEFAULT_SETTINGS.notation }),
+    );
+    stop();
   });
 
   it('keeps a setting it does have a name for', async () => {

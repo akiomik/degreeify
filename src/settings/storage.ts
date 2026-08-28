@@ -194,22 +194,38 @@ export async function saveKept(
     .filter((page) => !(page in stamps))
     .map((page) => `${STAMP_PREFIX}${page}`);
 
-  if (gone.length > 0) await browser.storage.local.remove(gone);
+  // And a failure to remove them is not a failure. The caller shows a reader
+  // that nothing was kept, which would be untrue: the settings are written,
+  // the page is already following them, and what is left behind is a record
+  // nothing reads that the next write clears.
+  if (gone.length > 0) await browser.storage.local.remove(gone).catch(() => {});
 }
 
 export async function loadSettings(): Promise<Settings> {
-  const stored = (await browser.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY];
+  return settingsIn((await browser.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY]);
+}
+
+/**
+ * What is stored, read as settings.
+ *
+ * Field by field, taking what is there only where it is one of the things
+ * that field can be. A notation is used to choose a table of numerals, so one
+ * this build has never heard of is not a setting it disagrees with — it is an
+ * index into nothing, and the throw comes out of naming the chart.
+ *
+ * The likeliest way to get one is not corruption. Adding a third notation is
+ * not a change of shape, so the version would not obviously move, and an
+ * older build or a second profile would then read a value it cannot use.
+ * Falling back a field at a time keeps the rest of a reader's settings.
+ *
+ * Every way in goes through here. Reading and being told about a change are
+ * the same question asked twice, and a build whose reader is guarded and
+ * whose listener is not is one where an extension updated under an open page
+ * hands that page the value its own read would have turned away.
+ */
+function settingsIn(stored: unknown): Settings {
   if (!isSettings(stored)) return DEFAULT_SETTINGS;
 
-  // Field by field, taking what is stored only where it is one of the things
-  // that field can be. A notation is used to choose a table of numerals, so
-  // one this build has never heard of is not a setting it disagrees with —
-  // it is an index into nothing, and the throw comes out of naming the chart.
-  //
-  // The likeliest way to get one is not corruption. Adding a third notation
-  // is not a change of shape, so the version would not obviously move, and an
-  // older build or a second profile would then read a value it cannot use.
-  // Falling back a field at a time keeps the rest of a reader's settings.
   return {
     ...DEFAULT_SETTINGS,
     ...stored,
@@ -241,9 +257,7 @@ export function watchSettings(onChange: (settings: Settings) => void): () => voi
     const change = changes[SETTINGS_KEY];
     if (!change) return;
 
-    onChange(
-      isSettings(change.newValue) ? { ...DEFAULT_SETTINGS, ...change.newValue } : DEFAULT_SETTINGS,
-    );
+    onChange(settingsIn(change.newValue));
   };
 
   browser.storage.onChanged.addListener(listener);
