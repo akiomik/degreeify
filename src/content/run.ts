@@ -181,7 +181,9 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
  * would otherwise be a change every open tab hears about.
  */
 function matters(settings: Settings, pageId: string): string {
-  const kept = settings.keyOverrides[pageId];
+  const kept = Object.hasOwn(settings.keyOverrides, pageId)
+    ? settings.keyOverrides[pageId]
+    : undefined;
 
   return JSON.stringify({
     enabled: settings.enabled,
@@ -257,8 +259,13 @@ async function touchOverride(pageId: string): Promise<void> {
   // stamps a key while a reader is changing something in the popup, and a
   // write of everything from either would put back what the other had just
   // dropped — one key each is the only arrangement where that cannot happen.
+  // How far apart they are, and not how much later now is. A stamp written
+  // while the clock was ahead of itself is in the future once the clock is
+  // put right, and a difference read as a small one would make that key fresh
+  // for good — never re-stamped, never the oldest, and never dropped, while
+  // keys the reader actually uses go around it.
   const now = Date.now();
-  if (now - (await loadStamp(pageId)) < USED_AT_GRANULARITY) return;
+  if (Math.abs(now - (await loadStamp(pageId))) < USED_AT_GRANULARITY) return;
 
   await saveStamp(pageId, now);
 }

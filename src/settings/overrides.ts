@@ -45,7 +45,13 @@ export function usableOffset(offset: number | null | undefined): offset is numbe
  * and throws where the guards below are written to return.
  */
 export function overrideFor(settings: Settings, pageId: string, offset: number | null): Key | null {
-  const stored = settings.keyOverrides[pageId];
+  // Asked of the object itself. `in` would find a `constructor` or a
+  // `toString` on any object, and what is looked up here is a chart's name —
+  // which the adapter prefixes today and need not tomorrow.
+  const stored = Object.hasOwn(settings.keyOverrides, pageId)
+    ? settings.keyOverrides[pageId]
+    : undefined;
+
   if (!stored || !usableOffset(offset)) return null;
 
   // Read rather than trusted, and asked about before it is read. What is in
@@ -124,7 +130,7 @@ export function withoutOverride({ settings, stamps }: Kept, pageId: string): Kep
  */
 function kept(settings: Settings, overrides: Record<string, KeyOverride>, stamps: KeyStamps): Kept {
   const surviving = prunedOverrides(overrides, stamps, MOST_OVERRIDES);
-  const theirs = Object.entries(stamps).filter(([pageId]) => pageId in surviving);
+  const theirs = Object.entries(stamps).filter(([pageId]) => Object.hasOwn(surviving, pageId));
 
   return {
     settings: { ...settings, keyOverrides: surviving },

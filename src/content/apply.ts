@@ -92,12 +92,13 @@ export interface ApplyReport {
   /**
    * The key the chart was read in, and where that key came from.
    *
-   * The first key the chart states that could be read — which is not always
-   * the first it states, and is deliberately the one reported: a chart whose
-   * opening declaration is unreadable and whose second says `G` was read in
-   * G, and saying so is more use than naming a line nothing could be done
-   * with. Where the chart states no key this is the key it was given or the
-   * key its chords point at.
+   * A key given from outside where one was taken — which is wherever the
+   * chart states at most one, whether or not that one could be read.
+   * Otherwise the first key the chart states that could be read, which is not
+   * always the first it states: a chart whose opening declaration is
+   * unreadable and whose second says `G` was read in G, and saying so is more
+   * use than naming a line nothing could be done with. Failing both, the key
+   * its chords point at.
    *
    * Null where the chart could not be read in any key, which is the answer a
    * caller has to be able to tell from "read in C" — a chart showing no
@@ -291,12 +292,12 @@ interface Reading {
    * them — a chord above the chart's first key line is one the chart has said
    * nothing about yet.
    *
-   * False only where a key from outside is standing in for a chart that says
-   * nothing this can use. Then there is nothing to wait for and nothing to
-   * follow: the key covers the chart from its first slot, and the one line
-   * the chart does state is the line it is standing in for, so letting that
-   * line clear the reading would take the key away at the first thing it was
-   * given for.
+   * False wherever a key from outside was taken, which is wherever the chart
+   * states at most one of its own. Then there is nothing to wait for and
+   * nothing to follow: the key covers the chart from its first slot, and the
+   * one line the chart does state is the line it was taken over, so letting
+   * that line move the reading would take the key away at the first thing it
+   * was given for.
    *
    * What the fold starts on follows from this rather than being carried
    * alongside it. Two fields that have to agree are two fields that can stop

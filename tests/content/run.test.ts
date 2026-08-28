@@ -519,6 +519,20 @@ describe('a key set for the chart', () => {
   // The stamp decides which keys are dropped when there are too many, so it
   // has to be written — but not on every chart a reader opens, which would be
   // a storage write for every page they look at.
+  // A stamp written while the clock was ahead of itself is in the future once
+  // the clock is put right. Read as "how much later is now", that key would be
+  // fresh for good — never re-stamped, never the oldest, never dropped, while
+  // keys the reader actually uses go around it.
+  it('is stamped again where the stamp is in the future', async () => {
+    await saveSettings(withOverride(EMPTY, PAGE, key('G'), 0, 1).settings);
+    const ahead = Date.now() + 25 * 60 * 60 * 1000;
+    await saveStamp(PAGE, ahead);
+
+    (await start(load('chordwiki-basic')))();
+
+    expect(await loadStamp(PAGE)).toBeLessThan(ahead);
+  });
+
   it('is stamped as used no more than once a day', async () => {
     const doc = load('chordwiki-basic');
     const yesterday = Date.now() - 25 * 60 * 60 * 1000;

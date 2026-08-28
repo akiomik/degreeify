@@ -343,14 +343,17 @@ describe('what was found on a page', () => {
   // matters and the oldest by the only one there is: a record is written
   // once, so a chart left open while the reader browses has a stamp that
   // stops moving.
-  it('keeps the one it is asked to keep', async () => {
+  it('keeps the one it is asked to keep, and counts it', async () => {
     await writeDetection('detected:open', detection(1));
     await writeDetection('detected:newer', detection(2));
 
     await pruneDetections(1, 'detected:open');
 
+    // Counted as the newest rather than set aside: taken out of the reckoning
+    // afterwards it would keep its place in the count as well as its record,
+    // and the store would settle one above the number it is held to.
     expect(await readDetection('detected:open')).not.toBeNull();
-    expect(await readDetection('detected:newer')).not.toBeNull();
+    expect(await readDetection('detected:newer')).toBeNull();
   });
 
   // The settings live in the same storage area and are not a page record.

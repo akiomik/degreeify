@@ -164,6 +164,21 @@ describe('setting a key from what is on the screen', () => {
     expect(Object.keys(kept.settings.keyOverrides)).toHaveLength(MOST_OVERRIDES);
   });
 
+  // Asked of the objects themselves. `in` finds a `constructor` or a
+  // `toString` on any object, and what is looked up here is a chart's name —
+  // prefixed by the adapter today and not necessarily tomorrow.
+  it.each(['constructor', 'toString', 'valueOf'])(
+    'forgets a stamp for a chart called %s',
+    (name) => {
+      const left = withoutOverride(
+        { settings: DEFAULT_SETTINGS, stamps: { [name]: 1 } },
+        'elsewhere',
+      );
+
+      expect(left.stamps).toEqual({});
+    },
+  );
+
   // A stamp outliving the key it was about is a record that grows and is
   // never read.
   it('forgets when a key was used once the key is gone', () => {

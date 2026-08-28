@@ -344,20 +344,25 @@ export async function pruneDetections(most = MOST_DETECTIONS, keep?: string | nu
   // of the count leaves it in storage for good — a bump to the version would
   // otherwise strand every record ever written while a fresh fifty pile up
   // beside them.
+  // The one the reader is looking at counts as the newest, rather than being
+  // taken out of the reckoning afterwards. It is the newest by every measure
+  // that matters and the oldest by the only one there is — a record is
+  // written once, so a chart left open while the reader browses has a stamp
+  // that stops moving. Taken out afterwards it would keep its place in the
+  // count as well as its record, and the store would settle one record above
+  // the number it is being held to.
   const records = Object.entries(all)
     .filter(([key]) => key.startsWith(DETECTION_PREFIX))
     .map(([key, value]) => ({ key, updatedAt: isDetection(value) ? value.updatedAt : 0 }))
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+    .sort((a, b) => rank(b, keep) - rank(a, keep));
 
-  // Never the one the reader is looking at. It is the newest by every measure
-  // that matters and the oldest by the only one there is — a record is
-  // written once, so a chart left open while the reader browses has a stamp
-  // that stops moving.
-  const stale = records
-    .slice(most)
-    .map((record) => record.key)
-    .filter((key) => key !== keep);
+  const stale = records.slice(most).map((record) => record.key);
   if (stale.length > 0) await browser.storage.local.remove(stale);
+}
+
+/** Where a record sits in the reckoning, with the one being kept above all. */
+function rank(record: { key: string; updatedAt: number }, keep?: string | null): number {
+  return record.key === keep ? Number.POSITIVE_INFINITY : record.updatedAt;
 }
 
 /** How many pages this remembers reading, before the oldest are forgotten. */
