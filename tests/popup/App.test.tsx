@@ -3,6 +3,8 @@ import { render } from 'solid-js/web';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
+import { SPELLING_POLICIES } from '@/core/degree';
+import { NOTATIONS } from '@/core/notation';
 import { parseNote } from '@/core/pitch';
 import App from '@/entrypoints/popup/App';
 import { type Kept, withOverride } from '@/settings/overrides';
@@ -858,6 +860,29 @@ describe('the popup on a chart', () => {
 
     expect(root.textContent).toContain('written by a newer version');
     expect(root.querySelector('input[type="checkbox"]')).toBeNull();
+    dispose();
+  });
+
+  // Offered from the same lists the settings are validated against. Written
+  // out beside the options, the two could drift — as an option a reader can
+  // pick and the settings will not keep.
+  it('offers every notation and spelling the settings will take', async () => {
+    await onATab(ADDRESS, detection());
+    const { root, dispose } = await open();
+
+    const selects = [...root.querySelectorAll('select')];
+    const numerals = selects.at(-2);
+    const spelling = selects.at(-1);
+
+    expect([...(numerals?.options ?? [])].map((option) => option.value)).toEqual([...NOTATIONS]);
+    expect([...(spelling?.options ?? [])].map((option) => option.value)).toEqual([
+      ...SPELLING_POLICIES,
+    ]);
+
+    // And every one of them named, rather than offered as a blank line.
+    for (const option of [...(numerals?.options ?? []), ...(spelling?.options ?? [])]) {
+      expect(option.textContent).not.toBe('');
+    }
     dispose();
   });
 

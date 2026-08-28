@@ -41,9 +41,9 @@ export const SCHEMA_VERSION = 1;
  *
  * Three tries, spread far enough apart to outlast the sort of failure this is
  * for — an extension reloaded under an open page, storage busy behind another
- * tab — and then it stops. Something still failing after five seconds is
- * failing for a reason waiting will not fix, and a page that asks forever is
- * a page that asks forever on every tab a reader has open.
+ * tab — and then it stops. Something still failing five seconds after the try
+ * before it is failing for a reason waiting will not fix, and a page that
+ * asks forever is a page that asks forever on every tab a reader has open.
  *
  * One schedule, because both sides of this are waiting on the same storage
  * for the same reasons, and both say so. Kept in two places that agreed, the

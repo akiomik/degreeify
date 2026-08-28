@@ -9,9 +9,9 @@ import {
   Show,
 } from 'solid-js';
 import { browser } from 'wxt/browser';
-import type { SpellingPolicy } from '@/core/degree';
+import { SPELLING_POLICIES, type SpellingPolicy } from '@/core/degree';
 import { CANONICAL_TONIC, type Key, MOST_STATED_KEYS_TO_OVERRIDE, type Mode } from '@/core/key';
-import type { Notation } from '@/core/notation';
+import { NOTATIONS, type Notation } from '@/core/notation';
 import { formatNote, parseNote } from '@/core/pitch';
 import {
   type Kept,
@@ -40,6 +40,24 @@ import {
   watchSettings,
 } from '@/settings/storage';
 import styles from './App.module.css';
+
+/**
+ * What each stored value is called where a reader chooses it.
+ *
+ * Written out per value rather than beside the options, so that adding one is
+ * a compiler error here until it has a name. The lists themselves are the
+ * ones the settings are validated against, and two lists that could drift
+ * would drift as an option a reader can pick and the settings will not keep.
+ */
+const NOTATION_LABELS: Record<Notation, string> = {
+  'roman-ascii': 'I II III (fixed width)',
+  'roman-unicode': 'Ⅰ Ⅱ Ⅲ (one character)',
+};
+
+const SPELLING_LABELS: Record<SpellingPolicy, string> = {
+  canonical: 'Consistent',
+  source: 'As the chart spells it',
+};
 
 function App() {
   const [settings, setSettings] = createSignal<Settings | null>(null);
@@ -965,8 +983,9 @@ function App() {
                     void changeSetting((settings) => ({ ...settings, notation }));
                   }}
                 >
-                  <option value="roman-ascii">I II III (fixed width)</option>
-                  <option value="roman-unicode">Ⅰ Ⅱ Ⅲ (one character)</option>
+                  <For each={NOTATIONS}>
+                    {(notation) => <option value={notation}>{NOTATION_LABELS[notation]}</option>}
+                  </For>
                 </select>
               </label>
 
@@ -979,8 +998,9 @@ function App() {
                     void changeSetting((settings) => ({ ...settings, spelling }));
                   }}
                 >
-                  <option value="canonical">Consistent</option>
-                  <option value="source">As the chart spells it</option>
+                  <For each={SPELLING_POLICIES}>
+                    {(spelling) => <option value={spelling}>{SPELLING_LABELS[spelling]}</option>}
+                  </For>
                 </select>
               </label>
             </Show>

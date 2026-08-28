@@ -22,7 +22,14 @@ export const ORIGINAL_ATTRIBUTE = 'data-degreeify-original';
 /** The locked width, read by the stylesheet as `var(--degreeify-w, auto)`. */
 export const WIDTH_PROPERTY = '--degreeify-w';
 
-/** Set on the root element so a stylesheet can tell the two states apart. */
+/**
+ * Set on the root element to say which of the two states the page is in.
+ *
+ * Nothing in this extension reads it. It is here for whoever is looking at
+ * the page from outside — a test, a user stylesheet, a reader with the
+ * devtools open — where the alternative is counting rewritten elements to
+ * find out whether anything was rewritten at all.
+ */
 export const STATE_ATTRIBUTE = 'data-degreeify';
 
 export interface ApplyOptions {

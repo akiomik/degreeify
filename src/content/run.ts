@@ -1,5 +1,4 @@
 import { type ApplyReport, apply } from '@/content/apply';
-import type { Key } from '@/core/key';
 import { formatNote } from '@/core/pitch';
 import { overrideFor } from '@/settings/overrides';
 import {
@@ -363,7 +362,7 @@ function paint(
   adapter: SiteAdapter,
   settings: Settings,
   pageId: string,
-): { report: ApplyReport; offset: number | null; key: Key | null; applied: boolean } {
+): { report: ApplyReport; offset: number | null; applied: boolean } {
   const offset = adapter.transposeOffset(doc);
   const key = overrideFor(settings, pageId, offset);
 
@@ -379,7 +378,7 @@ function paint(
     write: settings.enabled,
   });
 
-  return { report, offset, key, applied: settings.enabled };
+  return { report, offset, applied: settings.enabled };
 }
 
 /**
