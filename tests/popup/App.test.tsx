@@ -552,6 +552,73 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // Said in between the placing and the record, a page just placed and being
+  // read is a page the popup is telling its reader it could not find out
+  // about — `place` has it lost until the record answers, which is exactly
+  // the round trip that sentence would speak over.
+  it('does not say it could not find out about a page it has just placed', async () => {
+    await onATab(ADDRESS, detection());
+
+    const real = browser.storage.local.get.bind(browser.storage.local);
+    const key = recordKey(ADDRESS);
+    if (!key) throw new Error('that is an address');
+
+    // The record read is slow, so the moment between placing the page and
+    // hearing about it is one a reader could be looking at.
+    vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+      const value = await real(query);
+      if (query === key) await new Promise((resolve) => setTimeout(resolve, 100));
+      return value;
+    }) as never);
+
+    let broken = true;
+    vi.spyOn(browser.tabs, 'query').mockImplementation((async () => {
+      if (broken) throw new Error('context invalidated');
+      return [{ url: ADDRESS }] as never;
+    }) as never);
+
+    const { root, dispose } = await open();
+    broken = false;
+
+    const seen: boolean[] = [];
+    for (let tick = 0; tick < 40; tick++) {
+      seen.push(root.textContent?.includes('could not find out about this page') ?? false);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    expect(seen.filter(Boolean)).toEqual([]);
+    expect(root.textContent).toContain('C — from the chart');
+    dispose();
+  });
+
+  // The cleanup clears the timer that is waiting, and a try already in flight
+  // has no timer to clear — its continuation would arm the next one on a root
+  // that is not there any more.
+  it('arms no more tries once it has gone', async () => {
+    await onATab(ADDRESS, detection());
+
+    // Slow and then failing, so that closing the popup can land while a try
+    // is in flight rather than while one is waiting.
+    const real = browser.storage.local.get.bind(browser.storage.local);
+    const get = vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+      if (query !== 'settings') return real(query);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      throw new Error('context invalidated');
+    }) as never);
+
+    const { dispose } = await open();
+
+    // The try armed at 200ms is still reading at 250ms, so the cleanup finds
+    // no timer to clear — only a continuation that would arm the next one.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    dispose();
+
+    const asked = get.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    expect(get.mock.calls).toHaveLength(asked);
+  });
+
   // A record that arrives on its own is a record. Asking again for one the
   // popup is already showing is round trips whose answers it throws away —
   // `fetchRecord` prefers what arrived — and the read failing is not the same

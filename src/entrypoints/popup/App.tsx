@@ -238,7 +238,20 @@ function App() {
    * tries that matter are the early ones; the last is there for a reader who
    * leaves it open while whatever broke storage sorts itself out.
    */
+  /**
+   * Whether the popup has gone, so that nothing arms a try for a dead one.
+   *
+   * The cleanup clears the timer that is waiting, and a try already in flight
+   * has no timer to clear — its continuation arms the next one, on a root
+   * that is not there any more. In a popup the document goes with it and
+   * nothing comes of it; in anything that outlives its root, it is storage
+   * reads and signal writes against something disposed.
+   */
+  let gone = false;
+
   const tryAgainIfNeeded = () => {
+    if (gone) return;
+
     if (!unreachable() && !lost() && !unplaced() && tidied) {
       tries = 0;
       return;
@@ -264,6 +277,7 @@ function App() {
   };
 
   onCleanup(() => {
+    gone = true;
     if (waiting !== null) clearTimeout(waiting);
   });
 
@@ -490,7 +504,6 @@ function App() {
           // Asked and answered, whatever the answer was. A tab with no chart
           // address is not going to grow one while the popup is open.
           setUnplaced(false);
-          setLooking(false);
           if (key) place(key);
         } catch {
           // Still nothing to place it by.
@@ -504,10 +517,13 @@ function App() {
       // on the chord chart in front of the reader, for as long as it stayed
       // open. Once the settings arrive it would say it while looking
       // otherwise well.
-      if (lost()) {
-        await fetchRecord();
-        if (!lost()) setLooking(false);
-      }
+      if (lost()) await fetchRecord();
+
+      // After both, the way the opening does it. Said in between, a page just
+      // placed and being read is a page the popup is telling its reader it
+      // could not find out about — `place` has it lost until the record
+      // answers, which is exactly the round trip this would speak over.
+      if (!unplaced() && !lost()) setLooking(false);
 
       // Last, because it was waiting on the address and because it is the one
       // thing here nobody is looking at.
