@@ -478,6 +478,35 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // The settings roll themselves back; the mode control is the popup's own,
+  // so nothing else would. A reader told that nothing changed would otherwise
+  // be looking at a mode that had — and at a key control showing no key,
+  // where the tonic they had set has no name in the mode now on offer.
+  it('puts the mode back when the change to it could not be saved', async () => {
+    await saveKept(
+      withOverride(EMPTY, 'chordwiki:chart:Test Song', { tonic: note('Db'), mode: 'major' }, 0, 1)
+        .settings,
+      { 'chordwiki:chart:Test Song': 1 },
+      {},
+    );
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+    const [tonics, modes] = [...root.querySelectorAll('select')];
+    if (!tonics || !modes) throw new Error('there is a key control');
+    expect(tonics.value).toBe('Db');
+
+    vi.spyOn(browser.storage.local, 'set').mockRejectedValue(new Error('quota exceeded'));
+    modes.value = 'minor';
+    modes.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(root.textContent).toContain('could not be saved');
+    expect(modes.value).toBe('major');
+    expect(tonics.value).toBe('Db');
+    dispose();
+  });
+
   it('says so when a change could not be saved', async () => {
     await onATab(ADDRESS, detection());
     const { root, dispose } = await open();

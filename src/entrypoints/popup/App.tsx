@@ -198,7 +198,7 @@ function App() {
    */
   let writing: Promise<void> = Promise.resolve();
 
-  const update = (change: (kept: Kept) => Kept) => {
+  const update = (change: (kept: Kept) => Kept): Promise<boolean> => {
     const next = async () => {
       try {
         const [settings, stamps] = await Promise.all([loadSettings(), loadStamps()]);
@@ -214,6 +214,7 @@ function App() {
         // read goes on saying it about settings the reader has just replaced
         // — which reads as the change not having taken.
         setUnread(false);
+        return true;
       } catch {
         setFailed(true);
 
@@ -223,13 +224,21 @@ function App() {
         // under a new identity, which is what makes the controls read them
         // again.
         setSettings((shown) => (shown ? { ...shown } : shown));
+        return false;
       }
     };
 
     // On both sides, so that one failure does not leave every change after it
     // skipped over a chain that has already rejected.
-    writing = writing.then(next, next);
-    return writing;
+    //
+    // Whether it was kept is handed back, because not everything a change
+    // moves is in the settings: a control the popup drives itself has to be
+    // put back by whoever moved it, and only this knows whether there is
+    // anything to put back.
+    const kept = writing.then(next, next);
+    writing = kept.then(() => undefined);
+
+    return kept;
   };
 
   /** The key set for this chart, as the chart is being shown. */
@@ -280,13 +289,13 @@ function App() {
     return usableOffset(found.transposeOffset);
   };
 
-  const setOverride = async (tonic: string, mode: Mode) => {
+  const setOverride = async (tonic: string, mode: Mode): Promise<boolean> => {
     const found = detection();
     const note = parseNote(tonic);
-    if (!found || !note || !usableOffset(found.transposeOffset)) return;
+    if (!found || !note || !usableOffset(found.transposeOffset)) return false;
 
     const { pageId, transposeOffset } = found;
-    await update((kept) =>
+    return update((kept) =>
       withOverride(kept, pageId, { tonic: note, mode }, transposeOffset, Date.now()),
     );
   };
@@ -438,6 +447,9 @@ function App() {
                             value={mode()}
                             onChange={(event) => {
                               const chosen = event.currentTarget.value as Mode;
+                              const before = pendingMode();
+                              const settled = modeIsSettled;
+
                               modeIsSettled = true;
                               setPendingMode(chosen);
 
@@ -446,7 +458,19 @@ function App() {
                               // about which tonics to offer and nothing has
                               // been asked for yet.
                               const current = override();
-                              if (current) void setOverride(formatNoteOf(current), chosen);
+                              if (!current) return;
+
+                              // And put back where it was if that could not
+                              // be kept. The settings roll themselves back;
+                              // this control is the popup's own, so nothing
+                              // else would — and a reader told that nothing
+                              // changed would be looking at a mode that had.
+                              void setOverride(formatNoteOf(current), chosen).then((kept) => {
+                                if (kept) return;
+
+                                modeIsSettled = settled;
+                                setPendingMode(before);
+                              });
                             }}
                           >
                             <option value="major">major</option>
