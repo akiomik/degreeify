@@ -59,6 +59,16 @@ function App() {
    */
   const [readable, setReadable] = createSignal(true);
 
+  /**
+   * Whether the settings could not be read at all.
+   *
+   * The controls still work — a change reads again before it writes, and that
+   * read may well succeed — but what they show until then is this build's
+   * defaults rather than the reader's answers, and a control showing
+   * something nobody chose has to say so.
+   */
+  const [unread, setUnread] = createSignal(false);
+
   // What is stored is what was chosen, once it has arrived. A key loaded from
   // storage brings its mode with it, and the control has to show that mode
   // rather than whichever one this happened to start on.
@@ -84,7 +94,12 @@ function App() {
     // reloaded out from under an open popup — would leave a heading and
     // nothing else, which is the state `addressInFront` is wrapped against
     // three lines down.
-    setSettings(await loadSettings().catch(() => DEFAULT_SETTINGS));
+    setSettings(
+      await loadSettings().catch(() => {
+        setUnread(true);
+        return DEFAULT_SETTINGS;
+      }),
+    );
     setReadable(await storedSettingsAreReadable().catch(() => true));
 
     const key = await addressInFront();
@@ -251,6 +266,12 @@ function App() {
             <>
               <Show when={failed()}>
                 <p class={styles.warning}>That could not be saved. Nothing has changed.</p>
+              </Show>
+
+              <Show when={unread()}>
+                <p class={styles.warning}>
+                  Your settings could not be read. These are the defaults, not your answers.
+                </p>
               </Show>
 
               {/*

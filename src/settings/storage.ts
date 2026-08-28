@@ -18,6 +18,14 @@ import { NOTATIONS, type Notation } from '@/core/notation';
  * does not know is not read: it is replaced with the defaults, because
  * reading a shape from a version that does not exist yet means guessing which
  * fields moved, and a wrong guess is a reader's settings silently changed.
+ *
+ * What a field may hold is part of that shape. Adding a third notation looks
+ * like a change to one field's values and is a change of shape all the same:
+ * an older build reads the new value, cannot use it, falls back to its own —
+ * and writes that fallback back over the reader's choice on their first
+ * unrelated click, because what is written is the whole object. Moving the
+ * version is what stops that: the older build then refuses to write at all
+ * and says why.
  */
 export const SCHEMA_VERSION = 1;
 

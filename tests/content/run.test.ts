@@ -608,6 +608,25 @@ describe('a key set for the chart', () => {
     expect(await loadStamp(PAGE)).toBeGreaterThan(1);
   });
 
+  // A stamp that does not land costs a key some of its standing among the
+  // ones kept; a record that does not land is a popup telling a reader to
+  // open a chord chart on the chord chart they are looking at.
+  it('does not carry off the record when it cannot be written', async () => {
+    await saveOnly(withOverride(EMPTY, PAGE, key('G'), 0, 1).settings);
+
+    const real = browser.storage.local.set.bind(browser.storage.local);
+    vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+      if (Object.keys(items).some((name) => name.startsWith('used:'))) {
+        throw new Error('quota exceeded');
+      }
+      return real(items);
+    }) as never);
+
+    (await start(load('chordwiki-basic')))();
+
+    expect(await readDetection(RECORD)).toMatchObject({ source: 'manual' });
+  });
+
   it('is stamped as used no more than once a day', async () => {
     const doc = load('chordwiki-basic');
     const yesterday = Date.now() - 25 * 60 * 60 * 1000;

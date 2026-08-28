@@ -306,6 +306,21 @@ describe('the popup on a chart', () => {
   // A control showing a setting that was not kept tells a reader their answer
   // was taken when it was not, and the only other trace is a line in a
   // console they will never open.
+  // The controls still work — a change reads again before it writes — but
+  // until then what they show is this build's defaults rather than the
+  // reader's answers, and a control showing something nobody chose has to say
+  // so.
+  it('says the controls are showing defaults when the settings could not be read', async () => {
+    vi.spyOn(browser.storage.local, 'get').mockRejectedValue(new Error('context invalidated'));
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('could not be read');
+    expect(root.querySelector('input[type="checkbox"]')).not.toBeNull();
+    dispose();
+  });
+
   it('says so when a change could not be saved', async () => {
     await onATab(ADDRESS, detection());
     const { root, dispose } = await open();

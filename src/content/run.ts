@@ -266,7 +266,11 @@ async function remember(
   // edited to state a second one is not used at all: `apply` follows the
   // chart there. Stamping it anyway would keep an inert key fresh on every
   // visit, and it would outlive keys that are doing something.
-  if (report.source === 'manual') await touchOverride(pageId);
+  // Its failure is not allowed to carry off the record. A stamp that does not
+  // land costs a key some of its standing among the ones kept; a record that
+  // does not land is a popup telling a reader to open a chord chart on the
+  // chord chart they are looking at.
+  if (report.source === 'manual') await touchOverride(pageId).catch(() => {});
 
   // And what was found, last, because it is the one of the two that can
   // fail on a page that is otherwise fine — a full quota, an extension
