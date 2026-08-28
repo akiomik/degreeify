@@ -336,14 +336,18 @@ function App() {
    * Here rather than in the content script, which runs on every page a reader
    * opens. Tidying belongs where somebody asked for something.
    *
-   * Not until the popup knows which page that is. Run without it, the record
-   * it is about to read is not the one being kept — and a reader who has
-   * browsed enough charts since has this one dropped by the popup they opened
-   * to look at it, after which it says to open a chord chart on the chord
-   * chart in front of them. A page normally writes its record straight back,
-   * but the failure that loses the address is an extension reloaded out from
-   * under everything, which is the failure that takes the page's listeners
-   * with it.
+   * Not until the popup has asked which page it is on. Run before that, the
+   * record it is about to read is not the one being kept — and a reader who
+   * has browsed enough charts since has this one dropped by the popup they
+   * opened to look at it, after which it says to open a chord chart on the
+   * chord chart in front of them. A page normally writes its record straight
+   * back, but the failure that loses the address is an extension reloaded out
+   * from under everything, which is the failure that takes the page's
+   * listeners with it.
+   *
+   * Asked, and not answered with an address. A tab this extension cannot see
+   * the address of has no record here to protect, so there is nothing for the
+   * asking to have told us and nothing to wait for.
    */
   const tidy = async () => {
     if (tidied || unplaced()) return;

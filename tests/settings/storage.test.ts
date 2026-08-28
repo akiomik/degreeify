@@ -526,6 +526,24 @@ describe('what was found on a page', () => {
     expect((await browser.storage.local.get('detected:broken'))['detected:broken']).toBeUndefined();
   });
 
+  // A record from a later build is a page that has read the same chart, and
+  // the watcher for a forgotten record already declines to treat one as a
+  // deletion. Dropped first here, the two builds would spend a reader's
+  // storage evicting and rewriting each other's records.
+  it('dates a record from a later build by what it says', async () => {
+    await browser.storage.local.set({
+      'detected:newer': { ...detection(2), version: SCHEMA_VERSION + 1 },
+    });
+    await writeDetection('detected:older', detection(1));
+
+    await pruneDetections(1);
+
+    expect(
+      (await browser.storage.local.get('detected:newer'))['detected:newer'],
+    ).not.toBeUndefined();
+    expect(await readDetection('detected:older')).toBeNull();
+  });
+
   it('keeps the one it is asked to keep, and counts it', async () => {
     await writeDetection('detected:open', detection(1));
     await writeDetection('detected:newer', detection(2));

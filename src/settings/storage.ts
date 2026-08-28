@@ -551,11 +551,23 @@ export async function pruneDetections(most = MOST_DETECTIONS, keep?: string | nu
   // the number it is being held to.
   const records = Object.entries(all)
     .filter(([key]) => key.startsWith(DETECTION_PREFIX))
-    .map(([key, value]) => ({ key, updatedAt: isDetection(value) ? value.updatedAt : 0 }))
+    // Dated by what it says rather than by whether this build can read the
+    // rest of it. A record from a later build is a page that has read the
+    // same chart, and the watcher for a forgotten record already declines to
+    // treat one as a deletion — ranked at nothing here, it would be the first
+    // thing evicted, and the two builds would spend a reader's storage
+    // dropping and rewriting each other's records. A record with no date this
+    // can read has none to go by and goes first, which is what it is for.
+    .map(([key, value]) => ({ key, updatedAt: dateOf(value) }))
     .sort((a, b) => rank(b, keep) - rank(a, keep));
 
   const stale = records.slice(most).map((record) => record.key);
   if (stale.length > 0) await browser.storage.local.remove(stale);
+}
+
+/** When a record says it was written, or nought where it does not say. */
+function dateOf(value: unknown): number {
+  return isRecord(value) && typeof value.updatedAt === 'number' ? value.updatedAt : 0;
 }
 
 /** Where a record sits in the reckoning, with the one being kept above all. */
