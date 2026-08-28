@@ -96,6 +96,17 @@ describe('reading settings that are not settings', () => {
   // Filling in what is missing from the defaults cannot help with a field
   // that is there and is the wrong thing: it replaces the default, and then
   // every page throws on the first thing it looks up.
+  // A field this build did not find is filled in from the defaults. The same
+  // line covers a field that is there and holds nothing, which a structured
+  // clone keeps where a JSON round trip drops it — this storage drops it, so
+  // that half is not what this case is exercising.
+  it('fills in the keys where the field is not there', async () => {
+    const { keyOverrides: _absent, ...rest } = DEFAULT_SETTINGS;
+    await browser.storage.local.set({ settings: rest });
+
+    expect((await loadSettings()).keyOverrides).toEqual({});
+  });
+
   it.each([null, 'nothing', 7])('gives the defaults where the keys are %j', async (overrides) => {
     await browser.storage.local.set({
       settings: { ...DEFAULT_SETTINGS, keyOverrides: overrides },
@@ -326,6 +337,20 @@ describe('what was found on a page', () => {
 
     const all = await browser.storage.local.get(null);
     expect(Object.keys(all)).toEqual(['detected:new']);
+  });
+
+  // The one the reader is looking at is the newest by every measure that
+  // matters and the oldest by the only one there is: a record is written
+  // once, so a chart left open while the reader browses has a stamp that
+  // stops moving.
+  it('keeps the one it is asked to keep', async () => {
+    await writeDetection('detected:open', detection(1));
+    await writeDetection('detected:newer', detection(2));
+
+    await pruneDetections(1, 'detected:open');
+
+    expect(await readDetection('detected:open')).not.toBeNull();
+    expect(await readDetection('detected:newer')).not.toBeNull();
   });
 
   // The settings live in the same storage area and are not a page record.

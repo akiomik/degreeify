@@ -308,7 +308,6 @@ describe('a reading whose record could not be written', () => {
   it('is written again at the next change, whatever the change was about', async () => {
     const doc = load('chordwiki-basic');
     const stop = await start(doc);
-    await browser.storage.local.remove(RECORD);
 
     const real = browser.storage.local.set.bind(browser.storage.local);
     const failing = vi.spyOn(browser.storage.local, 'set').mockImplementation((async (
@@ -319,6 +318,11 @@ describe('a reading whose record could not be written', () => {
       }
       return real(items);
     }) as never);
+
+    // Taken away with nothing able to put it back, so that what follows
+    // starts from a page whose record is missing.
+    await browser.storage.local.remove(RECORD);
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     await saveSettings({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -339,6 +343,34 @@ describe('a reading whose record could not be written', () => {
     expect(await readDetection(RECORD)).toMatchObject({ named: 6 });
     expect(shown(doc)[1]).toBe('Ⅵm7');
     stop();
+  });
+});
+
+describe('a record thrown away while the page is still open', () => {
+  // Records are dropped by count and nothing counting them knows which pages
+  // are open, so a chart left open while the reader browses can have its own
+  // record dropped under it — after which the popup tells them to open a
+  // chord chart on the chord chart in front of them.
+  it('is written again by the page that wrote it', async () => {
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+    expect(await readDetection(RECORD)).not.toBeNull();
+
+    await browser.storage.local.remove(RECORD);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(await readDetection(RECORD)).toMatchObject({ named: 6, source: 'page' });
+    stop();
+  });
+
+  it('stops being written again once the page has gone', async () => {
+    const doc = load('chordwiki-basic');
+    (await start(doc))();
+
+    await browser.storage.local.remove(RECORD);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(await readDetection(RECORD)).toBeNull();
   });
 });
 

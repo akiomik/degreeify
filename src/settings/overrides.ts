@@ -30,9 +30,23 @@ import {
  * is not a number reaches a table by way of arithmetic on it, finds no row,
  * and throws where the guards below are written to return.
  */
+/**
+ * Whether a page has said how far its chart has been transposed, in a way a
+ * key can be moved by.
+ *
+ * Asked here rather than at each place that needs to know, because the two
+ * places that need to know are the one that uses a key and the one that
+ * offers to set one — and a control that takes a key the reader's page will
+ * then refuse is a reader looking at a key they chose and a page that has
+ * never heard of it.
+ */
+export function usableOffset(offset: number | null | undefined): offset is number {
+  return Number.isInteger(offset);
+}
+
 export function overrideFor(settings: Settings, pageId: string, offset: number | null): Key | null {
   const stored = settings.keyOverrides[pageId];
-  if (!stored || offset === null || !Number.isInteger(offset)) return null;
+  if (!stored || !usableOffset(offset)) return null;
 
   // Read rather than trusted, and asked about before it is read. What is in
   // storage was written by some version of this extension, or by somebody

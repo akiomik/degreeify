@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { formatKey, type Key, type Mode } from '@/core/key';
 import { parseNote } from '@/core/pitch';
-import { type Kept, overrideFor, withOverride, withoutOverride } from '@/settings/overrides';
+import {
+  type Kept,
+  overrideFor,
+  usableOffset,
+  withOverride,
+  withoutOverride,
+} from '@/settings/overrides';
 import { DEFAULT_SETTINGS, MOST_OVERRIDES, type Settings } from '@/settings/storage';
 
 const key = (tonic: string, mode: Mode = 'major'): Key => {
@@ -71,6 +77,16 @@ describe('a key set for a chart', () => {
       expect(named(withKey('C'), offset)).toBeNull();
     },
   );
+
+  // The same question the control that offers to set a key is asked, so that
+  // it cannot offer to keep something the page will then refuse.
+  it.each([0, 6, -5])('is a transposition of %i semitones a page can keep a key at', (offset) => {
+    expect(usableOffset(offset)).toBe(true);
+  });
+
+  it.each([null, undefined, Number.NaN, 1.5, '3'])('is %s not one', (offset) => {
+    expect(usableOffset(offset as never)).toBe(false);
+  });
 
   it('is nothing where none was set', () => {
     expect(named(DEFAULT_SETTINGS, 0)).toBeNull();

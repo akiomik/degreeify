@@ -230,6 +230,14 @@ function settingsIn(stored: unknown): Settings {
     ...DEFAULT_SETTINGS,
     ...stored,
     enabled: typeof stored.enabled === 'boolean' ? stored.enabled : DEFAULT_SETTINGS.enabled,
+    // Spread over rather than left to the spread. A stored object may carry
+    // the field with nothing in it — the guard above allows that, and a
+    // structured clone keeps it where a JSON round trip would drop it — and
+    // an own property holding nothing replaces the default rather than
+    // falling back to it.
+    keyOverrides: isRecord(stored.keyOverrides)
+      ? stored.keyOverrides
+      : DEFAULT_SETTINGS.keyOverrides,
     notation: oneOf(NOTATIONS, stored.notation) ?? DEFAULT_SETTINGS.notation,
     spelling: oneOf(SPELLING_POLICIES, stored.spelling) ?? DEFAULT_SETTINGS.spelling,
   };
@@ -290,6 +298,32 @@ export function watchDetection(key: string, onChange: (detection: Detection) => 
   return () => browser.storage.onChanged.removeListener(listener);
 }
 
+/**
+ * Calls back when what was found on this page is no longer in storage.
+ *
+ * Records are dropped by count, and nothing counting them knows which pages
+ * are still open: a reader with a chart open who then browses enough charts
+ * to fill the list has that chart's record thrown away under them, and the
+ * popup tells them to open a chord chart on the chord chart they are looking
+ * at. The page that wrote it is the one thing that can write it again.
+ */
+export function watchForgetting(key: string, onForgotten: () => void): () => void {
+  const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
+    if (area !== 'local') return;
+
+    // Whatever is there now is not a record, which covers a record removed
+    // and one left in a shape this build cannot read. What a browser leaves
+    // behind for a removed key differs — absent in one, null in another — and
+    // asking what it is rather than what it is missing is the same question
+    // without that difference in it.
+    const change = changes[key];
+    if (change && !isDetection(change.newValue)) onForgotten();
+  };
+
+  browser.storage.onChanged.addListener(listener);
+  return () => browser.storage.onChanged.removeListener(listener);
+}
+
 export async function writeDetection(key: string, detection: Detection): Promise<void> {
   await browser.storage.local.set({ [key]: detection });
 }
@@ -302,7 +336,7 @@ export async function writeDetection(key: string, detection: Detection): Promise
  * asked for, so a sweep of every key in storage belongs in the popup: the
  * page a reader is on should not pay for the tidying of pages they left.
  */
-export async function pruneDetections(most = MOST_DETECTIONS): Promise<void> {
+export async function pruneDetections(most = MOST_DETECTIONS, keep?: string | null): Promise<void> {
   const all = await browser.storage.local.get(null);
 
   // Every record, and not only the ones this build can read. A record written
@@ -315,7 +349,14 @@ export async function pruneDetections(most = MOST_DETECTIONS): Promise<void> {
     .map(([key, value]) => ({ key, updatedAt: isDetection(value) ? value.updatedAt : 0 }))
     .sort((a, b) => b.updatedAt - a.updatedAt);
 
-  const stale = records.slice(most).map((record) => record.key);
+  // Never the one the reader is looking at. It is the newest by every measure
+  // that matters and the oldest by the only one there is — a record is
+  // written once, so a chart left open while the reader browses has a stamp
+  // that stops moving.
+  const stale = records
+    .slice(most)
+    .map((record) => record.key)
+    .filter((key) => key !== keep);
   if (stale.length > 0) await browser.storage.local.remove(stale);
 }
 

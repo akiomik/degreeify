@@ -13,7 +13,13 @@ import type { SpellingPolicy } from '@/core/degree';
 import { CANONICAL_TONIC, type Key, type Mode } from '@/core/key';
 import type { Notation } from '@/core/notation';
 import { formatNote, parseNote } from '@/core/pitch';
-import { type Kept, overrideFor, withOverride, withoutOverride } from '@/settings/overrides';
+import {
+  type Kept,
+  overrideFor,
+  usableOffset,
+  withOverride,
+  withoutOverride,
+} from '@/settings/overrides';
 import {
   DEFAULT_SETTINGS,
   type Detection,
@@ -98,7 +104,7 @@ function App() {
 
     // Here rather than in the content script, which runs on every page a
     // reader opens. Tidying belongs where somebody asked for something.
-    await pruneDetections().catch(() => {});
+    await pruneDetections(undefined, key).catch(() => {});
   });
 
   /**
@@ -191,17 +197,16 @@ function App() {
     if (!found || found.statedKeys > MOST_STATED_KEYS_TO_OVERRIDE) return false;
 
     // A key is kept as the key of the untransposed chart, so setting one
-    // needs to know how far the chart has been transposed. Where the page
-    // does not say, there is nothing to offer: a control that took a key and
-    // saved none would leave a reader looking at a key they had chosen and a
-    // page that had never heard of it.
-    return found.transposeOffset !== null;
+    // needs to know how far the chart has been transposed. Asked with the
+    // same question the key will be read with, so that a control cannot offer
+    // to keep something the page will then refuse.
+    return usableOffset(found.transposeOffset);
   };
 
   const setOverride = async (tonic: string, mode: Mode) => {
     const found = detection();
     const note = parseNote(tonic);
-    if (!found || !note || found.transposeOffset === null) return;
+    if (!found || !note || !usableOffset(found.transposeOffset)) return;
 
     const { pageId, transposeOffset } = found;
     await update((kept) =>

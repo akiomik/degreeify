@@ -485,6 +485,22 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // The control that offers to set a key asks the same question the key will
+  // be read with. Asked a looser one, it would take a key the page then
+  // refuses — a reader looking at a key they chose and a page that has never
+  // heard of it.
+  it.each([1.5, '3'])(
+    'does not offer a key where the page says it has moved by %s',
+    async (offset) => {
+      await onATab(ADDRESS, detection({ statedKeys: 1, transposeOffset: offset as never }));
+      const { root, dispose } = await open();
+
+      expect(root.textContent).toContain('does not say how far the chart has been transposed');
+      expect(root.querySelectorAll('select')).toHaveLength(2);
+      dispose();
+    },
+  );
+
   // A record is written by a content script and read by a popup, and an
   // extension is updated with pages already open. A record from another shape
   // read as though it were this one is a popup counting `undefined` chords.

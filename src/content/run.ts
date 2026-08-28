@@ -12,6 +12,7 @@ import {
   type Settings,
   saveStamp,
   USED_AT_GRANULARITY,
+  watchForgetting,
   watchSettings,
   writeDetection,
 } from '@/settings/storage';
@@ -67,6 +68,9 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   let painted: ReturnType<typeof paint> | null = null;
   let recorded = false;
 
+  /** The settings the page was last shown for, for a run that is not about them. */
+  let current = DEFAULT_SETTINGS;
+
   let showing = Promise.resolve();
   const queue = (settings: () => Settings | Promise<Settings>) => {
     // Queued behind whatever is already running. Two runs at once would have
@@ -79,7 +83,7 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
     // rejected for good, and the page would stop following the settings
     // silently and for the rest of its life.
     const next = async () => {
-      const current = await settings();
+      current = await settings();
       const wanted = matters(current, pageId);
 
       // Painted only where the page is not already showing this, and
@@ -107,6 +111,19 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
     showing = showing.then(next, next);
     return showing;
   };
+
+  // And listening for the record being thrown away. Records are dropped by
+  // count and nothing counting them knows which pages are open, so a chart
+  // left open while the reader browses can have its own record dropped under
+  // it — after which the popup tells them to open a chord chart on the chord
+  // chart in front of them. This page is the one thing that can write it
+  // again, and it still knows what it found.
+  const forgetting = stored
+    ? watchForgetting(stored, () => {
+        recorded = false;
+        void queue(() => current).catch(() => {});
+      })
+    : () => {};
 
   // Listening before reading, so that a change made while the page is still
   // loading is not the one change nothing hears.
@@ -138,7 +155,10 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   // chart in degree names and a chart in none.
   await queue(() => loadSettings().catch(() => DEFAULT_SETTINGS)).catch(() => {});
 
-  return stop;
+  return () => {
+    stop();
+    forgetting();
+  };
 }
 
 /**
