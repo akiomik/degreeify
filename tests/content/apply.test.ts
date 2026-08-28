@@ -459,4 +459,14 @@ describe('the state the page is left in', () => {
     restore(doc);
     expect(doc.documentElement.getAttribute(STATE_ATTRIBUTE)).toBe('off');
   });
+
+  // Read and reported on, but not written to: the page is as the site served
+  // it, and saying otherwise would have a stylesheet dressing a chart that
+  // has no degree names on it.
+  it('says the names are off where it was asked not to write them', () => {
+    const { doc } = run('chordwiki-basic', { write: false });
+
+    expect(doc.documentElement.getAttribute(STATE_ATTRIBUTE)).toBe('off');
+    expect(applied(doc)).toEqual([]);
+  });
 });

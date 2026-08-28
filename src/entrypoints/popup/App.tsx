@@ -1,4 +1,13 @@
-import { createSignal, For, getOwner, onCleanup, onMount, runWithOwner, Show } from 'solid-js';
+import {
+  createEffect,
+  createSignal,
+  For,
+  getOwner,
+  onCleanup,
+  onMount,
+  runWithOwner,
+  Show,
+} from 'solid-js';
 import { browser } from 'wxt/browser';
 import type { SpellingPolicy } from '@/core/degree';
 import { CANONICAL_TONIC, formatKey, type Key, type Mode } from '@/core/key';
@@ -38,6 +47,14 @@ function App() {
   const [pendingMode, setPendingMode] = createSignal<Mode>('major');
 
   const [failed, setFailed] = createSignal(false);
+
+  // What is stored is what was chosen, once it has arrived. A key loaded from
+  // storage brings its mode with it, and the control has to show that mode
+  // rather than whichever one this happened to start on.
+  createEffect(() => {
+    const found = override();
+    if (found) setPendingMode(found.mode);
+  });
 
   onMount(async () => {
     // Held on to before anything is awaited. Solid knows which component a
@@ -139,8 +156,16 @@ function App() {
     return current && found ? overrideFor(current, found.pageId, found.transposeOffset) : null;
   };
 
-  /** The mode the tonics are being named for. */
-  const mode = (): Mode => override()?.mode ?? pendingMode();
+  /**
+   * The mode the tonics are being named for.
+   *
+   * What the reader last chose, and not what is stored. A mode change is a
+   * write, and a write takes a moment: asked of the key in force, the control
+   * would read one mode while the tonics beside it were the other's, and a
+   * tonic picked in between would be saved in the mode the reader had just
+   * moved away from.
+   */
+  const mode = (): Mode => pendingMode();
 
   const canOverride = (): boolean => {
     const found = detection();
@@ -304,9 +329,16 @@ function App() {
                       </label>
                     </div>
 
+                    {/*
+                     * Offered whenever a key is kept, and not only when one
+                     * is in force. A key stored in some shape this cannot
+                     * read is a key that does nothing and cannot be removed
+                     * — which is the only kind a reader would most want to
+                     * be rid of.
+                     */}
                     <button
                       type="button"
-                      disabled={!override()}
+                      disabled={!current().keyOverrides[found().pageId]}
                       onClick={() => void clearOverride()}
                     >
                       Use the chart's own key

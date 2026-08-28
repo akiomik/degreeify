@@ -1,4 +1,4 @@
-import { type Key, transposeKey } from '@/core/key';
+import { type Key, type Mode, transposeKey } from '@/core/key';
 import { formatNote, parseNote } from '@/core/pitch';
 import {
   type KeyOverride,
@@ -31,9 +31,19 @@ export function overrideFor(settings: Settings, pageId: string, offset: number |
   const stored = settings.keyOverrides[pageId];
   if (!stored || offset === null) return null;
 
+  // Read rather than trusted. What is in storage was written by some version
+  // of this extension, or by somebody with the developer tools open, and a
+  // mode that is neither of the two names one no table has a row for — the
+  // lookup gives nothing, and indexing nothing throws before any guard
+  // downstream can say so. A key that cannot be read is no key, which is
+  // what a chart with no key set gets, and the popup can still forget it.
   const tonic = parseNote(stored.tonic);
-  return tonic ? transposeKey({ tonic, mode: stored.mode }, offset) : null;
+  if (!tonic || !MODES.includes(stored.mode)) return null;
+
+  return transposeKey({ tonic, mode: stored.mode }, offset);
 }
+
+const MODES: readonly Mode[] = ['major', 'minor'];
 
 /** The settings and the stamps, which are written together or not at all. */
 export interface Kept {

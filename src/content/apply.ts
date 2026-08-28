@@ -189,10 +189,12 @@ export function apply(
     named.push({ node: item.node, text });
   }
 
-  if (writing) {
-    write(named);
-    doc.documentElement.setAttribute(STATE_ATTRIBUTE, 'on');
-  }
+  if (writing) write(named);
+
+  // Said either way, because it is about the page and the page has two
+  // states. Set only when writing, a page left as the site served it would
+  // still claim the names were on it.
+  doc.documentElement.setAttribute(STATE_ATTRIBUTE, writing ? 'on' : 'off');
 
   return {
     named: named.length,

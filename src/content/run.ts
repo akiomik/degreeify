@@ -177,16 +177,23 @@ function paint(
 async function remember(
   pageId: string,
   stored: string | null,
-  { report, offset, key }: ReturnType<typeof paint>,
+  { report, offset }: ReturnType<typeof paint>,
 ): Promise<void> {
   if (stored) await writeDetection(stored, record(pageId, report, offset));
 
-  // Whether or not the names are being shown. The key was used to read the
-  // chart either way — the report says what it found — and the stamp is the
+  // Whether or not the names are being shown, and only where the key was the
+  // one the chart was read in.
+  //
+  // Either way, because the chart is read either way and the stamp is the
   // only thing keeping a key from being the first dropped when there are too
-  // many. A reader who browses with the names off, using the popup to see
+  // many — a reader who browses with the names off, using the popup to see
   // what key a chart is in, would otherwise lose the keys they had set.
-  if (key) await touchOverride(pageId);
+  //
+  // Only where it was used, because a key set for a chart that has since been
+  // edited to state a second one is not used at all: `apply` follows the
+  // chart there. Stamping it anyway would keep an inert key fresh on every
+  // visit, and it would outlive keys that are doing something.
+  if (report.source === 'manual') await touchOverride(pageId);
 }
 
 /**

@@ -386,6 +386,61 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // A mode change is a write, and a write takes a moment. Asked of the key in
+  // force, the control reads one mode while the tonics beside it are the
+  // other's — and a tonic picked in between is saved in the mode the reader
+  // had just moved away from.
+  it('saves a tonic in the mode just chosen, not the one still stored', async () => {
+    await saveKept(
+      withOverride(EMPTY, 'chordwiki:chart:Test Song', KEY_OF_C_MINOR, 0, 1).settings,
+      { 'chordwiki:chart:Test Song': 1 },
+    );
+    await onATab(ADDRESS, detection({ statedKeys: 0, key: null, source: null }));
+
+    const { root, dispose } = await open();
+    const [tonics, modes] = [...root.querySelectorAll('select')];
+    if (!tonics || !modes) throw new Error('there is a key control');
+
+    modes.value = 'major';
+    modes.dispatchEvent(new Event('change', { bubbles: true }));
+
+    // Without waiting for that to land, which is the whole of the case.
+    tonics.value = 'Db';
+    tonics.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect((await loadSettings()).keyOverrides['chordwiki:chart:Test Song']).toEqual({
+      tonic: 'Db',
+      mode: 'major',
+    });
+    dispose();
+  });
+
+  // A mode that names no key reaches a table that has no row for it, and
+  // indexing nothing throws — out of the popup's first read, where it takes
+  // the whole popup with it: no key line, no control, and no way to forget
+  // the key that caused it.
+  it('shows a chart whose stored key cannot be read, and can forget it', async () => {
+    await saveKept(
+      {
+        ...DEFAULT_SETTINGS,
+        keyOverrides: { 'chordwiki:chart:Test Song': { tonic: 'C', mode: 'dorian' as never } },
+      },
+      { 'chordwiki:chart:Test Song': 1 },
+    );
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+    expect(root.textContent).toContain('C — from the chart');
+
+    const button = root.querySelector('button');
+    button?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect((await loadSettings()).keyOverrides).toEqual({});
+    dispose();
+  });
+
   // A record is written by a content script and read by a popup, and an
   // extension is updated with pages already open. A record from another shape
   // read as though it were this one is a popup counting `undefined` chords.

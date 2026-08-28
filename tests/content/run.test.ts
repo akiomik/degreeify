@@ -21,6 +21,8 @@ import { chordwiki } from '@/sites/chordwiki/adapter';
 
 const FIXTURES = join(import.meta.dirname, '../fixtures');
 
+const parse = (html: string): Document => new DOMParser().parseFromString(html, 'text/html');
+
 const load = (name: string): Document =>
   new DOMParser().parseFromString(
     readFileSync(join(FIXTURES, `${name}.html`), 'utf8'),
@@ -269,6 +271,31 @@ describe('a showing that failed', () => {
 
     expect(shown(doc)[1]).toBe('VIm7');
     stop();
+  });
+});
+
+describe('a key kept for a chart that has since been given two', () => {
+  // `apply` follows a chart that states more than one key rather than a key
+  // set for the page, so the key is not used. Stamped anyway, an inert key
+  // would keep itself fresh on every visit and outlive keys that are doing
+  // something.
+  it('is not marked as used', async () => {
+    await saveSettings(withOverride(EMPTY, PAGE, key('G'), 0, 1).settings);
+    await saveStamp(PAGE, 1);
+
+    const doc = parse(`
+      <div class="main">
+        <p class="key">Key: C</p>
+        <p class="line"><span class="chord">Am7</span></p>
+        <p class="key">Key: G</p>
+        <p class="line"><span class="chord">Am7</span></p>
+      </div>
+    `);
+
+    (await run(doc, chordwiki, new URL(ADDRESS)))();
+
+    expect(await readDetection(RECORD)).toMatchObject({ source: 'page', statedKeys: 2 });
+    expect(await loadStamp(PAGE)).toBe(1);
   });
 });
 
