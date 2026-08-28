@@ -271,11 +271,17 @@ function App() {
    * tries that matter are the early ones; the last is there for a reader who
    * leaves it open while whatever broke storage sorts itself out.
    *
-   * Three to a spell, and anything getting done starts a new one. Four things
-   * can be outstanding here and they are not the same failure: a tab that
-   * would not say what it was on the first two tries leaves the record it
-   * then has to read with one, and the popup gives up on a chart whose
-   * content script had simply not written yet.
+   * Three to a spell, and anything getting done starts a new one. Five things
+   * can be outstanding here — the settings, the record, the address of the
+   * page, a record that has not arrived, and the tidying — and they are not
+   * the same failure: a tab that would not say what it was on the first two
+   * tries leaves the record it then has to read with one, and the popup gives
+   * up on a chart whose content script had simply not written yet.
+   *
+   * The tidying is the odd one. The other four are answered by asking again;
+   * that one cannot even be asked until the page has been placed, so on a
+   * popup that never places one it stays outstanding to the end without ever
+   * having been tried.
    */
   const tryAgainIfNeeded = () => {
     if (gone) return;
