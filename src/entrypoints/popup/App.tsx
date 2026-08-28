@@ -611,7 +611,20 @@ function App() {
         setUnreachable(false);
         return true;
       } catch {
-        setFailed(true);
+        // Asked why, because one of the reasons is not a failure to write.
+        // `saveKept` refuses outright where what is stored came from a later
+        // build, and a popup left open while a second window running one
+        // writes gets that refusal before the change event telling it so
+        // arrives. Answered as a write that would not land, the reader is
+        // told their change could not be saved, beside controls still
+        // offering to make it — when what they need to be told is that this
+        // build cannot change these settings at all.
+        const said = heard;
+        const stored = await readSettings().catch(() => null);
+        const refused = stored?.fromLater === true;
+
+        if (stored && heard === said) settle(stored);
+        setFailed(!refused);
 
         // And the controls put back to what is kept. A checkbox a reader
         // clicked shows what they clicked until something says otherwise, and

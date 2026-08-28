@@ -966,6 +966,39 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // A refusal is not a write that would not land. `saveKept` refuses outright
+  // where what is stored came from a later build, and a popup left open while
+  // a second window running one writes gets that refusal before the change
+  // event telling it so arrives — so a click inside that window is answered
+  // with "could not be saved", beside controls still offering to make the
+  // change this build cannot make.
+  it('says which build wrote the settings rather than that the write failed', async () => {
+    await onATab(ADDRESS, detection());
+
+    // A popup that cannot listen. Told by the change event, this heals on its
+    // own a moment later; unable to listen, it is left saying the write
+    // failed for as long as it stays open.
+    vi.spyOn(browser.storage.onChanged, 'addListener').mockImplementation(() => {
+      throw new Error('context invalidated');
+    });
+
+    const { root, dispose } = await open();
+
+    // And another window writes settings this build cannot read.
+    await browser.storage.local.set({
+      settings: { ...DEFAULT_SETTINGS, version: SCHEMA_VERSION + 1 },
+    });
+
+    const toggle = root.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    if (!toggle) throw new Error('there is a toggle');
+    toggle.click();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(root.textContent).toContain('written by a newer version');
+    expect(root.textContent).not.toContain('could not be saved');
+    dispose();
+  });
+
   // And follows a change made somewhere else, which is the same listener.
   it('follows a settings change made while it was open', async () => {
     await onATab(ADDRESS, detection());
