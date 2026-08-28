@@ -327,35 +327,45 @@ function App() {
     <main class={styles.popup}>
       <h1 class={styles.title}>Degreeify</h1>
 
-      <Show
-        when={readable()}
-        fallback={
-          <p class={styles.warning}>
-            These settings were written by a newer version of Degreeify. Update it to change them.
-          </p>
-        }
-      >
-        <Show when={settings()}>
-          {(current) => (
-            <>
-              <Show when={failed()}>
-                <p class={styles.warning}>That could not be saved. Nothing has changed.</p>
-              </Show>
+      {/*
+       * Beside what is known about the page rather than in place of it. The
+       * reading line, and the warnings around it, write nothing — a reader on
+       * a chart whose settings came from a newer build can still be told what
+       * the page did with them, and taking that away leaves them a sentence
+       * about a version number and no idea whether their chart was named.
+       */}
+      <Show when={!readable()}>
+        <p class={styles.warning}>
+          These settings were written by a newer version of Degreeify. Update it to change them.
+        </p>
+      </Show>
 
-              <Show when={unread()}>
-                <p class={styles.warning}>
-                  Your settings could not be read. These are the defaults, not your answers, and no
-                  chart is being named until you change something here.
-                </p>
-              </Show>
+      <Show when={settings()}>
+        {(current) => (
+          <>
+            <Show when={failed()}>
+              <p class={styles.warning}>That could not be saved. Nothing has changed.</p>
+            </Show>
 
-              {/*
-               * Outside what is known about the page, because it is not about
-               * the page. A reader who switched the names off, or who is on a
-               * chart whose content script has not written its record yet, has
-               * to be able to switch them back on — and this is the control
-               * they came for.
-               */}
+            {/*
+             * Not alongside the one above, which says the same thing about
+             * the same settings and says which build wrote them.
+             */}
+            <Show when={unread() && readable()}>
+              <p class={styles.warning}>
+                Your settings could not be read. These are the defaults, not your answers, and no
+                chart is being named until you change something here.
+              </p>
+            </Show>
+
+            {/*
+             * Outside what is known about the page, because it is not about
+             * the page. A reader who switched the names off, or who is on a
+             * chart whose content script has not written its record yet, has
+             * to be able to switch them back on — and this is the control
+             * they came for.
+             */}
+            <Show when={readable()}>
               <label class={styles.row}>
                 <input
                   type="checkbox"
@@ -370,30 +380,32 @@ function App() {
                 />
                 <span>Show degree names</span>
               </label>
+            </Show>
 
-              <Show
-                when={detection()}
-                fallback={<p class={styles.note}>Open a ChordWiki chord chart to use Degreeify.</p>}
-              >
-                {(found) => (
-                  <>
-                    <p class={styles.reading}>{reading(found(), current().enabled)}</p>
+            <Show
+              when={detection()}
+              fallback={<p class={styles.note}>Open a ChordWiki chord chart to use Degreeify.</p>}
+            >
+              {(found) => (
+                <>
+                  <p class={styles.reading}>{reading(found())}</p>
 
-                    {/*
-                     * Only where the chart's own declarations are what was
-                     * followed. A key from outside — set by hand, or guessed
-                     * from the chords — stands in for the line that could not
-                     * be read, and the chart is named end to end; saying a
-                     * section was left alone would be false, and would sit
-                     * directly under a count of the chords that were named.
-                     */}
-                    <Show when={found().unreadKeys > 0 && found().source === 'page'}>
-                      <p class={styles.warning}>
-                        {found().unreadKeys} of {found().statedKeys} key declarations could not be
-                        read. Those sections are left as the chart wrote them.
-                      </p>
-                    </Show>
+                  {/*
+                   * Only where the chart's own declarations are what was
+                   * followed. A key from outside — set by hand, or guessed
+                   * from the chords — stands in for the line that could not
+                   * be read, and the chart is named end to end; saying a
+                   * section was left alone would be false, and would sit
+                   * directly under a count of the chords that were named.
+                   */}
+                  <Show when={found().unreadKeys > 0 && found().source === 'page'}>
+                    <p class={styles.warning}>
+                      {found().unreadKeys} of {found().statedKeys} key declarations could not be
+                      read. Those sections are left as the chart wrote them.
+                    </p>
+                  </Show>
 
+                  <Show when={readable()}>
                     <Show
                       when={canOverride()}
                       fallback={
@@ -494,10 +506,12 @@ function App() {
                         Use the chart's own key
                       </button>
                     </Show>
-                  </>
-                )}
-              </Show>
+                  </Show>
+                </>
+              )}
+            </Show>
 
+            <Show when={readable()}>
               <label class={styles.field}>
                 <span>Numerals</span>
                 <select
@@ -531,9 +545,9 @@ function App() {
                   <option value="source">As the chart spells it</option>
                 </select>
               </label>
-            </>
-          )}
-        </Show>
+            </Show>
+          </>
+        )}
       </Show>
     </main>
   );
@@ -563,7 +577,7 @@ async function addressInFront(): Promise<string | null> {
 }
 
 /** What the popup says about the key a chart was read in. */
-function reading(found: Detection, enabled: boolean): string {
+function reading(found: Detection): string {
   if (!found.key) {
     if (found.statedKeys === 0)
       return 'This chart states no key, and its chords do not settle one.';
@@ -586,11 +600,15 @@ function reading(found: Detection, enabled: boolean): string {
         : 'guessed from the chords';
   const sections = found.statedKeys > 1 ? `, ${found.statedKeys} sections` : '';
 
-  // What the page says, and not what it would say. The chart is read whether
-  // or not the names are shown, so with them off this count is of names that
-  // are not on the page — and a reader looking at a chart in chord names,
-  // told that six chords are named, would be right to wonder which six.
-  const chords = enabled ? `${found.named} chords named.` : `${found.named} chords would be named.`;
+  // What the page says it did, and not what this popup's own reading of the
+  // settings says it should have done. The chart is read whether or not the
+  // names are shown, so with them off this count is of names that are not on
+  // the page — and the two reads can disagree: one of them can fail, or catch
+  // a different moment. A reader looking at a chart in chord names, told that
+  // six chords are named, would be right to wonder which six.
+  const chords = found.applied
+    ? `${found.named} chords named.`
+    : `${found.named} chords would be named.`;
 
   return `${key} — ${where}${sections}. ${chords}`;
 }

@@ -107,6 +107,15 @@ export interface Detection {
   /** How far the reader has transposed the chart, where the page says. */
   readonly transposeOffset: number | null;
   readonly named: number;
+  /**
+   * Whether the names were written onto the page.
+   *
+   * Said by the page rather than worked out by whoever reads this. The page
+   * and a popup read the settings separately, and either read can fail or
+   * catch a different moment — so a popup deciding from its own read would
+   * tell a reader that six chords are named on a page showing none.
+   */
+  readonly applied: boolean;
   readonly updatedAt: number;
 }
 
@@ -199,6 +208,13 @@ export async function saveKept(
   // Nothing at all where what is stored is not this build's. Writing would
   // put the defaults this build read over settings it could not read, and
   // every key the reader had set with them.
+  //
+  // Asked and acted on in two calls, which storage gives no way to make one:
+  // a newer build writing between them is overwritten anyway. That window is
+  // as wide as one storage read, and both sides of it are a reader working
+  // the same profile from two builds of this extension at once — rare enough
+  // to be worth a narrow window, and not worth the popup refusing to save
+  // because someone else might be about to write.
   if (!(await storedSettingsAreReadable())) throw new Error('the stored settings are not readable');
 
   // Only the stamps that changed. Written whole, this would put back every
@@ -608,7 +624,12 @@ function isDetection(value: unknown): value is Detection {
     // not a number — a sort given one of those leaves the list in no
     // particular order, and what is dropped is whatever the ordering happened
     // to leave last, the record the popup is about to show among it.
-    typeof value.updatedAt === 'number'
+    typeof value.updatedAt === 'number' &&
+    // Nothing else says whether the names went onto the page, and a record
+    // without it would read as a page that named nothing. Better no record —
+    // which the popup already has a line for, and which the page replaces on
+    // its next run — than a confident wrong count.
+    typeof value.applied === 'boolean'
   );
 }
 

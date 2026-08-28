@@ -42,6 +42,7 @@ const detection = (updatedAt: number): Detection => ({
   unreadKeys: 0,
   transposeOffset: 0,
   named: 4,
+  applied: true,
   updatedAt,
 });
 
@@ -418,6 +419,18 @@ describe('what was found on a page', () => {
 
   it('is nothing where nothing was written', async () => {
     expect(await readDetection('detected:nothing')).toBeNull();
+  });
+
+  // Nothing else says whether the names went onto the page, so a record
+  // without it would be read as a page that named nothing. Better no record,
+  // which the popup has a line for and which the page writes again on its
+  // next run, than a confident wrong count.
+  it('is nothing where the record does not say what the page did', async () => {
+    const { applied, ...rest } = detection(1);
+    expect(applied).toBe(true);
+
+    await browser.storage.local.set({ 'detected:partial': rest });
+    expect(await readDetection('detected:partial')).toBeNull();
   });
 
   // Records are written on every chart anyone opens, and read only for the

@@ -81,6 +81,35 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   /** The settings the page was last shown for, for a run that is not about them. */
   let current = DEFAULT_SETTINGS;
 
+  /**
+   * Whether those settings were ever read, rather than fallen back to.
+   *
+   * A read can fail once — a worker restarting, storage busy — and nothing
+   * would ask again: the watcher fires when the settings are written, and a
+   * reader who changes nothing never writes them. The page would sit in chord
+   * names for its whole life while the popup, whose own read succeeded, told
+   * its reader the names were on. So a run that is not about the settings
+   * reads them again until one of those reads works.
+   */
+  let read = false;
+
+  const retry = async (): Promise<void> => {
+    if (read) return;
+    await queue(settingsNow).catch(() => {});
+  };
+
+  const settingsNow = async (): Promise<Settings> => {
+    if (read) return current;
+
+    try {
+      const stored = asked(await readSettings());
+      read = true;
+      return stored;
+    } catch {
+      return { ...DEFAULT_SETTINGS, enabled: false };
+    }
+  };
+
   let showing = Promise.resolve();
   const queue = (settings: () => Settings | Promise<Settings>) => {
     // Queued behind whatever is already running. Two runs at once would have
@@ -153,8 +182,12 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   // again, and it still knows what it found.
   /** Writes down what the page is showing, where anyone could be looking. */
   const rewrite = () => {
-    if (recorded || doc.hidden) return;
-    void queue(() => current).catch(() => {});
+    // Also where the settings were never read, which is a page showing chord
+    // names because a read failed rather than because a reader asked. Coming
+    // back to a tab is the one thing such a page can still be told about
+    // after the tries below have run out.
+    if ((recorded && read) || doc.hidden) return;
+    void queue(settingsNow).catch(() => {});
   };
 
   const forgetting = stored
@@ -183,6 +216,8 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   // Listening before reading, so that a change made while the page is still
   // loading is not the one change nothing hears.
   const stop = watchSettings((stored) => {
+    read = true;
+
     // Nothing is waiting on this one. A run that rejects with nobody attached
     // is an unhandled rejection, which in a content script is a line in a
     // console the reader will never open — the recovery is above, and this is
@@ -208,18 +243,25 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   // popup has something to say — but the defaults say to rewrite every chart,
   // and a reader who has turned that off has said the opposite. A setting
   // that cannot be read is not a setting that was never made.
-  await queue(() =>
-    readSettings()
-      .then(asked)
-      .catch(() => ({ ...DEFAULT_SETTINGS, enabled: false })),
-  ).catch(() => {});
+  await queue(settingsNow).catch(() => {});
+
+  // Three tries, spread far enough apart to outlast the sort of failure this
+  // is for — an extension reloaded under an open page, storage busy behind
+  // another tab — and then it stops. A read that is still failing after five
+  // seconds is failing for a reason waiting will not fix, and a page that
+  // asks forever is a page that asks forever on every tab a reader has open.
+  const retries = read ? [] : RETRY_AFTER.map((after) => setTimeout(() => void retry(), after));
 
   return () => {
     stop();
     forgetting();
     doc.removeEventListener('visibilitychange', rewrite);
+    for (const timer of retries) clearTimeout(timer);
   };
 }
+
+/** How long to wait before reading the settings again, in milliseconds. */
+const RETRY_AFTER = [200, 1000, 5000];
 
 /**
  * Everything about the settings that this page is shown from.
@@ -247,7 +289,7 @@ function paint(
   adapter: SiteAdapter,
   settings: Settings,
   pageId: string,
-): { report: ApplyReport; offset: number | null; key: Key | null } {
+): { report: ApplyReport; offset: number | null; key: Key | null; applied: boolean } {
   const offset = adapter.transposeOffset(doc);
   const key = overrideFor(settings, pageId, offset);
 
@@ -263,7 +305,7 @@ function paint(
     write: settings.enabled,
   });
 
-  return { report, offset, key };
+  return { report, offset, key, applied: settings.enabled };
 }
 
 /**
@@ -276,7 +318,7 @@ function paint(
 async function remember(
   pageId: string,
   stored: string | null,
-  { report, offset }: ReturnType<typeof paint>,
+  { report, offset, applied }: ReturnType<typeof paint>,
   tidy: boolean,
 ): Promise<void> {
   // Whether or not the names are being shown, and only where the key was the
@@ -304,7 +346,7 @@ async function remember(
   // out from under it. Written first, a failure would carry off the stamp
   // with it, and a key used every day on a page whose records will not write
   // would age towards being dropped while keys nobody touches do not.
-  const found = record(pageId, report, offset);
+  const found = record(pageId, report, offset, applied);
 
   // Tidied here as well as in the popup, once for each page a reader opens.
   // Tidying only where somebody asked for something leaves a reader who never
@@ -336,7 +378,11 @@ async function remember(
     // page wrote before and is writing again is already there and is already
     // the one being kept, so counting it out as well would drop a record that
     // did not need to go.
-    const already = await isStored(stored).catch(() => false);
+    // Taken for present where the asking itself fails, which it may for the
+    // same reasons the writing just did. A page that has been writing records
+    // most likely has one, and guessing the other way evicts a record that
+    // did not need to go.
+    const already = await isStored(stored).catch(() => true);
     await pruneDetections(already ? MOST_DETECTIONS : MOST_DETECTIONS - 1, stored).catch(() => {});
     await writeDetection(stored, found);
     return;
@@ -368,7 +414,12 @@ async function touchOverride(pageId: string): Promise<void> {
   await saveStamp(pageId, now);
 }
 
-function record(pageId: string, report: ApplyReport, offset: number | null): Detection {
+function record(
+  pageId: string,
+  report: ApplyReport,
+  offset: number | null,
+  enabled: boolean,
+): Detection {
   return {
     version: SCHEMA_VERSION,
     pageId,
@@ -378,6 +429,7 @@ function record(pageId: string, report: ApplyReport, offset: number | null): Det
     unreadKeys: report.unreadKeys,
     transposeOffset: offset,
     named: report.named,
+    applied: enabled,
     updatedAt: Date.now(),
   };
 }

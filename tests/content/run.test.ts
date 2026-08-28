@@ -141,6 +141,87 @@ describe('a page whose settings cannot be read', () => {
     expect(await readDetection(RECORD)).toMatchObject({ source: 'page', named: 6 });
     stop();
   });
+
+  // A read can fail once and nothing would ask again: the watcher fires when
+  // the settings are written, and a reader who changes nothing never writes
+  // them. The page would sit in chord names for its whole life while the
+  // popup, whose own read worked, told its reader the names were on.
+  it('reads the settings again after a read that failed', async () => {
+    vi.useFakeTimers();
+    try {
+      const real = browser.storage.local.get.bind(browser.storage.local);
+      let failing = true;
+      vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+        if (failing && query === 'settings') throw new Error('context invalidated');
+        return real(query);
+      }) as never);
+
+      const doc = load('chordwiki-basic');
+      const stop = await run(doc, chordwiki, new URL(ADDRESS));
+      expect(shown(doc)[0]).toBe('C');
+
+      failing = false;
+      await vi.advanceTimersByTimeAsync(200);
+
+      expect(shown(doc)[0]).toBe('I');
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // And gives up, rather than asking a storage that is not coming back for as
+  // long as the tab is open.
+  it('stops reading the settings again once the tries have run out', async () => {
+    vi.useFakeTimers();
+    try {
+      const real = browser.storage.local.get.bind(browser.storage.local);
+      const get = vi.spyOn(browser.storage.local, 'get').mockImplementation((async (
+        query: never,
+      ) => {
+        if (query === 'settings') throw new Error('context invalidated');
+        return real(query);
+      }) as never);
+
+      const doc = load('chordwiki-basic');
+      const stop = await run(doc, chordwiki, new URL(ADDRESS));
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      const asked = get.mock.calls.filter(([query]) => query === 'settings').length;
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(get.mock.calls.filter(([query]) => query === 'settings')).toHaveLength(asked);
+
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // The tries run out; a reader coming back to the tab does not. Left there,
+  // a page whose read failed while the reader was away in another tab is one
+  // they have to reload to get the names they asked for.
+  it('reads the settings again when the page is looked at again', async () => {
+    const real = browser.storage.local.get.bind(browser.storage.local);
+    let failing = true;
+    vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+      if (failing && query === 'settings') throw new Error('context invalidated');
+      return real(query);
+    }) as never);
+
+    const doc = load('chordwiki-basic');
+    Object.defineProperty(doc, 'hidden', { value: true, configurable: true });
+    const stop = await run(doc, chordwiki, new URL(ADDRESS));
+    expect(shown(doc)[0]).toBe('C');
+
+    failing = false;
+    Object.defineProperty(doc, 'hidden', { value: false, configurable: true });
+    doc.dispatchEvent(new Event('visibilitychange'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(shown(doc)[0]).toBe('I');
+    stop();
+  });
 });
 
 describe('a page whose settings are not settings', () => {
@@ -443,6 +524,7 @@ describe('records of pages the reader has left', () => {
         unreadKeys: 0,
         transposeOffset: 0,
         named: 0,
+        applied: true,
         updatedAt: index,
       });
     }
@@ -472,6 +554,7 @@ describe('records of pages the reader has left', () => {
         unreadKeys: 0,
         transposeOffset: 0,
         named: 0,
+        applied: true,
         updatedAt: index,
       });
     }
@@ -492,6 +575,65 @@ describe('records of pages the reader has left', () => {
 
     // And one short of the number on the way, because the record about to be
     // written is not among the ones being counted.
+    const all = await browser.storage.local.get(null);
+    expect(Object.keys(all).filter((key) => key.startsWith('detected:'))).toHaveLength(
+      MOST_DETECTIONS,
+    );
+  });
+
+  // Asking whether the record is already there can fail for the same reasons
+  // the write just did, and the answer decides how much room to make. Guessed
+  // the other way, a page that has been writing all along throws away a
+  // record that had room for itself.
+  it('keeps a record it did not have to drop where it could not ask', async () => {
+    for (let index = 0; index < MOST_DETECTIONS - 1; index++) {
+      await writeDetection(`detected:page-${index}`, {
+        version: SCHEMA_VERSION,
+        pageId: `chordwiki:chart:${index}`,
+        key: null,
+        source: null,
+        statedKeys: 0,
+        unreadKeys: 0,
+        transposeOffset: 0,
+        named: 0,
+        applied: true,
+        updatedAt: index,
+      });
+    }
+
+    // This page's own among them, so the store is exactly full and the write
+    // that is coming replaces rather than adds.
+    await writeDetection(RECORD, {
+      version: SCHEMA_VERSION,
+      pageId: PAGE,
+      key: null,
+      source: null,
+      statedKeys: 0,
+      unreadKeys: 0,
+      transposeOffset: 0,
+      named: 0,
+      applied: true,
+      updatedAt: 0,
+    });
+
+    const setting = browser.storage.local.set.bind(browser.storage.local);
+    let full = true;
+    vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+      if (full && Object.keys(items).some((name) => name.startsWith('detected:'))) {
+        full = false;
+        throw new Error('quota exceeded');
+      }
+      return setting(items);
+    }) as never);
+
+    const getting = browser.storage.local.get.bind(browser.storage.local);
+    vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+      if (query === RECORD) throw new Error('context invalidated');
+      return getting(query);
+    }) as never);
+
+    (await start(load('chordwiki-basic')))();
+
     const all = await browser.storage.local.get(null);
     expect(Object.keys(all).filter((key) => key.startsWith('detected:'))).toHaveLength(
       MOST_DETECTIONS,

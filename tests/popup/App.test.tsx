@@ -41,6 +41,7 @@ const detection = (over: Partial<Detection> = {}): Detection => ({
   unreadKeys: 0,
   transposeOffset: 0,
   named: 6,
+  applied: true,
   updatedAt: 1,
   ...over,
 });
@@ -176,6 +177,37 @@ describe('the popup over settings this build cannot read', () => {
     expect(root.querySelector('input[type="checkbox"]')).toBeNull();
     dispose();
   });
+
+  // What is known about the page writes nothing, so nothing is at risk in
+  // showing it. Taken away with the controls, a reader is left a sentence
+  // about a version number and no idea whether their chart was named.
+  it('still says what the chart was read as', async () => {
+    await browser.storage.local.set({
+      settings: { ...DEFAULT_SETTINGS, version: SCHEMA_VERSION + 1 },
+    });
+    await onATab(ADDRESS, detection({ statedKeys: 2, unreadKeys: 1, source: 'page' }));
+
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('C — from the chart');
+    expect(root.textContent).toContain('could not be read');
+    dispose();
+  });
+
+  // And the one warning, rather than that one and the general one under it
+  // which says the same thing without saying which build wrote them.
+  it('says which build wrote them rather than only that they could not be read', async () => {
+    await browser.storage.local.set({
+      settings: { ...DEFAULT_SETTINGS, version: SCHEMA_VERSION + 1 },
+    });
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('written by a newer version');
+    expect(root.textContent).not.toContain('These are the defaults');
+    dispose();
+  });
 });
 
 describe('the popup on a chart', () => {
@@ -242,10 +274,33 @@ describe('the popup on a chart', () => {
   // this count is of names that are not on the page.
   it('says the names would be written rather than that they were', async () => {
     await saveOnly({ ...DEFAULT_SETTINGS, enabled: false });
-    await onATab(ADDRESS, detection());
+    await onATab(ADDRESS, detection({ applied: false }));
     const { root, dispose } = await open();
 
     expect(root.textContent).toContain('6 chords would be named');
+    dispose();
+  });
+
+  // The page and this popup read the settings separately, and either read can
+  // fail or catch a different moment. Asked of its own read, the popup tells
+  // a reader looking at a chart in chord names that six of them are named.
+  it('says what the page did with the settings, not what its own read says', async () => {
+    await saveOnly({ ...DEFAULT_SETTINGS, enabled: true });
+    await onATab(ADDRESS, detection({ applied: false }));
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('6 chords would be named');
+    dispose();
+  });
+
+  // And the other way round, which is the same disagreement: a popup whose
+  // own read failed, over a page that named the chart before it did.
+  it('says the names were written where the page says so and its own read did not', async () => {
+    await saveOnly({ ...DEFAULT_SETTINGS, enabled: false });
+    await onATab(ADDRESS, detection({ applied: true }));
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('6 chords named');
     dispose();
   });
 
