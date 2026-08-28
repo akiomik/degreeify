@@ -195,12 +195,28 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
     void queue(settingsNow).catch(() => {});
   };
 
+  // Wrapped, both of these. Naming the chart needs neither, and the failure
+  // that stops a listener being added is the invalidated context the reads
+  // are already written around — so a throw here would cost the whole
+  // showing, on a page that could have been named and written down and only
+  // gone without hearing about later changes.
+  const listen = (start: () => () => void): (() => void) => {
+    try {
+      return start();
+    } catch {
+      // Nothing to undo: a listener that could not be added is not one.
+      return () => {};
+    }
+  };
+
   const forgetting = stored
-    ? watchForgetting(stored, () => {
-        recorded = false;
-        writing++;
-        rewrite();
-      })
+    ? listen(() =>
+        watchForgetting(stored, () => {
+          recorded = false;
+          writing++;
+          rewrite();
+        }),
+      )
     : () => {};
 
   // And when the page comes back into view. Writing it back only where the
@@ -220,15 +236,17 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
 
   // Listening before reading, so that a change made while the page is still
   // loading is not the one change nothing hears.
-  const stop = watchSettings((stored) => {
-    read = true;
+  const stop = listen(() =>
+    watchSettings((stored) => {
+      read = true;
 
-    // Nothing is waiting on this one. A run that rejects with nobody attached
-    // is an unhandled rejection, which in a content script is a line in a
-    // console the reader will never open — the recovery is above, and this is
-    // only about not shouting about it.
-    void queue(() => asked(stored)).catch(() => {});
-  });
+      // Nothing is waiting on this one. A run that rejects with nobody attached
+      // is an unhandled rejection, which in a content script is a line in a
+      // console the reader will never open — the recovery is above, and this is
+      // only about not shouting about it.
+      void queue(() => asked(stored)).catch(() => {});
+    }),
+  );
 
   // The reading queued rather than awaited, so that a change arriving during
   // it is queued behind it and not in front of it. Awaited, the settings from

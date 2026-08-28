@@ -142,6 +142,34 @@ describe('a page whose settings cannot be read', () => {
     stop();
   });
 
+  // Naming the chart needs neither listener, and what stops one being added
+  // is the same invalidated context the reads are written around. Left to
+  // throw, it costs the whole showing on a page that could have been named,
+  // written down, and only gone without hearing about later changes.
+  it('names the chart where it cannot listen for changes', async () => {
+    vi.spyOn(browser.storage.onChanged, 'addListener').mockImplementation(() => {
+      throw new Error('context invalidated');
+    });
+
+    const doc = load('chordwiki-basic');
+    const stop = await run(doc, chordwiki, new URL(ADDRESS));
+
+    expect(shown(doc)[0]).toBe('I');
+    expect(await readDetection(RECORD)).toMatchObject({ named: 6 });
+    stop();
+  });
+
+  // And stops cleanly, which a listener that was never added does by doing
+  // nothing.
+  it('can be stopped where it never started listening', async () => {
+    vi.spyOn(browser.storage.onChanged, 'addListener').mockImplementation(() => {
+      throw new Error('context invalidated');
+    });
+
+    const stop = await run(load('chordwiki-basic'), chordwiki, new URL(ADDRESS));
+    expect(() => stop()).not.toThrow();
+  });
+
   // A read can fail once and nothing would ask again: the watcher fires when
   // the settings are written, and a reader who changes nothing never writes
   // them. The page would sit in chord names for its whole life while the

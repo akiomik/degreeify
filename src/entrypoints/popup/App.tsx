@@ -170,8 +170,15 @@ function App() {
   const tidy = async () => {
     if (tidied || unplaced) return;
 
-    tidied = true;
-    await pruneDetections(undefined, where).catch(() => {});
+    // And spent only once it has been done, for the reason the page spends
+    // its own that way: a walk of the store that would not answer is not a
+    // tidying, and taking it for one leaves the popup — which is where the
+    // tidying belongs — never doing it, so the records stay over the number
+    // they are held to until the next one opens.
+    tidied = await pruneDetections(undefined, where).then(
+      () => true,
+      () => false,
+    );
   };
 
   /**
@@ -294,7 +301,7 @@ function App() {
     // the life of a tab, so the tries that matter are the early ones — the
     // last is there for a reader who leaves it open while whatever broke
     // storage sorts itself out.
-    if (!unreachable() && !lost && !unplaced) return;
+    if (!unreachable() && !lost && !unplaced && tidied) return;
 
     const again = RETRY_AFTER.map((after) => setTimeout(() => void reread(), after));
     const clear = () => {
@@ -377,9 +384,6 @@ function App() {
           // address is not going to grow one while the popup is open.
           unplaced = false;
           if (key) place(key);
-
-          // Which was waiting on this, and keeps the record about to be read.
-          await tidy();
         } catch {
           // Still nothing to place it by.
         }
@@ -393,6 +397,10 @@ function App() {
       // open. Once the settings arrive it would say it while looking
       // otherwise well.
       if (lost) await fetchRecord();
+
+      // Last, because it was waiting on the address and because it is the one
+      // thing here nobody is looking at.
+      await tidy();
     });
 
   const update = (change: (kept: Kept) => Kept, stamped = true): Promise<boolean> => {

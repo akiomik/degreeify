@@ -566,6 +566,44 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // A walk of the store that would not answer is not a tidying. Taken for
+  // one, the popup — which is where the tidying belongs — never does it, and
+  // the records stay over the number they are held to until the next one
+  // opens.
+  it('tidies again where the walk of the store did not answer', async () => {
+    for (let index = 0; index < MOST_DETECTIONS + 5; index++) {
+      await writeDetection(`detected:page-${index}`, {
+        ...detection(),
+        pageId: `chordwiki:chart:${index}`,
+        updatedAt: index + 2,
+      });
+    }
+    await onATab(ADDRESS, detection({ updatedAt: 1 }));
+
+    const real = browser.storage.local.get.bind(browser.storage.local);
+    let broken = true;
+    vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+      if (broken && query === null) throw new Error('context invalidated');
+      return real(query);
+    }) as never);
+
+    const { dispose } = await open();
+
+    const left = await real(null);
+    expect(Object.keys(left).filter((key) => key.startsWith('detected:')).length).toBeGreaterThan(
+      MOST_DETECTIONS,
+    );
+
+    broken = false;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    const all = await real(null);
+    expect(Object.keys(all).filter((key) => key.startsWith('detected:'))).toHaveLength(
+      MOST_DETECTIONS,
+    );
+    dispose();
+  });
+
   // And is not asked again once it has been answered. A tab with no chart
   // address is not going to grow one while the popup is open.
   it('does not keep asking which page it is over where it was told', async () => {
@@ -616,7 +654,12 @@ describe('the popup on a chart', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(tonics.value).toBe('G');
-    expect(await loadStamp('chordwiki:chart:Test Song')).not.toBeNull();
+    expect((await loadSettings()).keyOverrides).toHaveProperty('chordwiki:chart:Test Song');
+
+    // A number rather than something, because nothing is a number here:
+    // `loadStamp` answers 0 for a key that has never been used, so anything
+    // that asks whether it is there is asking a question with one answer.
+    expect(await loadStamp('chordwiki:chart:Test Song')).toBeGreaterThan(0);
     dispose();
   });
 
