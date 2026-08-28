@@ -9,6 +9,7 @@ import {
   Show,
 } from 'solid-js';
 import { browser } from 'wxt/browser';
+import { MOST_STATED_KEYS_TO_OVERRIDE } from '@/content/apply';
 import type { SpellingPolicy } from '@/core/degree';
 import { CANONICAL_TONIC, type Key, type Mode } from '@/core/key';
 import type { Notation } from '@/core/notation';
@@ -33,13 +34,6 @@ import {
   watchDetection,
 } from '@/settings/storage';
 import styles from './App.module.css';
-
-/**
- * How many keys a chart may state and still be one a single key can answer
- * for. Past that it changes key, and one key set for the page cannot be right
- * for every section of it.
- */
-const MOST_STATED_KEYS_TO_OVERRIDE = 1;
 
 function App() {
   const [settings, setSettings] = createSignal<Settings | null>(null);

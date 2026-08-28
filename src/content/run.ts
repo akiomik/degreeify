@@ -68,6 +68,9 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   let painted: ReturnType<typeof paint> | null = null;
   let recorded = false;
 
+  /** Counts the writings, so that one can tell whether it is still the last. */
+  let writing = 0;
+
   /** The settings the page was last shown for, for a run that is not about them. */
   let current = DEFAULT_SETTINGS;
 
@@ -104,8 +107,16 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
       }
 
       if (!recorded && painted) {
+        // Marked against this run rather than as a flag. The writing takes a
+        // turn of the loop, and the record can be thrown away inside it — the
+        // watcher below would set this back to false and queue a run, and a
+        // plain `recorded = true` afterwards would overwrite what it had
+        // asked for. The record would stay gone, which is the failure that
+        // watcher exists to prevent.
+        const mine = ++writing;
         await remember(pageId, stored, painted);
-        recorded = true;
+
+        if (writing === mine) recorded = true;
       }
     };
     showing = showing.then(next, next);
@@ -121,6 +132,7 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   const forgetting = stored
     ? watchForgetting(stored, () => {
         recorded = false;
+        writing++;
         void queue(() => current).catch(() => {});
       })
     : () => {};

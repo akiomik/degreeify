@@ -363,6 +363,36 @@ describe('a record thrown away while the page is still open', () => {
     stop();
   });
 
+  // The writing takes a turn of the loop, and the record can be thrown away
+  // inside it. Marked as written afterwards regardless, the page would take
+  // back what the watcher had just asked for and the record would stay gone.
+  it('is written again where it went while it was being written', async () => {
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+
+    const real = browser.storage.local.set.bind(browser.storage.local);
+    let taken = false;
+    vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+      const writing = real(items);
+
+      // Thrown away once, while the write it is answering is still in flight.
+      if (!taken && Object.keys(items).some((name) => name.startsWith('detected:'))) {
+        taken = true;
+        await browser.storage.local.remove(RECORD);
+      }
+
+      return writing;
+    }) as never);
+
+    await saveSettings({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    vi.restoreAllMocks();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(await readDetection(RECORD)).toMatchObject({ named: 6 });
+    stop();
+  });
+
   it('stops being written again once the page has gone', async () => {
     const doc = load('chordwiki-basic');
     (await start(doc))();

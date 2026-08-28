@@ -20,17 +20,6 @@ import {
  */
 
 /**
- * The key set for this chart, as the chart now stands.
- *
- * Nothing where the page does not say how far it has been transposed, and
- * nothing where what it says is not a count of semitones. A key meant for one
- * transposition, applied at an unknown other, names every chord on the page
- * against the wrong tonic — and it would do so most confidently on the pages
- * where a reader had gone to the trouble of setting one. A transposition that
- * is not a number reaches a table by way of arithmetic on it, finds no row,
- * and throws where the guards below are written to return.
- */
-/**
  * Whether a page has said how far its chart has been transposed, in a way a
  * key can be moved by.
  *
@@ -44,6 +33,17 @@ export function usableOffset(offset: number | null | undefined): offset is numbe
   return Number.isInteger(offset);
 }
 
+/**
+ * The key set for this chart, as the chart now stands.
+ *
+ * Nothing where the page does not say how far it has been transposed, and
+ * nothing where what it says is not a count of semitones. A key meant for one
+ * transposition, applied at an unknown other, names every chord on the page
+ * against the wrong tonic — and it would do so most confidently on the pages
+ * where a reader had gone to the trouble of setting one. A transposition that
+ * is not a number reaches a table by way of arithmetic on it, finds no row,
+ * and throws where the guards below are written to return.
+ */
 export function overrideFor(settings: Settings, pageId: string, offset: number | null): Key | null {
   const stored = settings.keyOverrides[pageId];
   if (!stored || !usableOffset(offset)) return null;

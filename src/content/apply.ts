@@ -25,6 +25,20 @@ export const WIDTH_PROPERTY = '--degreeify-w';
 /** Set on the root element so a stylesheet can tell the two states apart. */
 export const STATE_ATTRIBUTE = 'data-degreeify';
 
+/**
+ * How many keys a chart may state and still be one a single key can answer
+ * for.
+ *
+ * Past that it changes key, and one key given for a whole page cannot be
+ * right for every section of it.
+ *
+ * Exported because a caller offering to set a key has to offer it exactly
+ * where one would be taken. Kept in two places that agreed, the day one moved
+ * would be the day a reader set a key, was told it was kept, and watched the
+ * page ignore it.
+ */
+export const MOST_STATED_KEYS_TO_OVERRIDE = 1;
+
 export interface ApplyOptions {
   readonly notation?: Notation;
   readonly spelling?: SpellingPolicy;
@@ -191,9 +205,9 @@ export function apply(
 
   if (writing) write(named);
 
-  // Said either way, because it is about the page and the page has two
-  // states. Set only when writing, a page left as the site served it would
-  // still claim the names were on it.
+  // Said here rather than left to the restoring above, which sets it to `off`
+  // on the way in. Both orders leave the same attribute on the page; this one
+  // does not need a reader to have followed the restore to know why.
   doc.documentElement.setAttribute(STATE_ATTRIBUTE, writing ? 'on' : 'off');
 
   return {
@@ -249,12 +263,16 @@ function openingKey(chart: readonly ChartItem[], given: Key | null | undefined):
   // that cannot override is not one: the reasons for setting one include a
   // chart whose stated key this reads correctly and whose reader disagrees
   // with it.
-  if (given && stated.length <= 1) return { key: given, source: 'manual', follows: false };
+  if (given && stated.length <= MOST_STATED_KEYS_TO_OVERRIDE) {
+    return { key: given, source: 'manual', follows: false };
+  }
 
   const read = stated.find((item) => item.key)?.key;
   if (read) return { key: read, source: 'page', follows: true };
 
-  if (stated.length > 1) return { key: null, source: null, follows: true };
+  if (stated.length > MOST_STATED_KEYS_TO_OVERRIDE) {
+    return { key: null, source: null, follows: true };
+  }
 
   const guess = inferKey(chordsIn(chart));
   const inferred = guess ? guess.key : null;
