@@ -39,11 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that reading came from — the page, a guess, or a person — because a chart
   with no names on it and an extension that is switched off look the same
   otherwise.
-- A key set by hand, per chart, for a chart that one key can answer for. It is
-  kept as the key of the untransposed chart and moved to wherever the reader
-  has transposed it, so that transposing a chart does not lose the key set for
-  it. A chart that changes key is followed rather than overridden, and the
-  popup says so instead of offering a control that would not work.
+- A key set by hand, per chart, for a chart that one key can answer for: one
+  with no key line, or with a single one, read or unread. It is kept as the
+  key of the untransposed chart and moved to wherever the reader has
+  transposed it, so that transposing a chart does not lose the key set for it.
+  A chart that states several keys is followed rather than overridden — a
+  section it modulates into is never named in a key meant for the page — and
+  the popup says so instead of offering a control that would not work.
 - What the page was read as is written down whether or not the names are being
   shown. Turning the names off leaves the page as the site served it; it does
   not stop the extension knowing what key the chart is in, so a reader can see
@@ -54,10 +56,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the chart states and this cannot read is left alone too, rather than named
   against the key of the section before it. Turning the extension off puts the
   page back character for character.
-- A key set by hand, for a chart that says nothing this can use — one with no
-  key line, or one whose single key line is written in a form this cannot
-  read. A chart that states several keys is followed rather than overridden,
-  so a section it modulates into is never named in a key meant for the page.
 - A width lock, so that naming a chart does not move it. A slot is measured
   before it is rewritten and fixed at that width, so a name longer than the
   chord it stands for overhangs rather than pushing the lyric under it out of

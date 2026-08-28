@@ -126,6 +126,15 @@ const DETECTION_PREFIX = 'detected:';
  * Null where there is no address to speak of. A popup can be opened on any
  * tab, and a tab this extension has no permission for reports no address at
  * all; a null here is that ordinary case rather than an error.
+ *
+ * The address and not the chart, which means one chart read at several
+ * transpositions keeps several of these — the site serves each transposition
+ * from its own address. What a key is kept under collapses them to one chart,
+ * so nothing is duplicated that matters; what is spent is room among the
+ * records, whose number is therefore charts times transpositions rather than
+ * charts. It has to be the address: a popup has only the address of the tab
+ * and cannot ask the page what chart it is on without permissions this
+ * extension does without.
  */
 export function recordKey(address: string | undefined | null): string | null {
   if (!address) return null;

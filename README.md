@@ -55,7 +55,6 @@ declares more than one key is followed rather than overridden.
   one needs to know how far the chart has moved. ChordWiki says so on every
   chart today; if it stops, the popup says why instead of offering a control
   that would keep nothing.
-
 - **Settings written by a newer version are not changed, and no chart is
   rewritten while they are in place.** Going back to an older build leaves
   them readable only by the newer one; the popup says so rather than offering
