@@ -308,12 +308,19 @@ function App() {
     // tidying, and taking it for one leaves the popup — which is where the
     // tidying belongs — never doing it, so the records stay over the number
     // they are held to until the next one opens.
-    // One short of the number where this page has no record yet. Its content
-    // script writes one as soon as it has read the page — the seconds the
-    // "give this one a moment" line is about — and counting to the number
-    // without it leaves the store one over as soon as it lands, on exactly
-    // the page the reader is looking at.
-    const room = MOST_DETECTIONS - (detection() ? 0 : 1);
+    // One short of the number where a record is expected and has not arrived.
+    // Its content script writes one as soon as it has read the page — the
+    // seconds the "give this one a moment" line is about — and counting to
+    // the number without it leaves the store one over as soon as it lands, on
+    // exactly the page the reader is looking at.
+    //
+    // Expected, and not merely absent. A tab this extension cannot see the
+    // address of has no record and will never have one, and a read that
+    // failed says nothing about whether there is one — either way, holding a
+    // place open drops the oldest chart a reader has read for a record that
+    // is not coming.
+    const expected = where !== null && !lost() && !detection();
+    const room = MOST_DETECTIONS - (expected ? 1 : 0);
 
     tidied = await pruneDetections(room, where).then(
       () => true,

@@ -642,6 +642,58 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // A tab this extension cannot see the address of has no record and will
+  // never have one. Holding a place open for it drops the oldest chart the
+  // reader has read, for a record that is not coming.
+  it('holds no place open on a tab it can see no address for', async () => {
+    for (let index = 0; index < MOST_DETECTIONS + 5; index++) {
+      await writeDetection(`detected:page-${index}`, {
+        ...detection(),
+        pageId: `chordwiki:chart:${index}`,
+        updatedAt: index + 2,
+      });
+    }
+    await onATab(undefined);
+
+    const { dispose } = await open();
+
+    const all = await browser.storage.local.get(null);
+    expect(Object.keys(all).filter((key) => key.startsWith('detected:'))).toHaveLength(
+      MOST_DETECTIONS,
+    );
+    dispose();
+  });
+
+  // And a read that failed says nothing about whether there is a record, so
+  // it is no reason to make room for one — the chart in front may well have
+  // had one all along.
+  it('holds no place open where the record could not be read', async () => {
+    for (let index = 0; index < MOST_DETECTIONS + 5; index++) {
+      await writeDetection(`detected:page-${index}`, {
+        ...detection(),
+        pageId: `chordwiki:chart:${index}`,
+        updatedAt: index + 2,
+      });
+    }
+    await onATab(ADDRESS, detection({ updatedAt: 1 }));
+
+    const real = browser.storage.local.get.bind(browser.storage.local);
+    const key = recordKey(ADDRESS);
+    if (!key) throw new Error('that is an address');
+    vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+      if (query === key) throw new Error('context invalidated');
+      return real(query);
+    }) as never);
+
+    const { dispose } = await open();
+
+    const all = await real(null);
+    expect(Object.keys(all).filter((name) => name.startsWith('detected:'))).toHaveLength(
+      MOST_DETECTIONS,
+    );
+    dispose();
+  });
+
   // A chart whose record has not arrived is not a page with no chart on it.
   // A content script waits for the page's own font before it measures
   // anything, which on a slow page is seconds — and a popup opened inside
