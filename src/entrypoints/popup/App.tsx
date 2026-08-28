@@ -141,7 +141,7 @@ function App() {
    * any other page has. Both leave the popup with nothing to say about a
    * page; only one of them is worth asking about again.
    */
-  let unplaced = false;
+  const [unplaced, setUnplaced] = createSignal(false);
 
   /**
    * Takes the page in front to be the one at `key`, and listens for its
@@ -245,14 +245,22 @@ function App() {
    * cancel the retrying this popup opened needing.
    */
   const tryAgainIfNeeded = () => {
-    if (!unreachable() && !lost && !unplaced && tidied) {
+    if (!unreachable() && !lost && !unplaced() && tidied) {
       tries = 0;
       return;
     }
     if (waiting !== null) return;
 
     const after = RETRY_AFTER[tries];
-    if (after === undefined) return;
+
+    // And says so where they are spent. Left looking, a popup that never
+    // worked out which tab it was over shows a heading, the settings, and a
+    // gap where everything about the page goes — with nothing to say whether
+    // it is still asking, gave up, or is simply not on a chart.
+    if (after === undefined) {
+      setLooking(false);
+      return;
+    }
 
     tries++;
     waiting = setTimeout(() => {
@@ -284,7 +292,7 @@ function App() {
    * with it.
    */
   const tidy = async () => {
-    if (tidied || unplaced) return;
+    if (tidied || unplaced()) return;
 
     // And spent only once it has been done, for the reason the page spends
     // its own that way: a walk of the store that would not answer is not a
@@ -394,7 +402,7 @@ function App() {
       // Asked again below, like the reads. Left as no chart, a popup that
       // could not work out which tab it was over would say there is no chart
       // here on a chart, hide the whole key control, and never ask again.
-      unplaced = true;
+      setUnplaced(true);
     }
 
     if (key) {
@@ -407,7 +415,7 @@ function App() {
     // reader to open a chord chart is what the popup has to say until one
     // arrives — saying it before asking is what this is about, and a page
     // this could not place has not been asked about.
-    if (!unplaced) setLooking(false);
+    if (!unplaced()) setLooking(false);
 
     await tidy();
 
@@ -477,13 +485,13 @@ function App() {
       // Which page this is, where that could not be asked. Nothing can be
       // read about a page the popup cannot place, so this comes before the
       // record and settles whether there is one to read at all.
-      if (unplaced) {
+      if (unplaced()) {
         try {
           const key = await addressInFront();
 
           // Asked and answered, whatever the answer was. A tab with no chart
           // address is not going to grow one while the popup is open.
-          unplaced = false;
+          setUnplaced(false);
           setLooking(false);
           if (key) place(key);
         } catch {
@@ -717,7 +725,22 @@ function App() {
               when={detection()}
               fallback={
                 <Show when={!looking()}>
-                  <p class={styles.note}>Open a ChordWiki chord chart to use Degreeify.</p>
+                  {/*
+                   * Which of the two it is. A tab that would not answer is not
+                   * a tab with no chart on it, and once the asking has run out
+                   * the difference is all the popup has to offer — one of them
+                   * is worth reopening it for.
+                   */}
+                  <Show
+                    when={unplaced()}
+                    fallback={
+                      <p class={styles.note}>Open a ChordWiki chord chart to use Degreeify.</p>
+                    }
+                  >
+                    <p class={styles.warning}>
+                      Degreeify could not work out which page this is. Close this and open it again.
+                    </p>
+                  </Show>
                 </Show>
               }
             >

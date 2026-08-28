@@ -6,7 +6,6 @@ import {
   asked,
   DEFAULT_SETTINGS,
   type Detection,
-  isStored,
   loadStamp,
   MOST_DETECTIONS,
   pruneDetections,
@@ -446,17 +445,21 @@ async function remember(
     // that write fails for want of room too, a page that had spent its one
     // tidying would have no way left to make room — stuck without a record
     // for the rest of its life, which is what this exists to prevent.
-    // One short of the number where what is about to be written is not among
-    // what is being counted, and the whole number where it is. A record this
-    // page wrote before and is writing again is already there and is already
-    // the one being kept, so counting it out as well would drop a record that
-    // did not need to go.
-    // Taken for present where the asking itself fails, which it may for the
-    // same reasons the writing just did. A page that has been writing records
-    // most likely has one, and guessing the other way evicts a record that
-    // did not need to go.
-    const already = await isStored(stored).catch(() => true);
-    await tidying(already ? MOST_DETECTIONS : MOST_DETECTIONS - 1);
+    // One short of the number, whether or not this page's own record is
+    // already among them. Counting to land on the number exactly is the right
+    // arithmetic and the wrong recovery: a page rewriting a record it already
+    // has is replacing a key rather than adding one, so a store sitting at
+    // the number is asked to drop nothing — and the write that follows fails
+    // for exactly the reason the one before it did.
+    //
+    // The number is this project's own, and a write fails on the browser's
+    // quota rather than on it, so what has to be freed is space. This is the
+    // only thing here that can free any, and it is asked for only because a
+    // write has already failed. The record it drops is the one nothing has
+    // looked at for longest, which is the one the number would drop next
+    // anyway; the cost of being wrong is a store one record under its cap,
+    // which the next chart a reader opens fills.
+    await tidying(MOST_DETECTIONS - 1);
     await writeDetection(stored, found);
     return;
   }

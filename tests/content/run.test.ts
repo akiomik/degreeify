@@ -780,65 +780,6 @@ describe('records of pages the reader has left', () => {
     stop();
   });
 
-  // Asking whether the record is already there can fail for the same reasons
-  // the write just did, and the answer decides how much room to make. Guessed
-  // the other way, a page that has been writing all along throws away a
-  // record that had room for itself.
-  it('keeps a record it did not have to drop where it could not ask', async () => {
-    for (let index = 0; index < MOST_DETECTIONS - 1; index++) {
-      await writeDetection(`detected:page-${index}`, {
-        version: SCHEMA_VERSION,
-        pageId: `chordwiki:chart:${index}`,
-        key: null,
-        source: null,
-        statedKeys: 0,
-        unreadKeys: 0,
-        transposeOffset: 0,
-        named: 0,
-        applied: true,
-        updatedAt: index,
-      });
-    }
-
-    // This page's own among them, so the store is exactly full and the write
-    // that is coming replaces rather than adds.
-    await writeDetection(RECORD, {
-      version: SCHEMA_VERSION,
-      pageId: PAGE,
-      key: null,
-      source: null,
-      statedKeys: 0,
-      unreadKeys: 0,
-      transposeOffset: 0,
-      named: 0,
-      applied: true,
-      updatedAt: 0,
-    });
-
-    const setting = browser.storage.local.set.bind(browser.storage.local);
-    let full = true;
-    vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
-      if (full && Object.keys(items).some((name) => name.startsWith('detected:'))) {
-        full = false;
-        throw new Error('quota exceeded');
-      }
-      return setting(items);
-    }) as never);
-
-    const getting = browser.storage.local.get.bind(browser.storage.local);
-    vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
-      if (query === RECORD) throw new Error('context invalidated');
-      return getting(query);
-    }) as never);
-
-    (await start(load('chordwiki-basic')))();
-
-    const all = await browser.storage.local.get(null);
-    expect(Object.keys(all).filter((key) => key.startsWith('detected:'))).toHaveLength(
-      MOST_DETECTIONS,
-    );
-  });
-
   // Spent only once it has been done. Spent before, a page whose store had no
   // room would tidy once, fail anyway, and never try to make room again — so
   // the popup would go on telling its reader to open a chord chart on the
@@ -944,10 +885,12 @@ describe('records of pages the reader has left', () => {
     stop();
   });
 
-  // A record this page wrote before and is writing again is already there and
-  // is already the one being kept, so counting it out as well would drop a
-  // record that did not need to go.
-  it('are counted with this page own record where it already has one', async () => {
+  // Room is made even where this page's own record is already among them.
+  // Counting to land on the number exactly is the right arithmetic and the
+  // wrong recovery: a page rewriting a record it has is replacing a key
+  // rather than adding one, so a store sitting at the number would be asked
+  // to drop nothing and the write would fail again for the same reason.
+  it('make room where this page already has a record among them', async () => {
     const doc = load('chordwiki-basic');
     const stop = await start(doc);
 
@@ -983,17 +926,21 @@ describe('records of pages the reader has left', () => {
     await saveOnly({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
+    // Which is what the recovery is for. One under the number, and the record
+    // written — where nothing is dropped, the write fails again and the popup
+    // is left describing a page as it was before the reader changed it.
+    expect(await readDetection(RECORD)).toMatchObject({ named: 6 });
+
     const all = await browser.storage.local.get(null);
     expect(Object.keys(all).filter((key) => key.startsWith('detected:'))).toHaveLength(
-      MOST_DETECTIONS,
+      MOST_DETECTIONS - 1,
     );
     stop();
   });
 
-  // Asked whether anything is there rather than read. A record written under
-  // another version is there, takes a place among the ones kept, and survives
-  // a tidying told to keep it — so counting what is there has to count it,
-  // whether or not this build can make sense of it.
+  // Counted rather than read. A record written under another version takes a
+  // place among the ones kept and survives a tidying told to keep it, so what
+  // makes room has to count it whether or not this build can read it.
   it('count a record of this page written in a shape they cannot read', async () => {
     const doc = load('chordwiki-basic');
     const stop = await start(doc);
@@ -1041,7 +988,7 @@ describe('records of pages the reader has left', () => {
 
     const all = await browser.storage.local.get(null);
     expect(Object.keys(all).filter((key) => key.startsWith('detected:'))).toHaveLength(
-      MOST_DETECTIONS,
+      MOST_DETECTIONS - 1,
     );
     stop();
   });

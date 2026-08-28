@@ -4,7 +4,6 @@ import { fakeBrowser } from 'wxt/testing/fake-browser';
 import {
   DEFAULT_SETTINGS,
   type Detection,
-  isStored,
   loadSettings,
   loadStamp,
   loadStamps,
@@ -420,20 +419,6 @@ describe('what was found on a page', () => {
 
   it('is nothing where nothing was written', async () => {
     expect(await readDetection('detected:nothing')).toBeNull();
-  });
-
-  // A browser that has just had a key removed answers `undefined` or `null`
-  // and they do not agree about which. Told that a removed record is still
-  // there, a page making room for one would leave itself none — and would
-  // fail to write for want of the room it had just decided it did not need.
-  it('is not there where the browser answers null for a key it has removed', async () => {
-    const real = browser.storage.local.get.bind(browser.storage.local);
-    vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
-      if (query === 'detected:gone') return { 'detected:gone': null };
-      return real(query);
-    }) as never);
-
-    expect(await isStored('detected:gone')).toBe(false);
   });
 
   // Nothing else says whether the names went onto the page, so a record

@@ -136,10 +136,10 @@ describe('the popup where it cannot work out which tab it is on', () => {
     dispose();
   });
 
-  // And says nothing about the page, rather than saying there is no chart
-  // here. It was never asked: a tab that could not be looked up is not a tab
-  // with no chart on it, and the asking is tried again while the popup is
-  // open. Nothing is what this knows.
+  // And says nothing about the page while it is still asking, rather than
+  // saying there is no chart here. A tab that could not be looked up is not a
+  // tab with no chart on it, and the asking is tried again while the popup is
+  // open.
   it('does not say there is no chart on a page it could not look up', async () => {
     vi.spyOn(browser.tabs, 'query').mockRejectedValue(new Error('no window'));
     const { root, dispose } = await open();
@@ -149,6 +149,21 @@ describe('the popup where it cannot work out which tab it is on', () => {
     expect(root.textContent).not.toContain('Open a ChordWiki chord chart');
     dispose();
   });
+
+  // And says which of the two it is once the asking has run out. Left
+  // looking, the popup shows a heading, the settings, and a gap where
+  // everything about the page goes — with nothing to say whether it is still
+  // asking, gave up, or is simply not on a chart.
+  it('says it could not work out which page this is once the tries are spent', async () => {
+    vi.spyOn(browser.tabs, 'query').mockRejectedValue(new Error('no window'));
+    const { root, dispose } = await open();
+
+    await new Promise((resolve) => setTimeout(resolve, 7000));
+
+    expect(root.textContent).toContain('could not work out which page this is');
+    expect(root.textContent).not.toContain('Open a ChordWiki chord chart');
+    dispose();
+  }, 15000);
 });
 
 describe('the popup over settings this build cannot read', () => {
