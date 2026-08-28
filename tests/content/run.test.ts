@@ -296,6 +296,38 @@ describe('a showing that failed', () => {
   // leaves the chart in chord names — which is the honest state for a page
   // this can no longer read. What must not happen is that it stays there:
   // the next change has to be acted on.
+  // `apply` restores before it reads, so a reading that throws leaves the page
+  // in chord names — and what it was showing before is a state it is no
+  // longer in. Remembered as that state, a change back to it is skipped as a
+  // change to nothing and the page stays in chord names for good.
+  it('is forgotten, so going back to what was showing shows it again', async () => {
+    let breaking = false;
+    const brittle = {
+      ...chordwiki,
+      readChart: (doc: Document) => {
+        if (breaking) throw new Error('the page moved');
+        return chordwiki.readChart(doc);
+      },
+    };
+
+    const doc = load('chordwiki-basic');
+    const stop = await run(doc, brittle, new URL(ADDRESS));
+    expect(shown(doc)[1]).toBe('VIm7');
+
+    breaking = true;
+    await saveOnly({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(shown(doc)[1]).toBe('Am7');
+
+    // Back to exactly what was on the page before it broke.
+    breaking = false;
+    await saveOnly(DEFAULT_SETTINGS);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(shown(doc)[1]).toBe('VIm7');
+    stop();
+  });
+
   it('leaves the chart in chord names and goes on following the settings', async () => {
     let breaking = false;
     const brittle = {
@@ -430,6 +462,20 @@ describe('records of pages the reader has left', () => {
   // failed to write for want of room has to be tried again here or not at
   // all.
   it('are tidied and the record written again where the store had no room', async () => {
+    for (let index = 0; index < MOST_DETECTIONS + 5; index++) {
+      await writeDetection(`detected:page-${index}`, {
+        version: SCHEMA_VERSION,
+        pageId: `chordwiki:chart:${index}`,
+        key: null,
+        source: null,
+        statedKeys: 0,
+        unreadKeys: 0,
+        transposeOffset: 0,
+        named: 0,
+        updatedAt: index,
+      });
+    }
+
     const real = browser.storage.local.set.bind(browser.storage.local);
     let full = true;
     vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
@@ -443,6 +489,13 @@ describe('records of pages the reader has left', () => {
     (await start(load('chordwiki-basic')))();
 
     expect(await readDetection(RECORD)).toMatchObject({ named: 6 });
+
+    // And one short of the number on the way, because the record about to be
+    // written is not among the ones being counted.
+    const all = await browser.storage.local.get(null);
+    expect(Object.keys(all).filter((key) => key.startsWith('detected:'))).toHaveLength(
+      MOST_DETECTIONS,
+    );
   });
 
   // Once for each page a reader opens, and not for each time it is read:

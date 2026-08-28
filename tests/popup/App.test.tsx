@@ -532,6 +532,27 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // Kept rather than usable. Something stored that this cannot read is a key
+  // that does nothing and cannot be removed — the kind a reader would most
+  // want to be rid of — and a control asking whether the value is truthy
+  // would leave them with it for good, taking a place among the ones kept.
+  it('can forget a key kept as nothing at all', async () => {
+    await browser.storage.local.set({
+      settings: { ...DEFAULT_SETTINGS, keyOverrides: { 'chordwiki:chart:Test Song': null } },
+    });
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+    const button = root.querySelector('button');
+    expect(button?.disabled).toBe(false);
+
+    button?.click();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect((await loadSettings()).keyOverrides).toEqual({});
+    dispose();
+  });
+
   // The mode a key was in stays on offer after it is cleared. Otherwise a
   // reader clearing a minor key to choose another minor tonic finds the
   // control back on major, three of the tonics gone, and the next one they

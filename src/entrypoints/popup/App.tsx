@@ -25,7 +25,6 @@ import {
   asked,
   DEFAULT_SETTINGS,
   type Detection,
-  type KeyOverride,
   loadSettings,
   loadStamps,
   pruneDetections,
@@ -280,7 +279,7 @@ function App() {
     // "read from the chart" on a chart that was already being read from tells
     // every open tab that the settings changed, over a change that is not
     // one — and can be told the write failed for their trouble.
-    if (!found || !current || !keptFor(current, found.pageId)) return;
+    if (!found || !current || !anythingKeptFor(current, found.pageId)) return;
 
     // The mode the key was in stays on offer. A reader clearing a key to
     // choose another tonic in the same mode would otherwise find the control
@@ -383,7 +382,7 @@ function App() {
                            * the other way, the escape hatch is missing from
                            * half of what it is an escape from.
                            */}
-                          <Show when={keptFor(current(), found().pageId)}>
+                          <Show when={anythingKeptFor(current(), found().pageId)}>
                             <button type="button" onClick={() => void clearOverride()}>
                               Forget the key set for this chart
                             </button>
@@ -440,7 +439,7 @@ function App() {
                        */}
                       <button
                         type="button"
-                        disabled={!keptFor(current(), found().pageId)}
+                        disabled={!anythingKeptFor(current(), found().pageId)}
                         onClick={() => void clearOverride()}
                       >
                         Use the chart's own key
@@ -558,15 +557,20 @@ function whyNotOverridable(found: Detection): string {
 }
 
 /**
- * The key kept for a chart, asked of the object itself.
+ * Whether anything at all is kept for a chart.
  *
- * `in` and a bare lookup both find a `constructor` on any object, and what is
- * looked up here is a chart's name — which carries an adapter's prefix today
- * and need not tomorrow. Asked either of those ways, a chart called
- * `constructor` would have a key nobody set and a button to forget it.
+ * Kept rather than usable, and asked of the object rather than of the value.
+ * Something stored that this cannot read is a key that does nothing and
+ * cannot be removed — the kind a reader would most want to be rid of — and a
+ * control asking whether the value is truthy would leave them with it for
+ * good, taking a place among the two hundred kept.
+ *
+ * Asked of the object because `in` and a bare lookup both find a
+ * `constructor` on anything, and what is looked up here is a chart's name —
+ * which carries an adapter's prefix today and need not tomorrow.
  */
-function keptFor(settings: Settings, pageId: string): KeyOverride | undefined {
-  return Object.hasOwn(settings.keyOverrides, pageId) ? settings.keyOverrides[pageId] : undefined;
+function anythingKeptFor(settings: Settings, pageId: string): boolean {
+  return Object.hasOwn(settings.keyOverrides, pageId);
 }
 
 /** The tonic on its own, which is what the control offers and keeps. */

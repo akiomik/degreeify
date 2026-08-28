@@ -107,9 +107,16 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
       // change that came back to this one would be skipped as a change to
       // nothing — with no way back short of a reload.
       if (wanted !== showed) {
+        // Nothing, before anything is done to the page. `apply` restores
+        // before it reads, so a reading that throws leaves the page in chord
+        // names — and `showed` still naming the state it was in before would
+        // have a change back to that state skipped as a change to nothing.
+        // The page would stay in chord names for the rest of its life.
+        showed = null;
+        recorded = false;
+
         painted = paint(doc, adapter, current, pageId);
         showed = wanted;
-        recorded = false;
       }
 
       if (!recorded && painted) {
@@ -314,7 +321,11 @@ async function remember(
     // not tidied yet. Tidied and tried once more rather than left to a later
     // reading: the reader is sitting on this page, so neither a settings
     // change nor its coming back into view is going to happen on its own.
-    await tidying();
+    // One short of the number, because what is about to be written is not
+    // among what is being counted: this record does not exist yet, so keeping
+    // the whole number of others and then adding this one would settle a
+    // record above it.
+    await pruneDetections(MOST_DETECTIONS - 1, stored).catch(() => {});
     await writeDetection(stored, found);
     return;
   }
