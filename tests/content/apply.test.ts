@@ -266,6 +266,18 @@ describe("a chord above the chart's first key line", () => {
     expect(report.source).toBe('page');
   });
 
+  // A key set by hand is a claim about the whole page, and the chart having
+  // stated a readable key of its own does not narrow it: a reader who says
+  // this chart is in D has said so about all of it, including whatever is
+  // written above the line they disagreed with.
+  it('is named where a key given from outside overrides a readable one', () => {
+    const doc = aboveTheKeyLine('Key: C');
+    const report = apply(doc, chordwiki, { key: key('D') });
+
+    expect(shown(doc)).toEqual(['IV7', 'bVII']);
+    expect(report.source).toBe('manual');
+  });
+
   // A chart that changes key is followed rather than overridden, so a chord
   // above its first key line stays a chord above a key line.
   it('is left alone where a chart that changes key is given a key', () => {

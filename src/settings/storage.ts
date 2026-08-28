@@ -639,13 +639,13 @@ function nothingStored(value: unknown): boolean {
 function isSettings(value: unknown): value is Settings {
   if (!isRecord(value) || value.version !== SCHEMA_VERSION) return false;
 
-  // Not an array, which `isRecord` would take for one of these. Read, it
-  // degrades to nothing — no chart is named after a number — but the first
-  // key a reader sets is spread over it, and the numbers come along as
-  // overrides for charts that do not exist, taking places among the two
-  // hundred kept and reachable from nowhere.
+  // Which `isRecord` rules an array out of. Read as one, it degrades to
+  // nothing — no chart is named after a number — but the first key a reader
+  // sets is spread over it, and the numbers come along as overrides for
+  // charts that do not exist, taking places among the two hundred kept and
+  // reachable from nowhere.
   const keys = value.keyOverrides;
-  return keys === undefined || (isRecord(keys) && !Array.isArray(keys));
+  return keys === undefined || isRecord(keys);
 }
 
 function isDetection(value: unknown): value is Detection {
@@ -690,6 +690,14 @@ function isReadKey(value: unknown): boolean {
   );
 }
 
+/**
+ * Whether a value is something with named fields.
+ *
+ * Not an array, which `typeof` alone calls an object. Nothing stored here is
+ * one, and every caller goes on to look up a field by name — so an array
+ * passing this is a guard saying yes to something none of its callers can
+ * use.
+ */
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
