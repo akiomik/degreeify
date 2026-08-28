@@ -159,7 +159,7 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
         // asked for. The record would stay gone, which is the failure that
         // watcher exists to prevent.
         const mine = ++writing;
-        await remember(pageId, stored, painted, first);
+        const swept = await remember(pageId, stored, painted, first);
 
         // Both marked only once the whole of it has been done. Marked before,
         // a tidying that never finished would be spent all the same — and a
@@ -167,7 +167,12 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
         // popup would go on telling its reader to open a chord chart on the
         // chord chart in front of them for the rest of that page's life.
         if (writing === mine) recorded = true;
-        tidied = true;
+
+        // And only where it was done. A prune that failed on its own — a read
+        // of the whole store that would not answer, a removal that would not
+        // land — resolves quietly, and spending the flag on it leaves the
+        // page never sweeping again for the rest of its life.
+        if (swept) tidied = true;
       }
     };
     showing = showing.then(next, next);
@@ -320,7 +325,7 @@ async function remember(
   stored: string | null,
   { report, offset, applied }: ReturnType<typeof paint>,
   tidy: boolean,
-): Promise<void> {
+): Promise<boolean> {
   // Whether or not the names are being shown, and only where the key was the
   // one the chart was read in.
   //
@@ -339,7 +344,10 @@ async function remember(
   // chord chart they are looking at.
   if (report.source === 'manual') await touchOverride(pageId).catch(() => {});
 
-  if (!stored) return;
+  // Spent, on a page with nowhere to write. There is nothing to sweep for and
+  // nothing a later run could do differently, and the sweep is only ever
+  // asked for once.
+  if (!stored) return true;
 
   // And what was found, last, because it is the one of the two that can fail
   // on a page that is otherwise fine — a full quota, an extension reloaded
@@ -358,7 +366,15 @@ async function remember(
   //
   // After the writing, so that what was just written is counted and the store
   // settles at the number it is held to rather than one above it.
-  const tidying = () => pruneDetections(MOST_DETECTIONS, stored).catch(() => {});
+  //
+  // Says whether it was done. Failing is allowed — the record is written
+  // either way, and a store one record over the number it is held to is not
+  // worth a page in chord names — but it must not be mistaken for done.
+  const tidying = (most: number) =>
+    pruneDetections(most, stored).then(
+      () => true,
+      () => false,
+    );
 
   try {
     await writeDetection(stored, found);
@@ -383,12 +399,12 @@ async function remember(
     // most likely has one, and guessing the other way evicts a record that
     // did not need to go.
     const already = await isStored(stored).catch(() => true);
-    await pruneDetections(already ? MOST_DETECTIONS : MOST_DETECTIONS - 1, stored).catch(() => {});
+    const swept = await tidying(already ? MOST_DETECTIONS : MOST_DETECTIONS - 1);
     await writeDetection(stored, found);
-    return;
+    return swept;
   }
 
-  if (tidy) await tidying();
+  return tidy ? await tidying(MOST_DETECTIONS) : true;
 }
 
 /**

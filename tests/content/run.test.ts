@@ -581,6 +581,56 @@ describe('records of pages the reader has left', () => {
     );
   });
 
+  // A prune that fails on its own resolves quietly — the record was written
+  // and the page is named either way — and a page that took that for a
+  // tidying would never sweep again for the rest of its life, leaving the
+  // store above the number it is held to until the reader opens the popup.
+  it('are tidied on a later reading where the first tidying failed on its own', async () => {
+    for (let index = 0; index < MOST_DETECTIONS + 5; index++) {
+      await writeDetection(`detected:page-${index}`, {
+        version: SCHEMA_VERSION,
+        pageId: `chordwiki:chart:${index}`,
+        key: null,
+        source: null,
+        statedKeys: 0,
+        unreadKeys: 0,
+        transposeOffset: 0,
+        named: 0,
+        applied: true,
+        updatedAt: index,
+      });
+    }
+
+    // The whole store, which is what the pruning reads and nothing else here
+    // asks for. The record itself writes fine, so the retry path is not the
+    // one being taken.
+    const getting = browser.storage.local.get.bind(browser.storage.local);
+    let broken = true;
+    vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+      if (broken && query === null) throw new Error('context invalidated');
+      return getting(query);
+    }) as never);
+
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+
+    const left = await getting(null);
+    expect(Object.keys(left).filter((key) => key.startsWith('detected:')).length).toBeGreaterThan(
+      MOST_DETECTIONS,
+    );
+
+    broken = false;
+    await saveOnly({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const all = await browser.storage.local.get(null);
+    expect(Object.keys(all).filter((key) => key.startsWith('detected:'))).toHaveLength(
+      MOST_DETECTIONS,
+    );
+    expect(await readDetection(RECORD)).not.toBeNull();
+    stop();
+  });
+
   // Asking whether the record is already there can fail for the same reasons
   // the write just did, and the answer decides how much room to make. Guessed
   // the other way, a page that has been writing all along throws away a

@@ -60,7 +60,7 @@ function App() {
   const [readable, setReadable] = createSignal(true);
 
   /**
-   * Whether the settings could not be read at all.
+   * Whether what is stored is not settings this build can read.
    *
    * The controls still work — a change reads again before it writes, and that
    * read may well succeed — but what they show until then is this build's
@@ -74,11 +74,29 @@ function App() {
    * is what any change here writes, so changing the numerals turns the names
    * on as well. Neither is wrong and the pair is surprising, so the line says
    * what will happen rather than leaving it to be found out.
+   *
+   * Every page reads the same stored value and answers it the same way, which
+   * is what lets this speak for the charts as well as for the controls.
    */
   const [unread, setUnread] = createSignal(false);
 
+  /**
+   * Whether this popup's own read failed, which is a different thing.
+   *
+   * Kept apart from {@link unread} because only one of the two says anything
+   * about the charts. A read that throws here says nothing about the read a
+   * content script made a moment earlier: that one may well have worked, and
+   * the chart behind this popup may be named end to end. Told that no chart
+   * is being named, a reader looking at one that is would be right to stop
+   * believing the rest of this.
+   */
+  const [unreachable, setUnreachable] = createSignal(false);
+
   /** Whether the mode on offer is one the reader has settled, one way or another. */
   let modeIsSettled = false;
+
+  /** Which mode change is the latest, so that an older one cannot undo it. */
+  let modeChanges = 0;
 
   // What is stored is what was chosen, once it has arrived: a key loaded from
   // storage brings its mode with it, and the control has to show that mode
@@ -123,21 +141,29 @@ function App() {
 
     setReadable(!stored?.fromLater);
 
-    // Not read, whether the read failed or what came back was not settings.
-    // Both leave the controls showing this build's defaults rather than the
+    // Told apart, because they leave the charts in different states. Both
+    // leave the controls showing this build's defaults rather than the
     // reader's answers, and a control showing something nobody chose is worse
-    // for being indistinguishable from one showing an answer.
-    setUnread(!stored?.understood);
+    // for being indistinguishable from one showing an answer — but only a
+    // stored value no build here can read is one every page is answering the
+    // same way.
+    setUnreachable(stored === null);
+    setUnread(stored !== null && !stored.understood);
     // The same fallback the page uses for the same failure. Read as the plain
     // defaults, the checkbox would say the names are on while no page is
     // naming anything — one failure answered two ways, and the one the reader
     // can see would be the wrong one.
     //
-    // As every page is acting on them, which for settings that could not be
-    // read is with the names off. Shown as the plain defaults, the checkbox
-    // would say the names are on while no chart anywhere is named — and the
-    // reader's first click would turn them off again, so it would take two to
-    // turn them on.
+    // As every page is acting on them, which for a stored value none of them
+    // can read is with the names off. Shown as the plain defaults, the
+    // checkbox would say the names are on while no chart anywhere is named —
+    // and the reader's first click would turn them off again, so it would
+    // take two to turn them on.
+    //
+    // For a read that threw here it is a guess rather than a reading: the
+    // pages made their own reads and this one says nothing about them. It is
+    // the guess whose recovery is one click, and the warning above says which
+    // of the two states this is.
     //
     // What is written still starts from what was read rather than from this.
     // A value nobody chose, sitting where a setting goes, is one the next
@@ -359,6 +385,19 @@ function App() {
             </Show>
 
             {/*
+             * Which says nothing about the charts, because this failure says
+             * nothing about them: what a page is showing was decided by that
+             * page's own read of the same settings, and that read is not this
+             * one.
+             */}
+            <Show when={unreachable() && readable()}>
+              <p class={styles.warning}>
+                Your settings could not be read here. These are the defaults, not your answers. What
+                any chart is showing is unchanged.
+              </p>
+            </Show>
+
+            {/*
              * Outside what is known about the page, because it is not about
              * the page. A reader who switched the names off, or who is on a
              * chart whose content script has not written its record yet, has
@@ -459,8 +498,7 @@ function App() {
                             value={mode()}
                             onChange={(event) => {
                               const chosen = event.currentTarget.value as Mode;
-                              const before = pendingMode();
-                              const settled = modeIsSettled;
+                              const mine = ++modeChanges;
 
                               modeIsSettled = true;
                               setPendingMode(chosen);
@@ -477,11 +515,25 @@ function App() {
                               // this control is the popup's own, so nothing
                               // else would — and a reader told that nothing
                               // changed would be looking at a mode that had.
+                              //
+                              // Put back from what is kept rather than from
+                              // what this control read a moment ago, and only
+                              // by the last change made. Writes are
+                              // serialised, so two changes made before the
+                              // first has landed roll back in the order they
+                              // were made: the first puts back the mode from
+                              // before it, and the second puts back the mode
+                              // between the two. A reader whose changes were
+                              // all refused would be left looking at a mode
+                              // they never settled on — with the key reading
+                              // "read from the chart" on a chart that still
+                              // has one, its tonic not being among the ones
+                              // that mode offers.
                               void setOverride(formatNoteOf(current), chosen).then((kept) => {
-                                if (kept) return;
+                                if (kept || modeChanges !== mine) return;
 
-                                modeIsSettled = settled;
-                                setPendingMode(before);
+                                const stayed = override();
+                                if (stayed) setPendingMode(stayed.mode);
                               });
                             }}
                           >

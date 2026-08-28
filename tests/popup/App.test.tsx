@@ -396,13 +396,24 @@ describe('the popup on a chart', () => {
 
     const { root, dispose } = await open();
 
-    expect(root.textContent).toContain('could not be read');
-
-    // And what will happen, because two true things about this state
-    // disagree on the face of it: no chart is being named, and the defaults
-    // say to name every one.
-    expect(root.textContent).toContain('until you change something here');
+    expect(root.textContent).toContain('could not be read here');
     expect(root.querySelector('input[type="checkbox"]')).not.toBeNull();
+    dispose();
+  });
+
+  // And says nothing about the charts, because this failure says nothing
+  // about them. The pages made their own reads of the same settings, and one
+  // that threw here says nothing about one that did not throw there — a
+  // reader told that no chart is being named, looking at one that is, would
+  // be right to stop believing the rest of this.
+  it('does not claim the charts are unnamed when only its own read failed', async () => {
+    vi.spyOn(browser.storage.local, 'get').mockRejectedValue(new Error('context invalidated'));
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+
+    expect(root.textContent).not.toContain('until you change something here');
+    expect(root.textContent).toContain('What any chart is showing is unchanged');
     dispose();
   });
 
@@ -416,6 +427,12 @@ describe('the popup on a chart', () => {
     const { root, dispose } = await open();
 
     expect(root.textContent).toContain('could not be read');
+
+    // And here it does say what will happen to the charts, because every page
+    // reads the same stored value and answers it the same way. Two true
+    // things about this state disagree on the face of it: no chart is being
+    // named, and the defaults say to name every one.
+    expect(root.textContent).toContain('until you change something here');
     dispose();
   });
 
@@ -557,6 +574,37 @@ describe('the popup on a chart', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(root.textContent).toContain('could not be saved');
+    expect(modes.value).toBe('major');
+    expect(tonics.value).toBe('Db');
+    dispose();
+  });
+
+  // Writes are serialised, so two changes made before the first has landed
+  // roll back in the order they were made: the first puts back the mode from
+  // before it, and the second puts back the mode between the two. The reader
+  // is left looking at a mode they never settled on, with the key reading
+  // "read from the chart" on a chart that still has one.
+  it('puts the mode back where it is kept when two changes could not be saved', async () => {
+    await saveKept(
+      withOverride(EMPTY, 'chordwiki:chart:Test Song', { tonic: note('Db'), mode: 'major' }, 0, 1)
+        .settings,
+      { 'chordwiki:chart:Test Song': 1 },
+      {},
+    );
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+    const [tonics, modes] = [...root.querySelectorAll('select')];
+    if (!tonics || !modes) throw new Error('there is a key control');
+
+    vi.spyOn(browser.storage.local, 'set').mockRejectedValue(new Error('quota exceeded'));
+
+    modes.value = 'minor';
+    modes.dispatchEvent(new Event('change', { bubbles: true }));
+    modes.value = 'major';
+    modes.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
     expect(modes.value).toBe('major');
     expect(tonics.value).toBe('Db');
     dispose();
