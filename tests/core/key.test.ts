@@ -150,6 +150,16 @@ describe('transposeKey', () => {
     expect(moved('C', 6)).toBe(moved('B', 7));
   });
 
+  // A mode that is neither of the two has no table of names. Indexed anyway,
+  // the lookup throws where the guard below is written to say what went
+  // wrong, and this function is exported — a caller reading that guard would
+  // take it to cover the case it is standing in front of.
+  it('says what is wrong with a mode it has no names for', () => {
+    const key = { tonic: parseNote('C') as never, mode: 'dorian' as never };
+
+    expect(() => transposeKey(key, 1)).toThrow('no dorian key is named');
+  });
+
   it('takes a chart transposed and back to where it started', () => {
     for (const offset of [-5, -1, 1, 6, 11]) {
       expect(formatKey(transposeKey(transposeKey(key('Eb'), offset), -offset))).toBe('Eb');

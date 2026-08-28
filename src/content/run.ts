@@ -121,7 +121,6 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
 
       if (!recorded && painted) {
         const first = !tidied;
-        tidied = true;
 
         // Marked against this run rather than as a flag. The writing takes a
         // turn of the loop, and the record can be thrown away inside it — the
@@ -132,7 +131,13 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
         const mine = ++writing;
         await remember(pageId, stored, painted, first);
 
+        // Both marked only once the whole of it has been done. Marked before,
+        // a tidying that never finished would be spent all the same — and a
+        // page whose store had no room would stop trying to make room, so the
+        // popup would go on telling its reader to open a chord chart on the
+        // chord chart in front of them for the rest of that page's life.
         if (writing === mine) recorded = true;
+        tidied = true;
       }
     };
     showing = showing.then(next, next);

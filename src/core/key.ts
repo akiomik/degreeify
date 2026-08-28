@@ -458,7 +458,12 @@ export function transposeKey(key: Key, semitones: number): Key {
       SEMITONES_IN_AN_OCTAVE) %
     SEMITONES_IN_AN_OCTAVE;
 
-  const name = CANONICAL_TONIC[key.mode][pitch];
+  // The table asked for before it is indexed. A mode that is neither of the
+  // two has no table, and indexing nothing throws where the line below is
+  // written to say what went wrong — this function is exported, and a caller
+  // reading the guard would take it to cover the case it is standing in front
+  // of.
+  const name = CANONICAL_TONIC[key.mode]?.[pitch];
   const tonic = name ? parseNote(name) : null;
   if (!tonic) throw new Error(`no ${key.mode} key is named at pitch class ${pitch}`);
 
