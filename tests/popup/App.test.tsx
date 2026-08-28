@@ -11,10 +11,12 @@ import {
   type Detection,
   loadSettings,
   loadStamp,
+  MOST_DETECTIONS,
   recordKey,
   SCHEMA_VERSION,
   type Settings,
   saveKept,
+  writeDetection,
 } from '@/settings/storage';
 
 /** Writes settings the way the popup does, leaving the stamps alone. */
@@ -525,6 +527,38 @@ describe('the popup on a chart', () => {
     const { root, dispose } = await open();
     expect(root.textContent).toContain('Open a ChordWiki chord chart');
 
+    broken = false;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(root.textContent).toContain('C — from the chart');
+    dispose();
+  });
+
+  // Tidying without knowing which page the popup is over drops the record it
+  // is about to read. A reader who has browsed enough charts since has this
+  // one thrown away by the popup they opened to look at it — and the page
+  // that would normally write it straight back has had its listeners taken by
+  // the same failure.
+  it('does not drop the record for a page it has not placed yet', async () => {
+    for (let index = 0; index < MOST_DETECTIONS + 5; index++) {
+      await writeDetection(`detected:page-${index}`, {
+        ...detection(),
+        pageId: `chordwiki:chart:${index}`,
+        updatedAt: index + 2,
+      });
+    }
+
+    // The oldest of them, which is what a chart recorded when it loaded is
+    // once the reader has browsed on and come back to it.
+    await onATab(ADDRESS, detection({ updatedAt: 1 }));
+
+    let broken = true;
+    vi.spyOn(browser.tabs, 'query').mockImplementation((async () => {
+      if (broken) throw new Error('context invalidated');
+      return [{ url: ADDRESS }] as never;
+    }) as never);
+
+    const { root, dispose } = await open();
     broken = false;
     await new Promise((resolve) => setTimeout(resolve, 400));
 

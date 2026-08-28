@@ -149,6 +149,31 @@ function App() {
     }
   };
 
+  /** Whether the records have been tidied, which is once per popup. */
+  let tidied = false;
+
+  /**
+   * Drops the oldest records, keeping the one for the page in front.
+   *
+   * Here rather than in the content script, which runs on every page a reader
+   * opens. Tidying belongs where somebody asked for something.
+   *
+   * Not until the popup knows which page that is. Run without it, the record
+   * it is about to read is not the one being kept — and a reader who has
+   * browsed enough charts since has this one dropped by the popup they opened
+   * to look at it, after which it says to open a chord chart on the chord
+   * chart in front of them. A page normally writes its record straight back,
+   * but the failure that loses the address is an extension reloaded out from
+   * under everything, which is the failure that takes the page's listeners
+   * with it.
+   */
+  const tidy = async () => {
+    if (tidied || unplaced) return;
+
+    tidied = true;
+    await pruneDetections(undefined, where).catch(() => {});
+  };
+
   /**
    * Reads the record for the page in front, where there is one to read.
    *
@@ -262,9 +287,7 @@ function App() {
       await fetchRecord();
     }
 
-    // Here rather than in the content script, which runs on every page a
-    // reader opens. Tidying belongs where somebody asked for something.
-    await pruneDetections(undefined, key).catch(() => {});
+    await tidy();
 
     // And asked again where any of that failed, on the same schedule the page
     // uses for the same failure. A popup is open for seconds rather than for
@@ -354,6 +377,9 @@ function App() {
           // address is not going to grow one while the popup is open.
           unplaced = false;
           if (key) place(key);
+
+          // Which was waiting on this, and keeps the record about to be read.
+          await tidy();
         } catch {
           // Still nothing to place it by.
         }
