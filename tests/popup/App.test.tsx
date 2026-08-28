@@ -12,6 +12,7 @@ import {
   loadSettings,
   loadStamp,
   MOST_DETECTIONS,
+  RETRY_AFTER,
   recordKey,
   SCHEMA_VERSION,
   type Settings,
@@ -619,11 +620,12 @@ describe('the popup on a chart', () => {
     expect(get.mock.calls).toHaveLength(asked);
   });
 
-  // A content script writes its record as soon as it has read the page — the
-  // seconds the "give this one a moment" line is about. Counting to the
-  // number without it leaves the store one over as soon as it lands, on
-  // exactly the page the reader is looking at.
-  it('leaves room for the record of a page that has not written one yet', async () => {
+  // No place is held open for a record that has not arrived. One was, for the
+  // page whose content script is still reading it — but nothing here can tell
+  // that page from a page on the site that is not a chart, and guessing wrong
+  // drops the oldest chart a reader has read for a record never written. One
+  // over a number this project sets itself is the cheaper of the two.
+  it('holds no place open for a record that may never be written', async () => {
     for (let index = 0; index < MOST_DETECTIONS + 5; index++) {
       await writeDetection(`detected:page-${index}`, {
         ...detection(),
@@ -637,7 +639,7 @@ describe('the popup on a chart', () => {
 
     const all = await browser.storage.local.get(null);
     expect(Object.keys(all).filter((key) => key.startsWith('detected:'))).toHaveLength(
-      MOST_DETECTIONS - 1,
+      MOST_DETECTIONS,
     );
     dispose();
   });
@@ -740,26 +742,31 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
-  // And is not asked again where there is nothing to ask about. A page that
-  // is not a chart has no record and never will.
-  it('does not keep asking for a record where the read said there is none', async () => {
+  // And is asked again, a bounded number of times, where there is none yet.
+  // The watching is what normally brings a record, and a listener that could
+  // not be added hears nothing — on a chart still being read that is the line
+  // the popup exists for, gone for as long as it stays open. On a page that
+  // will never have a record the tries cost three reads and stop.
+  it('asks again for a record that has not arrived, and then stops', async () => {
     await onATab(ADDRESS);
 
     const real = browser.storage.local.get.bind(browser.storage.local);
+    const key = recordKey(ADDRESS);
+    if (!key) throw new Error('that is an address');
     const get = vi
       .spyOn(browser.storage.local, 'get')
       .mockImplementation((async (query: never) => real(query)) as never);
 
-    const { root, dispose } = await open();
-    const asked = get.mock.calls.length;
+    const { dispose } = await open();
+    const asked = get.mock.calls.filter(([query]) => query === key).length;
 
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await new Promise((resolve) => setTimeout(resolve, 7000));
 
-    expect(get.mock.calls).toHaveLength(asked);
-    expect(root.textContent).toContain('Nothing to show for this page yet');
-    get.mockRestore();
+    expect(get.mock.calls.filter(([query]) => query === key)).toHaveLength(
+      asked + RETRY_AFTER.length,
+    );
     dispose();
-  });
+  }, 15000);
 
   // Working out which page the popup is over takes two round trips after the
   // settings have already been shown, and nothing else tells "not a chart"

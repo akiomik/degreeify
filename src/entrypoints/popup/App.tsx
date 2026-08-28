@@ -253,7 +253,15 @@ function App() {
   const tryAgainIfNeeded = () => {
     if (gone) return;
 
-    if (!unreachable() && !lost() && !unplaced() && tidied) {
+    // A record that has not arrived is outstanding too, where the popup knows
+    // where one would be. `watchDetection` is what normally brings it, and a
+    // listener that could not be added is a listener that hears nothing — on
+    // a chart still being read, that is the line the popup exists for, gone
+    // for as long as it stays open. Bounded like the rest: three tries, and
+    // on a page that will never have a record they cost three reads.
+    const waited = where !== null && !detection();
+
+    if (!unreachable() && !lost() && !unplaced() && !waited && tidied) {
       tries = 0;
       return;
     }
@@ -308,21 +316,19 @@ function App() {
     // tidying, and taking it for one leaves the popup — which is where the
     // tidying belongs — never doing it, so the records stay over the number
     // they are held to until the next one opens.
-    // One short of the number where a record is expected and has not arrived.
-    // Its content script writes one as soon as it has read the page — the
-    // seconds the "give this one a moment" line is about — and counting to
-    // the number without it leaves the store one over as soon as it lands, on
-    // exactly the page the reader is looking at.
+    // The whole number, and no place held open for a record that has not
+    // arrived. One was, for the page whose content script is still reading it
+    // — a real case, and the store sits one over the number from the moment
+    // that record lands until something sweeps again.
     //
-    // Expected, and not merely absent. A tab this extension cannot see the
-    // address of has no record and will never have one, and a read that
-    // failed says nothing about whether there is one — either way, holding a
-    // place open drops the oldest chart a reader has read for a record that
-    // is not coming.
-    const expected = where !== null && !lost() && !detection();
-    const room = MOST_DETECTIONS - (expected ? 1 : 0);
-
-    tidied = await pruneDetections(room, where).then(
+    // But nothing here can tell that page from a page on the site that is not
+    // a chart. A popup has the address of the tab and nothing else, and every
+    // page on the site has an address that looks like a chart's, so holding a
+    // place open guesses — and guessing wrong drops the oldest chart a reader
+    // has read for a record that is never written. One over a number this
+    // project sets itself, until the next popup or the next page load, is the
+    // cheaper of the two.
+    tidied = await pruneDetections(MOST_DETECTIONS, where).then(
       () => true,
       () => false,
     );
@@ -532,7 +538,7 @@ function App() {
       // on the chord chart in front of the reader, for as long as it stayed
       // open. Once the settings arrive it would say it while looking
       // otherwise well.
-      if (lost()) await fetchRecord();
+      if (lost() || !detection()) await fetchRecord();
 
       // After both, the way the opening does it. Said in between, a page just
       // placed and being read is a page the popup is telling its reader it
