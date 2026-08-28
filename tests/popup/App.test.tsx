@@ -441,6 +441,28 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // A `select` cannot show a value it has no option for. The mode arrives
+  // from storage after the first paint and the options are swapped for the
+  // other mode's, so a value applied while the major ones were up became
+  // nothing — and `F#`, `C#` and `G#` name minor keys and no major one, so a
+  // reader with one of those set was told their key was read from the chart
+  // while the line above said it was set by hand.
+  it.each(['F#', 'C#', 'G#', 'A'])('shows a stored key of %s minor', async (tonic) => {
+    const stored = { tonic: note(tonic), mode: 'minor' } as const;
+    await saveKept(withOverride(EMPTY, 'chordwiki:chart:Test Song', stored, 0, 1).settings, {
+      'chordwiki:chart:Test Song': 1,
+    });
+    await onATab(ADDRESS, detection({ statedKeys: 0, key: null, source: null }));
+
+    const { root, dispose } = await open();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const [tonics, modes] = [...root.querySelectorAll('select')];
+    expect(modes?.value).toBe('minor');
+    expect(tonics?.value).toBe(tonic);
+    dispose();
+  });
+
   // A record is written by a content script and read by a popup, and an
   // extension is updated with pages already open. A record from another shape
   // read as though it were this one is a popup counting `undefined` chords.

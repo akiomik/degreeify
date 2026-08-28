@@ -167,6 +167,25 @@ function App() {
    */
   const mode = (): Mode => pendingMode();
 
+  /**
+   * The tonic the control is showing, out of the ones it is offering.
+   *
+   * Asked about the list as well as about the key, which is what makes it be
+   * asked again when the list changes. A `select` cannot show a value it has
+   * no option for: the mode arrives from storage after the first paint, the
+   * options are swapped for the other mode's, and a value applied while the
+   * major ones were up quietly became nothing. `F#`, `C#` and `G#` name
+   * minor keys and no major one, so a reader with one of those set was told
+   * their key was read from the chart while the line above said otherwise.
+   */
+  const chosenTonic = (): string => {
+    const offered = CANONICAL_TONIC[mode()];
+    const found = override();
+    const name = found ? formatNoteOf(found) : '';
+
+    return offered.includes(name) ? name : '';
+  };
+
   const canOverride = (): boolean => {
     const found = detection();
     if (!found || found.statedKeys > MOST_STATED_KEYS_TO_OVERRIDE) return false;
@@ -293,7 +312,7 @@ function App() {
                       <label class={styles.field}>
                         <span>Key</span>
                         <select
-                          value={override() ? formatNoteOf(override()) : ''}
+                          value={chosenTonic()}
                           onChange={(event) => {
                             const tonic = event.currentTarget.value;
                             if (tonic) void setOverride(tonic, mode());

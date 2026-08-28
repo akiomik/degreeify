@@ -46,9 +46,24 @@ describe('a key set for a chart', () => {
     expect(named(withKey('C'), null)).toBeNull();
   });
 
-  it('is nothing where none was set, and nothing where it cannot be read', () => {
+  // A key that cannot be read is no key. Storage is written by some version
+  // of this extension or by somebody with the developer tools open, and a
+  // throw here comes out of the popup's first read and takes the whole popup
+  // with it — including the button that would let the reader be rid of what
+  // caused it.
+  it.each([
+    ['a tonic that is no note', { tonic: 'H', mode: 'major' }],
+    ['a tonic that is not text', { tonic: 5, mode: 'major' }],
+    ['a mode that is no mode', { tonic: 'C', mode: 'dorian' }],
+    ['nothing that is a key at all', 7],
+  ])('is nothing for %s', (_what, stored) => {
+    const settings = { ...DEFAULT_SETTINGS, keyOverrides: { [PAGE]: stored } } as Settings;
+
+    expect(named(settings, 0)).toBeNull();
+  });
+
+  it('is nothing where none was set', () => {
     expect(named(DEFAULT_SETTINGS, 0)).toBeNull();
-    expect(named(withKey('H'), 0)).toBeNull();
   });
 });
 

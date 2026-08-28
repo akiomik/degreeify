@@ -31,16 +31,18 @@ export function overrideFor(settings: Settings, pageId: string, offset: number |
   const stored = settings.keyOverrides[pageId];
   if (!stored || offset === null) return null;
 
-  // Read rather than trusted. What is in storage was written by some version
-  // of this extension, or by somebody with the developer tools open, and a
-  // mode that is neither of the two names one no table has a row for — the
-  // lookup gives nothing, and indexing nothing throws before any guard
-  // downstream can say so. A key that cannot be read is no key, which is
-  // what a chart with no key set gets, and the popup can still forget it.
-  const tonic = parseNote(stored.tonic);
-  if (!tonic || !MODES.includes(stored.mode)) return null;
+  // Read rather than trusted, and asked about before it is read. What is in
+  // storage was written by some version of this extension, or by somebody
+  // with the developer tools open: a mode that is neither of the two names a
+  // table with no row for it, and a tonic that is not text has no first
+  // character. Either one throws — out of the popup's first read, where it
+  // takes the whole popup with it, including the button that would let the
+  // reader be rid of what caused it. A key that cannot be read is no key,
+  // which is what a chart with no key set gets.
+  if (typeof stored.tonic !== 'string' || !MODES.includes(stored.mode)) return null;
 
-  return transposeKey({ tonic, mode: stored.mode }, offset);
+  const tonic = parseNote(stored.tonic);
+  return tonic ? transposeKey({ tonic, mode: stored.mode }, offset) : null;
 }
 
 const MODES: readonly Mode[] = ['major', 'minor'];
