@@ -10,6 +10,7 @@ import {
   DEFAULT_SETTINGS,
   type Detection,
   loadSettings,
+  loadStamp,
   recordKey,
   SCHEMA_VERSION,
   type Settings,
@@ -506,6 +507,82 @@ describe('the popup on a chart', () => {
     expect(get.mock.calls).toHaveLength(asked);
     expect(root.textContent).toContain('Open a ChordWiki chord chart');
     get.mockRestore();
+    dispose();
+  });
+
+  // A popup that cannot ask which tab it is over has been told nothing, not
+  // told there is no chart. Answered the same way, it says there is no chart
+  // here on a chart, hides the whole key control, and never asks again.
+  it('asks which page it is over again where that could not be asked', async () => {
+    await onATab(ADDRESS, detection());
+
+    let broken = true;
+    vi.spyOn(browser.tabs, 'query').mockImplementation((async () => {
+      if (broken) throw new Error('context invalidated');
+      return [{ url: ADDRESS }] as never;
+    }) as never);
+
+    const { root, dispose } = await open();
+    expect(root.textContent).toContain('Open a ChordWiki chord chart');
+
+    broken = false;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(root.textContent).toContain('C — from the chart');
+    dispose();
+  });
+
+  // And is not asked again once it has been answered. A tab with no chart
+  // address is not going to grow one while the popup is open.
+  it('does not keep asking which page it is over where it was told', async () => {
+    await onATab('https://ja.chordwiki.org/');
+    const asking = vi.spyOn(browser.tabs, 'query');
+
+    const { root, dispose } = await open();
+    const asked = asking.mock.calls.length;
+
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(asking.mock.calls).toHaveLength(asked);
+    expect(root.textContent).toContain('Open a ChordWiki chord chart');
+    dispose();
+  });
+
+  // The stamps are read by walking the whole of storage, and a setting that
+  // is not about any chart's key hands them straight back — so the walk is a
+  // couple of hundred values read to be discarded, on every click of a
+  // checkbox.
+  it('does not walk the whole store for a setting that is not about a key', async () => {
+    await onATab(ADDRESS, detection());
+    const { root, dispose } = await open();
+
+    const get = vi.spyOn(browser.storage.local, 'get');
+    const toggle = root.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    if (!toggle) throw new Error('there is a toggle');
+
+    toggle.click();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(await loadSettings()).toMatchObject({ enabled: false });
+    expect(get.mock.calls.filter(([query]) => query === null)).toEqual([]);
+    get.mockRestore();
+    dispose();
+  });
+
+  // And still writes what a key needs, which is the read that walk is for.
+  it('still keeps a key set for a chart', async () => {
+    await onATab(ADDRESS, detection());
+    const { root, dispose } = await open();
+
+    const [tonics] = [...root.querySelectorAll('select')];
+    if (!tonics) throw new Error('there is a key control');
+
+    tonics.value = 'G';
+    tonics.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(tonics.value).toBe('G');
+    expect(await loadStamp('chordwiki:chart:Test Song')).not.toBeNull();
     dispose();
   });
 

@@ -25,6 +25,7 @@ import {
   asked,
   DEFAULT_SETTINGS,
   type Detection,
+  type KeyStamps,
   loadSettings,
   loadStamps,
   pruneDetections,
@@ -101,8 +102,75 @@ function App() {
   /** Which mode change is the latest, so that an older one cannot undo it. */
   let modeChanges = 0;
 
+  // Held on to before anything is awaited. Solid knows which component a
+  // cleanup belongs to only while the call stack is still inside it, and the
+  // first `await` in anything below leaves it — a cleanup registered after
+  // that belongs to nobody and is never run.
+  const owner = getOwner();
+
   /** Where the record for the page in front is kept, once that is known. */
   let where: string | null = null;
+
+  /**
+   * Whether the address of the page in front could not be asked for.
+   *
+   * Told apart from there being no chart address, which is what a reader on
+   * any other page has. Both leave the popup with nothing to say about a
+   * page; only one of them is worth asking about again.
+   */
+  let unplaced = false;
+
+  /**
+   * Takes the page in front to be the one at `key`, and listens for its
+   * record changing.
+   *
+   * Listening before reading, for the reason the content script does: the
+   * record may be written between the read being asked for and its answer
+   * arriving. A reader who opens the popup while a chart is still loading
+   * would otherwise be told there is no chart here, and told it for as long
+   * as the popup stays open.
+   *
+   * A record read once is out of date the moment the page is read again,
+   * which is every time something here is changed.
+   */
+  const place = (key: string) => {
+    where = key;
+    lost = true;
+
+    // Wrapped like everything else here. Doing without the watching costs a
+    // line that goes stale; throwing here would cost the record read below
+    // it, and the popup would say there is no chart here on a chart.
+    try {
+      const stop = watchDetection(key, setDetection);
+      if (owner) runWithOwner(owner, () => onCleanup(stop));
+      else stop();
+    } catch {
+      // Nothing to undo: a listener that could not be added is not one.
+    }
+  };
+
+  /**
+   * Reads the record for the page in front, where there is one to read.
+   *
+   * A read that answers settles it whatever the answer is: a chart address
+   * whose content script has not written a record yet is covered by the
+   * watching, and one that never will is a page this has nothing to say
+   * about. Only a read that failed is asked again.
+   */
+  const fetchRecord = async () => {
+    if (!where) return;
+
+    try {
+      const found = await readDetection(where);
+      lost = false;
+
+      // Only where nothing has arrived in the meantime. What the watcher
+      // heard is newer than what the read was sent to fetch.
+      setDetection((current) => current ?? found);
+    } catch {
+      // Left to be asked again.
+    }
+  };
 
   /**
    * Whether the record for that page could not be read.
@@ -131,12 +199,6 @@ function App() {
   });
 
   onMount(async () => {
-    // Held on to before anything is awaited. Solid knows which component a
-    // cleanup belongs to only while the call stack is still inside it, and
-    // the first `await` below leaves it — a cleanup registered after that
-    // belongs to nobody and is never run.
-    const owner = getOwner();
-
     // The settings first, and on their own. They are not about any page, and
     // a popup that could not work out which page it was opened on must still
     // show them — the alternative is a popup with a title and nothing else,
@@ -185,49 +247,31 @@ function App() {
     // write takes for an answer.
     setSettings(stored ? asked(stored) : { ...DEFAULT_SETTINGS, enabled: false });
 
-    const key = await addressInFront();
-    where = key;
+    let key: string | null = null;
+    try {
+      key = await addressInFront();
+    } catch {
+      // Asked again below, like the reads. Left as no chart, a popup that
+      // could not work out which tab it was over would say there is no chart
+      // here on a chart, hide the whole key control, and never ask again.
+      unplaced = true;
+    }
+
     if (key) {
-      // Listening before reading, for the reason the content script does:
-      // the record may be written between the read being asked for and its
-      // answer arriving. A reader who opens the popup while a chart is still
-      // loading would otherwise be told there is no chart here, and told it
-      // for as long as the popup stays open.
-      //
-      // A record read once is out of date the moment the page is read again,
-      // which is every time something here is changed.
-      // Wrapped like everything else here. This is the last thing that could
-      // throw before the record is read, and a throw would leave the popup
-      // saying there is no chart here on a chart — while doing without the
-      // watching costs only a line that goes stale.
-      try {
-        const stop = watchDetection(key, setDetection);
-        if (owner) runWithOwner(owner, () => onCleanup(stop));
-        else stop();
-      } catch {
-        // Nothing to undo: a listener that could not be added is not one.
-      }
-
-      const found = await readDetection(key).catch(() => {
-        lost = true;
-        return null;
-      });
-
-      // Only where nothing has arrived in the meantime. What the watcher
-      // heard is newer than what the read was sent to fetch.
-      setDetection((current) => current ?? found);
+      place(key);
+      await fetchRecord();
     }
 
     // Here rather than in the content script, which runs on every page a
     // reader opens. Tidying belongs where somebody asked for something.
     await pruneDetections(undefined, key).catch(() => {});
 
-    // And asked again where the first read failed, on the same schedule the
-    // page uses for the same failure. A popup is open for seconds rather than
-    // for the life of a tab, so the tries that matter are the early ones —
-    // the last is there for a reader who leaves it open while whatever broke
+    // And asked again where any of that failed, on the same schedule the page
+    // uses for the same failure. A popup is open for seconds rather than for
+    // the life of a tab, so the tries that matter are the early ones — the
+    // last is there for a reader who leaves it open while whatever broke
     // storage sorts itself out.
-    if (!unreachable() && !lost) return;
+    if (!unreachable() && !lost && !unplaced) return;
 
     const again = RETRY_AFTER.map((after) => setTimeout(() => void reread(), after));
     const clear = () => {
@@ -299,6 +343,22 @@ function App() {
         }
       }
 
+      // Which page this is, where that could not be asked. Nothing can be
+      // read about a page the popup cannot place, so this comes before the
+      // record and settles whether there is one to read at all.
+      if (unplaced) {
+        try {
+          const key = await addressInFront();
+
+          // Asked and answered, whatever the answer was. A tab with no chart
+          // address is not going to grow one while the popup is open.
+          unplaced = false;
+          if (key) place(key);
+        } catch {
+          // Still nothing to place it by.
+        }
+      }
+
       // The record as well, which the same failure takes and which nothing
       // else would ask for again. The watcher fires when a record changes,
       // and a page that has written one has no reason to write it again — so
@@ -306,19 +366,16 @@ function App() {
       // on the chord chart in front of the reader, for as long as it stayed
       // open. Once the settings arrive it would say it while looking
       // otherwise well.
-      if (lost && where) {
-        const found = await readDetection(where).catch(() => null);
-        if (found) {
-          lost = false;
-          setDetection((current) => current ?? found);
-        }
-      }
+      if (lost) await fetchRecord();
     });
 
-  const update = (change: (kept: Kept) => Kept): Promise<boolean> => {
+  const update = (change: (kept: Kept) => Kept, stamped = true): Promise<boolean> => {
     const next = async () => {
       try {
-        const [settings, stamps] = await Promise.all([loadSettings(), loadStamps()]);
+        const [settings, stamps] = await Promise.all([
+          loadSettings(),
+          stamped ? loadStamps() : Promise.resolve<KeyStamps>({}),
+        ]);
         const changed = change({ settings, stamps });
 
         await saveKept(changed.settings, changed.stamps, stamps);
@@ -353,6 +410,21 @@ function App() {
     // anything to put back.
     return inTurn(next);
   };
+
+  /**
+   * Changes a setting that is not about the key kept for any chart.
+   *
+   * Without the stamps, which are read by walking the whole of storage —
+   * every record and every stamp, up to a couple of hundred values — to hand
+   * back untouched. `saveKept` writes the stamps that changed against the
+   * ones that were read and removes the ones that went, and nothing against
+   * nothing is neither, so a checkbox costs one write and no walk.
+   *
+   * The write side already had this: the comment on `saveKept` about not
+   * writing two hundred keys for a checkbox is about the same click.
+   */
+  const changeSetting = (alter: (settings: Settings) => Settings): Promise<boolean> =>
+    update(({ settings }) => ({ settings: alter(settings), stamps: {} }), false);
 
   /** The key set for this chart, as the chart is being shown. */
   const override = (): Key | null => {
@@ -498,10 +570,7 @@ function App() {
                   checked={current().enabled}
                   onChange={(event) => {
                     const enabled = event.currentTarget.checked;
-                    void update(({ settings, stamps }) => ({
-                      settings: { ...settings, enabled },
-                      stamps,
-                    }));
+                    void changeSetting((settings) => ({ ...settings, enabled }));
                   }}
                 />
                 <span>Show degree names</span>
@@ -657,10 +726,7 @@ function App() {
                   value={current().notation}
                   onChange={(event) => {
                     const notation = event.currentTarget.value as Notation;
-                    void update(({ settings, stamps }) => ({
-                      settings: { ...settings, notation },
-                      stamps,
-                    }));
+                    void changeSetting((settings) => ({ ...settings, notation }));
                   }}
                 >
                   <option value="roman-ascii">I II III (fixed width)</option>
@@ -674,10 +740,7 @@ function App() {
                   value={current().spelling}
                   onChange={(event) => {
                     const spelling = event.currentTarget.value as SpellingPolicy;
-                    void update(({ settings, stamps }) => ({
-                      settings: { ...settings, spelling },
-                      stamps,
-                    }));
+                    void changeSetting((settings) => ({ ...settings, spelling }));
                   }}
                 >
                   <option value="canonical">Consistent</option>
@@ -701,18 +764,15 @@ function App() {
  * moment ago whose content script has not run yet. They are one state to a
  * reader — nothing to say about this page yet — and one state here.
  *
- * Including when asking throws. A popup is opened over whatever a reader
- * happens to be looking at, and one that throws while working out where it is
- * renders nothing at all: no key, no toggle, and no way to reach the settings
- * that were never about the page.
+ * Allowed to throw, which is not one of those. A popup is opened over
+ * whatever a reader happens to be looking at, and one that cannot ask which
+ * tab that is has been told nothing rather than told there is no chart —
+ * answered the same way, it would say there is no chart here on a chart and
+ * never ask again. Its caller wraps it and asks again.
  */
 async function addressInFront(): Promise<string | null> {
-  try {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    return recordKey(tab?.url);
-  } catch {
-    return null;
-  }
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  return recordKey(tab?.url);
 }
 
 /** What the popup says about the key a chart was read in. */
