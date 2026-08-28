@@ -108,7 +108,11 @@ function App() {
     // reader's answers, and a control showing something nobody chose is worse
     // for being indistinguishable from one showing an answer.
     setUnread(!stored?.understood);
-    setSettings(stored?.settings ?? DEFAULT_SETTINGS);
+    // The same fallback the page uses for the same failure. Read as the plain
+    // defaults, the checkbox would say the names are on while no page is
+    // naming anything — one failure answered two ways, and the one the reader
+    // can see would be the wrong one.
+    setSettings(stored?.settings ?? { ...DEFAULT_SETTINGS, enabled: false });
 
     const key = await addressInFront();
     if (key) {
@@ -120,9 +124,17 @@ function App() {
       //
       // A record read once is out of date the moment the page is read again,
       // which is every time something here is changed.
-      const stop = watchDetection(key, setDetection);
-      if (owner) runWithOwner(owner, () => onCleanup(stop));
-      else stop();
+      // Wrapped like everything else here. This is the last thing that could
+      // throw before the record is read, and a throw would leave the popup
+      // saying there is no chart here on a chart — while doing without the
+      // watching costs only a line that goes stale.
+      try {
+        const stop = watchDetection(key, setDetection);
+        if (owner) runWithOwner(owner, () => onCleanup(stop));
+        else stop();
+      } catch {
+        // Nothing to undo: a listener that could not be added is not one.
+      }
 
       const found = await readDetection(key).catch(() => null);
 
@@ -245,7 +257,13 @@ function App() {
 
   const clearOverride = async () => {
     const found = detection();
-    if (!found) return;
+    const current = settings();
+
+    // Nothing to clear is nothing to write. Written anyway, a reader choosing
+    // "read from the chart" on a chart that was already being read from tells
+    // every open tab that the settings changed, over a change that is not
+    // one — and can be told the write failed for their trouble.
+    if (!found || !current || !keptFor(current, found.pageId)) return;
 
     // The mode the key was in stays on offer. A reader clearing a key to
     // choose another tonic in the same mode would otherwise find the control

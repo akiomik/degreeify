@@ -359,6 +359,53 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // The same fallback the page uses for the same failure. Read as the plain
+  // defaults, the checkbox says the names are on while no page is naming
+  // anything — one failure answered two ways, and the one the reader can see
+  // would be the wrong one.
+  it('shows the names as off where the settings could not be read', async () => {
+    vi.spyOn(browser.storage.local, 'get').mockRejectedValue(new Error('context invalidated'));
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+
+    expect(root.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(false);
+    dispose();
+  });
+
+  // Nothing to clear is nothing to write. Written anyway, it tells every open
+  // tab that the settings changed over a change that is not one.
+  it('does not write when a chart with no key is told to read from the chart', async () => {
+    await onATab(ADDRESS, detection({ statedKeys: 0, key: null, source: null }));
+    const { root, dispose } = await open();
+
+    const wrote = vi.spyOn(browser.storage.local, 'set');
+    const tonics = root.querySelector('select');
+    if (!tonics) throw new Error('there is a key control');
+
+    tonics.value = '';
+    tonics.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(wrote).not.toHaveBeenCalled();
+    dispose();
+  });
+
+  // The last thing that could throw before the record is read. A throw leaves
+  // the popup saying there is no chart here on a chart, while doing without
+  // the watching costs only a line that goes stale.
+  it('shows the chart even where it cannot listen for the record changing', async () => {
+    vi.spyOn(browser.storage.onChanged, 'addListener').mockImplementation(() => {
+      throw new Error('no listeners left');
+    });
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('C — from the chart');
+    dispose();
+  });
+
   it('says so when a change could not be saved', async () => {
     await onATab(ADDRESS, detection());
     const { root, dispose } = await open();
