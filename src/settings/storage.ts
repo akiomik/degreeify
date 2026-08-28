@@ -510,10 +510,18 @@ export async function writeDetection(key: string, detection: Detection): Promise
 /**
  * The most recent records, and nothing older.
  *
- * Done where a person opened something rather than on every page anyone
- * visits. A content script runs on every page and a popup runs when it is
- * asked for, so a sweep of every key in storage belongs in the popup: the
- * page a reader is on should not pay for the tidying of pages they left.
+ * A sweep of every key in storage, so it is asked for sparingly: once by a
+ * popup being opened, and once by a chart page that has read itself. Not on
+ * every reading — a settings change is answered by every open tab, and each
+ * of them walking the whole store over it would make the tidying the most
+ * expensive thing this extension does.
+ *
+ * The popup alone was the first arrangement, on the grounds that the page a
+ * reader is on should not pay for the tidying of pages they left. It leaves a
+ * reader who never opens the popup keeping a record of every chart they have
+ * ever read, and a store that fills is one where the next record does not
+ * write — after which the popup, on a chart, tells them to open a chord
+ * chart. A page pays for its own sweep once.
  */
 export async function pruneDetections(most = MOST_DETECTIONS, keep?: string | null): Promise<void> {
   const all = await browser.storage.local.get(null);

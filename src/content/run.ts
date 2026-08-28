@@ -74,7 +74,18 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   /** Counts the writings, so that one can tell whether it is still the last. */
   let writing = 0;
 
-  /** Whether the records have been tidied since this page was opened. */
+  /**
+   * Whether the records have been tidied since this page was opened.
+   *
+   * Left false by a sweep that failed, and picked up again by the next run
+   * that writes a record — a settings change, or the record being thrown
+   * away. Not by the tries, which are about the settings and the record: a
+   * run that has both of those done has nothing to write, and the sweep goes
+   * with the writing. So a page whose one sweep failed leaves the store a
+   * record or two over the number until the next chart is opened or the next
+   * popup, both of which sweep. That is the whole of the cost, and it is
+   * cheaper than a second place in here that walks the store.
+   */
   let tidied = false;
 
   /** The settings the page was last shown for, for a run that is not about them. */
