@@ -1,6 +1,12 @@
 import { type Key, transposeKey } from '@/core/key';
 import { formatNote, parseNote } from '@/core/pitch';
-import { type KeyStamps, MOST_OVERRIDES, prunedOverrides, type Settings } from './storage';
+import {
+  type KeyOverride,
+  type KeyStamps,
+  MOST_OVERRIDES,
+  prunedOverrides,
+  type Settings,
+} from './storage';
 
 /**
  * Reading and writing the key a person set for a chart.
@@ -29,38 +35,63 @@ export function overrideFor(settings: Settings, pageId: string, offset: number |
   return tonic ? transposeKey({ tonic, mode: stored.mode }, offset) : null;
 }
 
+/** The settings and the stamps, which are written together or not at all. */
+export interface Kept {
+  readonly settings: Settings;
+  readonly stamps: KeyStamps;
+}
+
 /**
- * The settings with `key` set for this chart, `key` being the key of the
- * chart as it is being shown.
+ * `key` set for this chart, `key` being the key of the chart as it is shown.
  *
  * Kept shifted back to no transposition, so that the same setting is found
- * again whatever transposition the chart is next reached at. Kept as shown,
- * a reader who transposed a chart after setting a key would find their own
+ * again whatever transposition the chart is next reached at. Kept as shown, a
+ * reader who transposed a chart after setting a key would find their own
  * setting naming the page wrongly.
+ *
+ * Stamped as used now, and that is not bookkeeping: the stamps are what
+ * decides which key is dropped when there are too many, and a key set a
+ * moment ago has never been used. Left unstamped it sorts last, so a reader
+ * with a full list would set a key, be told it was kept, and find it gone.
  */
 export function withOverride(
-  settings: Settings,
+  { settings, stamps }: Kept,
   pageId: string,
   key: Key,
   offset: number,
-  stamps: KeyStamps,
-): Settings {
+  now: number,
+): Kept {
   const untransposed = transposeKey(key, -offset);
 
-  return {
-    ...settings,
-    keyOverrides: prunedOverrides(
-      {
-        ...settings.keyOverrides,
-        [pageId]: { tonic: formatNote(untransposed.tonic), mode: untransposed.mode },
-      },
-      stamps,
-      MOST_OVERRIDES,
-    ),
-  };
+  return kept(
+    settings,
+    {
+      ...settings.keyOverrides,
+      [pageId]: { tonic: formatNote(untransposed.tonic), mode: untransposed.mode },
+    },
+    { ...stamps, [pageId]: now },
+  );
 }
 
-export function withoutOverride(settings: Settings, pageId: string): Settings {
+export function withoutOverride({ settings, stamps }: Kept, pageId: string): Kept {
   const { [pageId]: _dropped, ...rest } = settings.keyOverrides;
-  return { ...settings, keyOverrides: rest };
+  return kept(settings, rest, stamps);
+}
+
+/**
+ * The two put back together, with nothing kept for a chart that has no key.
+ *
+ * A stamp outliving the key it was about is a record that grows and is never
+ * read: overrides are capped and stamps were not, so a reader who set and
+ * cleared keys across enough charts would carry every chart they had ever
+ * touched, read in full on every write.
+ */
+function kept(settings: Settings, overrides: Record<string, KeyOverride>, stamps: KeyStamps): Kept {
+  const surviving = prunedOverrides(overrides, stamps, MOST_OVERRIDES);
+  const theirs = Object.keys(surviving).map((pageId) => [pageId, stamps[pageId] ?? 0] as const);
+
+  return {
+    settings: { ...settings, keyOverrides: surviving },
+    stamps: Object.fromEntries(theirs),
+  };
 }

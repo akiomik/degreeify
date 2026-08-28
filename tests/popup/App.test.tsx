@@ -5,7 +5,7 @@ import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { parseNote } from '@/core/pitch';
 import App from '@/entrypoints/popup/App';
-import { withOverride } from '@/settings/overrides';
+import { type Kept, withOverride } from '@/settings/overrides';
 import {
   DEFAULT_SETTINGS,
   type Detection,
@@ -25,6 +25,8 @@ const note = (name: string) => {
 
 const KEY_OF_G = { tonic: note('G'), mode: 'major' } as const;
 const KEY_OF_C_MINOR = { tonic: note('C'), mode: 'minor' } as const;
+
+const EMPTY: Kept = { settings: DEFAULT_SETTINGS, stamps: {} };
 
 const detection = (over: Partial<Detection> = {}): Detection => ({
   version: SCHEMA_VERSION,
@@ -299,9 +301,7 @@ describe('the popup on a chart', () => {
   // beside the one that sets it — so a chart edited to declare a second key
   // leaves the reader with a key they cannot reach.
   it('can still forget a key set for a chart that can no longer take one', async () => {
-    await saveSettings(
-      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', KEY_OF_G, 0, {}),
-    );
+    await saveSettings(withOverride(EMPTY, 'chordwiki:chart:Test Song', KEY_OF_G, 0, 1).settings);
     await onATab(ADDRESS, detection({ statedKeys: 7 }));
 
     const { root, dispose } = await open();
@@ -321,7 +321,7 @@ describe('the popup on a chart', () => {
   // choose saved as a major key.
   it('goes on offering the minor tonics after a minor key is cleared', async () => {
     await saveSettings(
-      withOverride(DEFAULT_SETTINGS, 'chordwiki:chart:Test Song', KEY_OF_C_MINOR, 0, {}),
+      withOverride(EMPTY, 'chordwiki:chart:Test Song', KEY_OF_C_MINOR, 0, 1).settings,
     );
     await onATab(ADDRESS, detection({ statedKeys: 0, key: null, source: null }));
 
@@ -428,10 +428,25 @@ describe('the popup on a chart', () => {
   // page could not be read" is the difference between nothing being wrong and
   // something a person could act on.
   it('says how many key declarations it could not read', async () => {
-    await onATab(ADDRESS, detection({ statedKeys: 7, unreadKeys: 2, key: null, source: null }));
+    await onATab(ADDRESS, detection({ statedKeys: 7, unreadKeys: 2 }));
     const { root, dispose } = await open();
 
     expect(root.textContent).toContain('2 of 7 key declarations could not be read');
+    dispose();
+  });
+
+  // Only where the chart's own declarations are what was followed. A key
+  // guessed from the chords stands in for the one line that could not be
+  // read, so the chart is named end to end and no section was left alone.
+  it('does not warn where a guessed key answered for the line it could not read', async () => {
+    await onATab(
+      ADDRESS,
+      detection({ statedKeys: 1, unreadKeys: 1, source: 'inferred', named: 4 }),
+    );
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('guessed from the chords');
+    expect(root.textContent).not.toContain('could not be read');
     dispose();
   });
 });

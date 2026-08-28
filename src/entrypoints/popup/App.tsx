@@ -4,11 +4,10 @@ import type { SpellingPolicy } from '@/core/degree';
 import { CANONICAL_TONIC, formatKey, type Key, type Mode } from '@/core/key';
 import type { Notation } from '@/core/notation';
 import { parseNote } from '@/core/pitch';
-import { overrideFor, withOverride, withoutOverride } from '@/settings/overrides';
+import { type Kept, overrideFor, withOverride, withoutOverride } from '@/settings/overrides';
 import {
   DEFAULT_SETTINGS,
   type Detection,
-  type KeyStamps,
   loadSettings,
   loadStamps,
   pruneDetections,
@@ -16,6 +15,7 @@ import {
   recordKey,
   type Settings,
   saveSettings,
+  saveStamps,
   watchDetection,
 } from '@/settings/storage';
 import styles from './App.module.css';
@@ -105,14 +105,16 @@ function App() {
    */
   let writing: Promise<void> = Promise.resolve();
 
-  const update = (change: (settings: Settings, stamps: KeyStamps) => Settings) => {
+  const update = (change: (kept: Kept) => Kept) => {
     const next = async () => {
       try {
         const [settings, stamps] = await Promise.all([loadSettings(), loadStamps()]);
-        const changed = change(settings, stamps);
-        await saveSettings(changed);
+        const changed = change({ settings, stamps });
 
-        setSettings(changed);
+        await saveSettings(changed.settings);
+        if (changed.stamps !== stamps) await saveStamps(changed.stamps);
+
+        setSettings(changed.settings);
         setFailed(false);
       } catch {
         setFailed(true);
@@ -160,8 +162,8 @@ function App() {
     if (!found || !note || found.transposeOffset === null) return;
 
     const { pageId, transposeOffset } = found;
-    await update((settings, stamps) =>
-      withOverride(settings, pageId, { tonic: note, mode }, transposeOffset, stamps),
+    await update((kept) =>
+      withOverride(kept, pageId, { tonic: note, mode }, transposeOffset, Date.now()),
     );
   };
 
@@ -176,7 +178,7 @@ function App() {
     const cleared = override();
     if (cleared) setPendingMode(cleared.mode);
 
-    await update((settings) => withoutOverride(settings, found.pageId));
+    await update((kept) => withoutOverride(kept, found.pageId));
   };
 
   return (
@@ -203,7 +205,10 @@ function App() {
                 checked={current().enabled}
                 onChange={(event) => {
                   const enabled = event.currentTarget.checked;
-                  void update((settings) => ({ ...settings, enabled }));
+                  void update(({ settings, stamps }) => ({
+                    settings: { ...settings, enabled },
+                    stamps,
+                  }));
                 }}
               />
               <span>Show degree names</span>
@@ -217,7 +222,15 @@ function App() {
                 <>
                   <p class={styles.reading}>{reading(found(), current().enabled)}</p>
 
-                  <Show when={found().unreadKeys > 0 && found().source !== 'manual'}>
+                  {/*
+                   * Only where the chart's own declarations are what was
+                   * followed. A key from outside — set by hand, or guessed
+                   * from the chords — stands in for the line that could not
+                   * be read, and the chart is named end to end; saying a
+                   * section was left alone would be false, and would sit
+                   * directly under a count of the chords that were named.
+                   */}
+                  <Show when={found().unreadKeys > 0 && found().source === 'page'}>
                     <p class={styles.warning}>
                       {found().unreadKeys} of {found().statedKeys} key declarations could not be
                       read. Those sections are left as the chart wrote them.
@@ -304,7 +317,10 @@ function App() {
                 value={current().notation}
                 onChange={(event) => {
                   const notation = event.currentTarget.value as Notation;
-                  void update((settings) => ({ ...settings, notation }));
+                  void update(({ settings, stamps }) => ({
+                    settings: { ...settings, notation },
+                    stamps,
+                  }));
                 }}
               >
                 <option value="roman-ascii">I II III (fixed width)</option>
@@ -318,7 +334,10 @@ function App() {
                 value={current().spelling}
                 onChange={(event) => {
                   const spelling = event.currentTarget.value as SpellingPolicy;
-                  void update((settings) => ({ ...settings, spelling }));
+                  void update(({ settings, stamps }) => ({
+                    settings: { ...settings, spelling },
+                    stamps,
+                  }));
                 }}
               >
                 <option value="canonical">Consistent</option>

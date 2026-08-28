@@ -107,12 +107,19 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   // ones that won — a reader who turned the names off inside that window
   // would watch them stay on until they reloaded the page.
   //
+  // A first showing that throws is caught here for the reason a later one is
+  // caught in the watcher: nothing is listening but the content script's own
+  // entry point, where an unhandled rejection is a line in a console the
+  // reader will never open. The page is left in chord names, which is the
+  // honest state for a page this could not read, and the next change is still
+  // acted on.
+  //
   // And a reading that fails falls back to the defaults rather than leaving
   // the page unnamed. Before there were settings this needed no storage at
   // all; a storage read that throws — an extension reloaded out from under an
   // open page is the ordinary way — must not be the difference between a
   // chart in degree names and a chart in none.
-  await queue(() => loadSettings().catch(() => DEFAULT_SETTINGS));
+  await queue(() => loadSettings().catch(() => DEFAULT_SETTINGS)).catch(() => {});
 
   return stop;
 }
