@@ -131,8 +131,22 @@ describe('the popup where it cannot work out which tab it is on', () => {
     vi.spyOn(browser.tabs, 'query').mockRejectedValue(new Error('no window'));
     const { root, dispose } = await open();
 
-    expect(root.textContent).toContain('Open a ChordWiki chord chart');
     expect(root.querySelectorAll('select')).toHaveLength(2);
+    expect(root.querySelector('input[type="checkbox"]')).not.toBeNull();
+    dispose();
+  });
+
+  // And says nothing about the page, rather than saying there is no chart
+  // here. It was never asked: a tab that could not be looked up is not a tab
+  // with no chart on it, and the asking is tried again while the popup is
+  // open. Nothing is what this knows.
+  it('does not say there is no chart on a page it could not look up', async () => {
+    vi.spyOn(browser.tabs, 'query').mockRejectedValue(new Error('no window'));
+    const { root, dispose } = await open();
+
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(root.textContent).not.toContain('Open a ChordWiki chord chart');
     dispose();
   });
 });
@@ -592,6 +606,48 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // The watcher is registered before the first read for exactly this race,
+  // and the read's answer must not land on top of what it heard. A newer
+  // build writing while the read is in flight would otherwise be undone by
+  // the answer to the older question, and the popup would go back to offering
+  // controls that cannot be saved.
+  it('keeps what the watcher heard while its first read was in flight', async () => {
+    await onATab(ADDRESS, detection());
+
+    const real = browser.storage.local.get.bind(browser.storage.local);
+    let hold: (() => void) | null = null;
+    vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+      const value = await real(query);
+      if (query === 'settings' && hold) {
+        const waited = new Promise<void>((resolve) => {
+          const release = hold;
+          hold = null;
+          queueMicrotask(() => {
+            release?.();
+            resolve();
+          });
+        });
+        await waited;
+      }
+      return value;
+    }) as never);
+
+    // Written while that first read is held, so the watcher speaks and the
+    // read answers afterwards with what it was sent to fetch.
+    hold = () => {
+      void browser.storage.local.set({
+        settings: { ...DEFAULT_SETTINGS, version: SCHEMA_VERSION + 1 },
+      });
+    };
+
+    const { root, dispose } = await open();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(root.textContent).toContain('written by a newer version');
+    expect(root.querySelector('input[type="checkbox"]')).toBeNull();
+    dispose();
+  });
+
   // And follows a change made somewhere else, which is the same listener.
   it('follows a settings change made while it was open', async () => {
     await onATab(ADDRESS, detection());
@@ -621,7 +677,7 @@ describe('the popup on a chart', () => {
     }) as never);
 
     const { root, dispose } = await open();
-    expect(root.textContent).toContain('Open a ChordWiki chord chart');
+    expect(root.textContent).not.toContain('Open a ChordWiki chord chart');
 
     broken = false;
     await new Promise((resolve) => setTimeout(resolve, 400));

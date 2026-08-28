@@ -32,6 +32,7 @@ import {
   readSettings,
   recordKey,
   type Settings,
+  type StoredSettings,
   saveKept,
   watchDetection,
   watchSettings,
@@ -108,6 +109,18 @@ function App() {
    */
   const [looking, setLooking] = createSignal(true);
 
+  /**
+   * How many times the watcher has spoken about the settings.
+   *
+   * Read before a read is asked for and again when it answers. The watcher is
+   * registered before the first read for the race it is here for — a newer
+   * build, or another window, writing between the asking and the answer — and
+   * without this the answer to the older question lands last and wins. The
+   * popup would go back to offering controls that cannot be saved, which is
+   * the thing the watching was added to stop.
+   */
+  let heard = 0;
+
   /** Whether the mode on offer is one the reader has settled, one way or another. */
   let modeIsSettled = false;
 
@@ -166,6 +179,40 @@ function App() {
     where = key;
     lost = true;
     listen(() => watchDetection(key, setDetection));
+  };
+
+  /**
+   * Shows what a read of the settings came back with, or that it failed.
+   *
+   * Told apart, because they leave the charts in different states. Both leave
+   * the controls showing this build's defaults rather than the reader's
+   * answers, and a control showing something nobody chose is worse for being
+   * indistinguishable from one showing an answer — but only a stored value no
+   * build here can read is one every page is answering the same way.
+   *
+   * The settings themselves get the same fallback the page uses for the same
+   * failure. Read as the plain defaults, the checkbox would say the names are
+   * on while no page is naming anything — one failure answered two ways, and
+   * the one the reader can see would be the wrong one. As every page is
+   * acting on them, which for a stored value none of them can read is with
+   * the names off: shown plainly, the checkbox would say the names are on
+   * while no chart anywhere is named, and the reader's first click would turn
+   * them off again, so it would take two to turn them on.
+   *
+   * For a read that threw it is a guess rather than a reading: the pages made
+   * their own reads and this one says nothing about them. It is the guess
+   * whose recovery is one click, and the warning it raises says which of the
+   * two states this is.
+   *
+   * What is written still starts from what was read rather than from this. A
+   * value nobody chose, sitting where a setting goes, is one the next write
+   * takes for an answer.
+   */
+  const settle = (stored: StoredSettings | null) => {
+    setReadable(!stored?.fromLater);
+    setUnreachable(stored === null);
+    setUnread(stored !== null && !stored.understood);
+    setSettings(stored ? asked(stored) : { ...DEFAULT_SETTINGS, enabled: false });
   };
 
   /** Whether the records have been tidied, which is once per popup. */
@@ -273,6 +320,7 @@ function App() {
     // never going to be.
     listen(() =>
       watchSettings((changed) => {
+        heard++;
         setReadable(!changed.fromLater);
         setUnread(!changed.understood);
         setUnreachable(false);
@@ -280,38 +328,14 @@ function App() {
       }),
     );
 
+    const said = heard;
     const stored = await readSettings().catch(() => null);
 
-    setReadable(!stored?.fromLater);
-
-    // Told apart, because they leave the charts in different states. Both
-    // leave the controls showing this build's defaults rather than the
-    // reader's answers, and a control showing something nobody chose is worse
-    // for being indistinguishable from one showing an answer — but only a
-    // stored value no build here can read is one every page is answering the
-    // same way.
-    setUnreachable(stored === null);
-    setUnread(stored !== null && !stored.understood);
-    // The same fallback the page uses for the same failure. Read as the plain
-    // defaults, the checkbox would say the names are on while no page is
-    // naming anything — one failure answered two ways, and the one the reader
-    // can see would be the wrong one.
-    //
-    // As every page is acting on them, which for a stored value none of them
-    // can read is with the names off. Shown as the plain defaults, the
-    // checkbox would say the names are on while no chart anywhere is named —
-    // and the reader's first click would turn them off again, so it would
-    // take two to turn them on.
-    //
-    // For a read that threw here it is a guess rather than a reading: the
-    // pages made their own reads and this one says nothing about them. It is
-    // the guess whose recovery is one click, and the warning above says which
-    // of the two states this is.
-    //
-    // What is written still starts from what was read rather than from this.
-    // A value nobody chose, sitting where a setting goes, is one the next
-    // write takes for an answer.
-    setSettings(stored ? asked(stored) : { ...DEFAULT_SETTINGS, enabled: false });
+    // Unless the watcher has spoken in the meantime, in which case it heard
+    // something newer than this was sent to fetch.
+    if (heard === said) {
+      settle(stored);
+    }
 
     let key: string | null = null;
     try {
@@ -328,11 +352,12 @@ function App() {
       await fetchRecord();
     }
 
-    // Whatever came of it. A chart whose content script has not written a
-    // record yet has none to show, and telling its reader to open a chord
-    // chart is what the popup has to say until one arrives — saying it before
-    // asking is what this is about.
-    setLooking(false);
+    // Whatever came of it, so long as it was asked. A chart whose content
+    // script has not written a record yet has none to show, and telling its
+    // reader to open a chord chart is what the popup has to say until one
+    // arrives — saying it before asking is what this is about, and a page
+    // this could not place has not been asked about.
+    if (!unplaced) setLooking(false);
 
     await tidy();
 
@@ -414,13 +439,12 @@ function App() {
   const reread = () =>
     inTurn(async () => {
       if (unreachable()) {
+        const said = heard;
         const stored = await readSettings().catch(() => null);
-        if (stored) {
-          setReadable(!stored.fromLater);
-          setUnread(!stored.understood);
-          setUnreachable(false);
-          setSettings(asked(stored));
-        }
+
+        // And only where the watcher has not spoken in the meantime, which is
+        // the race the first read is guarded against for the same reason.
+        if (stored && heard === said) settle(stored);
       }
 
       // Which page this is, where that could not be asked. Nothing can be
@@ -433,6 +457,7 @@ function App() {
           // Asked and answered, whatever the answer was. A tab with no chart
           // address is not going to grow one while the popup is open.
           unplaced = false;
+          setLooking(false);
           if (key) place(key);
         } catch {
           // Still nothing to place it by.
