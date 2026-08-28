@@ -460,6 +460,55 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // The same failure takes the record, and nothing else would ask for it
+  // again: the watcher fires when a record changes, and a page that has
+  // written one has no reason to write it again. Left out of the asking, the
+  // popup goes on saying to open a chord chart on the chord chart in front of
+  // the reader — and once the settings arrive it says it while looking
+  // otherwise well.
+  it('reads the record again where the read it opened with failed', async () => {
+    await onATab(ADDRESS, detection());
+
+    const real = browser.storage.local.get.bind(browser.storage.local);
+    let broken = true;
+    const get = vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+      if (broken) throw new Error('context invalidated');
+      return real(query);
+    }) as never);
+
+    const { root, dispose } = await open();
+    expect(root.textContent).toContain('Open a ChordWiki chord chart');
+
+    broken = false;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(root.textContent).not.toContain('Open a ChordWiki chord chart');
+    expect(root.textContent).toContain('C — from the chart');
+    get.mockRestore();
+    dispose();
+  });
+
+  // And is not asked again where there is nothing to ask about. A page that
+  // is not a chart has no record and never will.
+  it('does not keep asking for a record where the read said there is none', async () => {
+    await onATab(ADDRESS);
+
+    const real = browser.storage.local.get.bind(browser.storage.local);
+    const get = vi
+      .spyOn(browser.storage.local, 'get')
+      .mockImplementation((async (query: never) => real(query)) as never);
+
+    const { root, dispose } = await open();
+    const asked = get.mock.calls.length;
+
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(get.mock.calls).toHaveLength(asked);
+    expect(root.textContent).toContain('Open a ChordWiki chord chart');
+    get.mockRestore();
+    dispose();
+  });
+
   // And says nothing about the charts, because this failure says nothing
   // about them. The pages made their own reads of the same settings, and one
   // that threw here says nothing about one that did not throw there — a

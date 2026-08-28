@@ -101,6 +101,18 @@ function App() {
   /** Which mode change is the latest, so that an older one cannot undo it. */
   let modeChanges = 0;
 
+  /** Where the record for the page in front is kept, once that is known. */
+  let where: string | null = null;
+
+  /**
+   * Whether the record for that page could not be read.
+   *
+   * Told apart from there being none. A page that is not a chart has no
+   * record and never will, and asking again would be asking about nothing;
+   * a read that failed is a chart the popup has been told nothing about.
+   */
+  let lost = false;
+
   // What is stored is what was chosen, once it has arrived: a key loaded from
   // storage brings its mode with it, and the control has to show that mode
   // rather than whichever one this happened to start on.
@@ -174,6 +186,7 @@ function App() {
     setSettings(stored ? asked(stored) : { ...DEFAULT_SETTINGS, enabled: false });
 
     const key = await addressInFront();
+    where = key;
     if (key) {
       // Listening before reading, for the reason the content script does:
       // the record may be written between the read being asked for and its
@@ -195,7 +208,10 @@ function App() {
         // Nothing to undo: a listener that could not be added is not one.
       }
 
-      const found = await readDetection(key).catch(() => null);
+      const found = await readDetection(key).catch(() => {
+        lost = true;
+        return null;
+      });
 
       // Only where nothing has arrived in the meantime. What the watcher
       // heard is newer than what the read was sent to fetch.
@@ -211,7 +227,7 @@ function App() {
     // for the life of a tab, so the tries that matter are the early ones —
     // the last is there for a reader who leaves it open while whatever broke
     // storage sorts itself out.
-    if (!unreachable()) return;
+    if (!unreachable() && !lost) return;
 
     const again = RETRY_AFTER.map((after) => setTimeout(() => void reread(), after));
     const clear = () => {
@@ -273,15 +289,30 @@ function App() {
    */
   const reread = () =>
     inTurn(async () => {
-      if (!unreachable()) return;
+      if (unreachable()) {
+        const stored = await readSettings().catch(() => null);
+        if (stored) {
+          setReadable(!stored.fromLater);
+          setUnread(!stored.understood);
+          setUnreachable(false);
+          setSettings(asked(stored));
+        }
+      }
 
-      const stored = await readSettings().catch(() => null);
-      if (!stored) return;
-
-      setReadable(!stored.fromLater);
-      setUnread(!stored.understood);
-      setUnreachable(false);
-      setSettings(asked(stored));
+      // The record as well, which the same failure takes and which nothing
+      // else would ask for again. The watcher fires when a record changes,
+      // and a page that has written one has no reason to write it again — so
+      // a popup that lost the read would go on saying to open a chord chart,
+      // on the chord chart in front of the reader, for as long as it stayed
+      // open. Once the settings arrive it would say it while looking
+      // otherwise well.
+      if (lost && where) {
+        const found = await readDetection(where).catch(() => null);
+        if (found) {
+          lost = false;
+          setDetection((current) => current ?? found);
+        }
+      }
     });
 
   const update = (change: (kept: Kept) => Kept): Promise<boolean> => {

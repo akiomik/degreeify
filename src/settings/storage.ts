@@ -585,16 +585,6 @@ function isFromLater(value: unknown): boolean {
 }
 
 /**
- * Whether stored settings are settings.
- *
- * The version, and then the fields that are read without being asked about.
- * `loadSettings` fills in what is missing from the defaults, which cannot
- * help with a field that is present and is the wrong thing: a `keyOverrides`
- * of `null` replaces the default and then every page throws on the first
- * thing it looks up. Reachable only from storage somebody has edited or
- * corrupted, which is reason enough to answer no rather than to trust it.
- */
-/**
  * Whether a key holds nothing, which is a reader who has never set anything.
  *
  * Absent or null, because a browser that has just had a key removed says one
@@ -608,6 +598,16 @@ function nothingStored(value: unknown): boolean {
   return value === undefined || value === null;
 }
 
+/**
+ * Whether stored settings are settings.
+ *
+ * The version, and then the fields that are read without being asked about.
+ * `loadSettings` fills in what is missing from the defaults, which cannot
+ * help with a field that is present and is the wrong thing: a `keyOverrides`
+ * of `null` replaces the default and then every page throws on the first
+ * thing it looks up. Reachable only from storage somebody has edited or
+ * corrupted, which is reason enough to answer no rather than to trust it.
+ */
 function isSettings(value: unknown): value is Settings {
   if (!isRecord(value) || value.version !== SCHEMA_VERSION) return false;
 
