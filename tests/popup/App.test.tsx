@@ -138,6 +138,31 @@ describe('the popup over settings this build cannot read', () => {
   // settings this one reads as the defaults. Offering the controls would be
   // offering to write those defaults over everything they had, every key they
   // had set among it — and to report that it worked.
+  // Everything about the settings is read before any of it is shown. Shown a
+  // piece at a time, the popup paints its controls and takes them away a
+  // moment later — and a reader who clicked inside that moment is told their
+  // change could not be saved rather than told why it was never going to be.
+  it('never shows the controls, not even for a moment', async () => {
+    await browser.storage.local.set({
+      settings: { ...DEFAULT_SETTINGS, version: SCHEMA_VERSION + 1 },
+    });
+    await onATab(ADDRESS, detection());
+
+    const root = document.createElement('div');
+    document.body.append(root);
+    const dispose = render(() => <App />, root);
+
+    const seen: number[] = [];
+    for (let tick = 0; tick < 50; tick++) {
+      seen.push(root.querySelectorAll('select').length);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    expect(seen.filter((count) => count > 0)).toEqual([]);
+    expect(root.textContent).toContain('written by a newer version');
+    dispose();
+  });
+
   it('says so instead of offering to change them', async () => {
     await browser.storage.local.set({
       settings: { ...DEFAULT_SETTINGS, version: SCHEMA_VERSION + 1 },

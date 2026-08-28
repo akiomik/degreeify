@@ -33,7 +33,6 @@ import {
   recordKey,
   type Settings,
   saveKept,
-  storedSettingsAreReadable,
   watchDetection,
 } from '@/settings/storage';
 import styles from './App.module.css';
@@ -95,15 +94,21 @@ function App() {
     // reloaded out from under an open popup — would leave a heading and
     // nothing else, which is the state `addressInFront` is wrapped against
     // three lines down.
+    // Everything about the settings before any of it is shown. Shown a piece
+    // at a time, the popup paints its controls and takes them away a moment
+    // later — and a reader who clicked inside that moment is told their
+    // change could not be saved rather than told why it was never going to
+    // be.
     const stored = await readSettings().catch(() => null);
-    setSettings(stored?.settings ?? DEFAULT_SETTINGS);
+
+    setReadable(!stored?.fromLater);
 
     // Not read, whether the read failed or what came back was not settings.
     // Both leave the controls showing this build's defaults rather than the
     // reader's answers, and a control showing something nobody chose is worse
     // for being indistinguishable from one showing an answer.
     setUnread(!stored?.understood);
-    setReadable(await storedSettingsAreReadable().catch(() => true));
+    setSettings(stored?.settings ?? DEFAULT_SETTINGS);
 
     const key = await addressInFront();
     if (key) {

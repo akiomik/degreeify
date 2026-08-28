@@ -142,7 +142,23 @@ describe('reading settings that are not settings', () => {
   });
 
   it('is understood where nothing is stored at all', async () => {
-    expect(await readSettings()).toEqual({ settings: DEFAULT_SETTINGS, understood: true });
+    expect(await readSettings()).toEqual({
+      settings: DEFAULT_SETTINGS,
+      fromLater: false,
+      understood: true,
+    });
+  });
+
+  // Read alongside the settings rather than asked for afterwards: a popup
+  // that asks afterwards paints its controls and takes them away a moment
+  // later, and a reader who clicked inside that moment is told their change
+  // could not be saved rather than told why it was never going to be.
+  it('says where the settings came from in the same reading', async () => {
+    await browser.storage.local.set({
+      settings: { ...DEFAULT_SETTINGS, version: SCHEMA_VERSION + 1 },
+    });
+
+    expect(await readSettings()).toMatchObject({ fromLater: true, understood: false });
   });
 });
 

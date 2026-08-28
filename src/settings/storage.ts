@@ -239,9 +239,20 @@ export async function storedSettingsAreReadable(): Promise<boolean> {
   return !isFromLater((await browser.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY]);
 }
 
-/** The settings, and whether what they were read from was settings at all. */
+/** The settings, and what they were read from. */
 export interface StoredSettings {
   readonly settings: Settings;
+  /**
+   * Whether they came from a build after this one, and so may not be written
+   * over.
+   *
+   * Read alongside the settings rather than asked for separately. Asked
+   * afterwards, a caller showing the settings paints its controls first and
+   * takes them away a moment later — and a reader who clicked inside that
+   * moment is told the write failed rather than told why it was never going
+   * to happen.
+   */
+  readonly fromLater: boolean;
   /**
    * False where something is stored and it is not settings this build knows.
    *
@@ -256,7 +267,11 @@ export interface StoredSettings {
 export async function readSettings(): Promise<StoredSettings> {
   const stored = (await browser.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY];
 
-  return { settings: settingsIn(stored), understood: stored === undefined || isSettings(stored) };
+  return {
+    settings: settingsIn(stored),
+    fromLater: isFromLater(stored),
+    understood: stored === undefined || isSettings(stored),
+  };
 }
 
 export async function loadSettings(): Promise<Settings> {
@@ -472,16 +487,6 @@ export function prunedOverrides(
 export const USED_AT_GRANULARITY = 24 * 60 * 60 * 1000;
 
 /**
- * Whether stored settings are settings.
- *
- * The version, and then the fields that are read without being asked about.
- * `loadSettings` fills in what is missing from the defaults, which cannot
- * help with a field that is present and is the wrong thing: a `keyOverrides`
- * of `null` replaces the default and then every page throws on the first
- * thing it looks up. Reachable only from storage somebody has edited or
- * corrupted, which is reason enough to answer no rather than to trust it.
- */
-/**
  * Whether what is stored was written by a build after this one.
  *
  * The version moving is a change of shape, and a shape from the future is one
@@ -500,6 +505,16 @@ function isFromLater(value: unknown): boolean {
   return isRecord(value) && typeof value.version === 'number' && value.version > SCHEMA_VERSION;
 }
 
+/**
+ * Whether stored settings are settings.
+ *
+ * The version, and then the fields that are read without being asked about.
+ * `loadSettings` fills in what is missing from the defaults, which cannot
+ * help with a field that is present and is the wrong thing: a `keyOverrides`
+ * of `null` replaces the default and then every page throws on the first
+ * thing it looks up. Reachable only from storage somebody has edited or
+ * corrupted, which is reason enough to answer no rather than to trust it.
+ */
 function isSettings(value: unknown): value is Settings {
   if (!isRecord(value) || value.version !== SCHEMA_VERSION) return false;
 
