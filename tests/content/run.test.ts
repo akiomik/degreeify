@@ -393,6 +393,40 @@ describe('a record thrown away while the page is still open', () => {
     stop();
   });
 
+  // Written back only where the page is being looked at. The popup drops the
+  // oldest records, and every open tab putting its own straight back would
+  // leave the store above the number it is held to and the tidying nothing
+  // but a burst of writes. A record is read by a popup, and a popup is opened
+  // over the page in front of the reader.
+  it('is not written again by a page nobody is looking at', async () => {
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+    Object.defineProperty(doc, 'hidden', { value: true, configurable: true });
+
+    await browser.storage.local.remove(RECORD);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(await readDetection(RECORD)).toBeNull();
+    stop();
+  });
+
+  // And written when the reader comes back to it.
+  it('is written again when the page is looked at again', async () => {
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+    Object.defineProperty(doc, 'hidden', { value: true, configurable: true });
+
+    await browser.storage.local.remove(RECORD);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    Object.defineProperty(doc, 'hidden', { value: false, configurable: true });
+    doc.dispatchEvent(new Event('visibilitychange'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(await readDetection(RECORD)).toMatchObject({ named: 6 });
+    stop();
+  });
+
   it('stops being written again once the page has gone', async () => {
     const doc = load('chordwiki-basic');
     (await start(doc))();

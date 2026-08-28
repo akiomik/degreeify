@@ -129,13 +129,28 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   // it — after which the popup tells them to open a chord chart on the chord
   // chart in front of them. This page is the one thing that can write it
   // again, and it still knows what it found.
+  /** Writes down what the page is showing, where anyone could be looking. */
+  const rewrite = () => {
+    if (recorded || doc.hidden) return;
+    void queue(() => current).catch(() => {});
+  };
+
   const forgetting = stored
     ? watchForgetting(stored, () => {
         recorded = false;
         writing++;
-        void queue(() => current).catch(() => {});
+        rewrite();
       })
     : () => {};
+
+  // And when the page comes back into view. Writing it back only where the
+  // page is being looked at is what keeps this from undoing the tidying: the
+  // popup drops the oldest records and every open tab would put its own
+  // straight back, so the store would settle above the number it is held to
+  // and the tidying would be a burst of writes and nothing else. A record is
+  // read by a popup, and a popup is opened over the page in front of the
+  // reader.
+  doc.addEventListener('visibilitychange', rewrite);
 
   // Listening before reading, so that a change made while the page is still
   // loading is not the one change nothing hears.
@@ -170,6 +185,7 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   return () => {
     stop();
     forgetting();
+    doc.removeEventListener('visibilitychange', rewrite);
   };
 }
 

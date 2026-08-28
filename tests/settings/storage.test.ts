@@ -212,6 +212,18 @@ describe('the settings and the stamps written together', () => {
     expect((await loadSettings()).enabled).toBe(false);
   });
 
+  // Asked of the object itself. `in` finds a `constructor` on anything, so a
+  // stamp for a chart called that would never be seen as gone.
+  it.each(['constructor', 'toString', 'valueOf'])(
+    'forget a stamp for a chart called %s',
+    async (name) => {
+      await saveStamp(name, 1);
+      await saveKept(DEFAULT_SETTINGS, {}, { [name]: 1 });
+
+      expect(await loadStamps()).toEqual({});
+    },
+  );
+
   // A stamp for a chart that has no key left is a record nothing reads.
   it('forget a stamp whose key has gone', async () => {
     await saveKept(DEFAULT_SETTINGS, { one: 1, two: 2 }, {});

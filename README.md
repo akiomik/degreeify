@@ -14,7 +14,8 @@ names, so a chart reads as `I - VIm - IV - V` instead of `C - Am - F - G`.
   part-way through, and follows ChordWiki's own transposition.
 - Turns off from the popup, restoring the original chord names exactly.
 - Lets you set the key by hand, whether or not the page declares one — for a
-  chart that changes key, the chart is followed instead.
+  chart that changes key, or one whose page does not say how far it has been
+  transposed, the chart is followed instead.
 
 ## Using it
 
@@ -45,10 +46,15 @@ declares more than one key is followed rather than overridden.
   wrong is worse than not naming, so the guess is declined where the chords do
   not settle it; set the key by hand from the popup. The same applies to a
   chart whose one key line is written in a form this cannot read.
-- **A chart that changes key cannot be overridden section by section.** A key
-  set by hand covers a chart that says nothing this can use. Where a chart
-  states several keys and one of them cannot be read, that section is left as
-  the chart wrote it rather than named in the key given for the page.
+- **A chart that changes key cannot be given a key by hand.** A key you set
+  covers a chart that states at most one of its own — read or unread, it is
+  yours that is used. A chart that states several is followed instead, and a
+  section whose declaration cannot be read is left as the chart wrote it.
+- **A key cannot be set on a page that does not say how far it has been
+  transposed.** What is kept is the key of the untransposed chart, so setting
+  one needs to know how far the chart has moved. ChordWiki says so on every
+  chart today; if it stops, the popup says why instead of offering a control
+  that would keep nothing.
 
 ## Requirements
 

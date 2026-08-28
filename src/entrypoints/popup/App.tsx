@@ -24,6 +24,7 @@ import {
 import {
   DEFAULT_SETTINGS,
   type Detection,
+  type KeyOverride,
   loadSettings,
   loadStamps,
   pruneDetections,
@@ -299,7 +300,7 @@ function App() {
                          * the other way, the escape hatch is missing from
                          * half of what it is an escape from.
                          */}
-                        <Show when={current().keyOverrides[found().pageId]}>
+                        <Show when={keptFor(current(), found().pageId)}>
                           <button type="button" onClick={() => void clearOverride()}>
                             Forget the key set for this chart
                           </button>
@@ -356,7 +357,7 @@ function App() {
                      */}
                     <button
                       type="button"
-                      disabled={!current().keyOverrides[found().pageId]}
+                      disabled={!keptFor(current(), found().pageId)}
                       onClick={() => void clearOverride()}
                     >
                       Use the chart's own key
@@ -470,6 +471,18 @@ function whyNotOverridable(found: Detection): string {
   return found.statedKeys > MOST_STATED_KEYS_TO_OVERRIDE
     ? `This chart states ${found.statedKeys} keys, so it cannot be read in one key set by hand.`
     : 'This page does not say how far the chart has been transposed, so a key set here could not be kept.';
+}
+
+/**
+ * The key kept for a chart, asked of the object itself.
+ *
+ * `in` and a bare lookup both find a `constructor` on any object, and what is
+ * looked up here is a chart's name — which carries an adapter's prefix today
+ * and need not tomorrow. Asked either of those ways, a chart called
+ * `constructor` would have a key nobody set and a button to forget it.
+ */
+function keptFor(settings: Settings, pageId: string): KeyOverride | undefined {
+  return Object.hasOwn(settings.keyOverrides, pageId) ? settings.keyOverrides[pageId] : undefined;
 }
 
 /** The tonic on its own, which is what the control offers and keeps. */

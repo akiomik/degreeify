@@ -191,7 +191,7 @@ export async function saveKept(
   await browser.storage.local.set({ [SETTINGS_KEY]: settings, ...Object.fromEntries(changed) });
 
   const gone = Object.keys(before)
-    .filter((page) => !(page in stamps))
+    .filter((page) => !Object.hasOwn(stamps, page))
     .map((page) => `${STAMP_PREFIX}${page}`);
 
   // And a failure to remove them is not a failure. The caller shows a reader
