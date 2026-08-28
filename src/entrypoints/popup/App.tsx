@@ -9,13 +9,13 @@ import {
   Show,
 } from 'solid-js';
 import { browser } from 'wxt/browser';
-import { MOST_STATED_KEYS_TO_OVERRIDE } from '@/content/apply';
 import type { SpellingPolicy } from '@/core/degree';
 import { CANONICAL_TONIC, type Key, type Mode } from '@/core/key';
 import type { Notation } from '@/core/notation';
 import { formatNote, parseNote } from '@/core/pitch';
 import {
   type Kept,
+  MOST_STATED_KEYS_TO_OVERRIDE,
   overrideFor,
   usableOffset,
   withOverride,
@@ -304,12 +304,22 @@ function App() {
     if (!unreachable() && !lost && !unplaced && tidied) return;
 
     const again = RETRY_AFTER.map((after) => setTimeout(() => void reread(), after));
-    const clear = () => {
-      for (const timer of again) clearTimeout(timer);
-    };
 
-    if (owner) runWithOwner(owner, () => onCleanup(clear));
-    else clear();
+    // And nothing where there is nobody to register the cleanup with, which
+    // is the opposite of what the watching does with the same question. A
+    // listener nobody can remove is one that goes on being told things; three
+    // timers nobody can clear go off once each and are done, and cancelling
+    // them to be tidy would cancel the retrying this popup opened needing.
+    //
+    // Unreachable as it stands: the owner is taken in the body of a component
+    // being rendered, where there is always one. It is here because there is
+    // no way to say that in the types.
+    if (owner)
+      runWithOwner(owner, () =>
+        onCleanup(() => {
+          for (const timer of again) clearTimeout(timer);
+        }),
+      );
   });
 
   /**

@@ -2,6 +2,7 @@ import { type ChordSymbol, parseChord } from '@/core/chord';
 import { type SpellingPolicy, toDegreeChord } from '@/core/degree';
 import { inferKey, type Key, type KeySource } from '@/core/key';
 import { formatDegreeChord, type Notation } from '@/core/notation';
+import { MOST_STATED_KEYS_TO_OVERRIDE } from '@/settings/overrides';
 import type { ChartItem, ChordNode, SiteAdapter } from '@/sites/types';
 
 /**
@@ -24,20 +25,6 @@ export const WIDTH_PROPERTY = '--degreeify-w';
 
 /** Set on the root element so a stylesheet can tell the two states apart. */
 export const STATE_ATTRIBUTE = 'data-degreeify';
-
-/**
- * How many keys a chart may state and still be one a single key can answer
- * for.
- *
- * Past that it changes key, and one key given for a whole page cannot be
- * right for every section of it.
- *
- * Exported because a caller offering to set a key has to offer it exactly
- * where one would be taken. Kept in two places that agreed, the day one moved
- * would be the day a reader set a key, was told it was kept, and watched the
- * page ignore it.
- */
-export const MOST_STATED_KEYS_TO_OVERRIDE = 1;
 
 export interface ApplyOptions {
   readonly notation?: Notation;
