@@ -99,7 +99,7 @@ describe('the popup on a tab that is not a chart', () => {
     await onATab(address);
     const { root, dispose } = await open();
 
-    expect(root.textContent).toContain('Open a ChordWiki chord chart');
+    expect(root.textContent).toContain('Nothing to show for this page yet');
     dispose();
   });
 
@@ -140,13 +140,13 @@ describe('the popup where it cannot work out which tab it is on', () => {
   // saying there is no chart here. A tab that could not be looked up is not a
   // tab with no chart on it, and the asking is tried again while the popup is
   // open.
-  it('does not say there is no chart on a page it could not look up', async () => {
+  it('says nothing about a page it could not look up', async () => {
     vi.spyOn(browser.tabs, 'query').mockRejectedValue(new Error('no window'));
     const { root, dispose } = await open();
 
     await new Promise((resolve) => setTimeout(resolve, 400));
 
-    expect(root.textContent).not.toContain('Open a ChordWiki chord chart');
+    expect(root.textContent).not.toContain('Nothing to show for this page yet');
     dispose();
   });
 
@@ -161,7 +161,7 @@ describe('the popup where it cannot work out which tab it is on', () => {
     await new Promise((resolve) => setTimeout(resolve, 7000));
 
     expect(root.textContent).toContain('could not find out about this page');
-    expect(root.textContent).not.toContain('Open a ChordWiki chord chart');
+    expect(root.textContent).not.toContain('Nothing to show for this page yet');
     dispose();
   }, 15000);
 });
@@ -542,7 +542,7 @@ describe('the popup on a chart', () => {
     // Not that there is no chart here, which is a different thing from a read
     // that would not answer — and would be a guess about a chart that may
     // well be named end to end.
-    expect(root.textContent).not.toContain('Open a ChordWiki chord chart');
+    expect(root.textContent).not.toContain('Nothing to show for this page yet');
 
     broken = false;
     await new Promise((resolve) => setTimeout(resolve, 400));
@@ -619,6 +619,18 @@ describe('the popup on a chart', () => {
     expect(get.mock.calls).toHaveLength(asked);
   });
 
+  // A chart whose record has not arrived is not a page with no chart on it.
+  // A content script waits for the page's own font before it measures
+  // anything, which on a slow page is seconds — and a popup opened inside
+  // those seconds is on the chart the reader is looking at.
+  it('does not tell a reader on a chart there is nothing on it', async () => {
+    await onATab(ADDRESS);
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('give this one a moment');
+    dispose();
+  });
+
   // A record that arrives on its own is a record. Asking again for one the
   // popup is already showing is round trips whose answers it throws away —
   // `fetchRecord` prefers what arrived — and the read failing is not the same
@@ -669,7 +681,7 @@ describe('the popup on a chart', () => {
     await new Promise((resolve) => setTimeout(resolve, 400));
 
     expect(get.mock.calls).toHaveLength(asked);
-    expect(root.textContent).toContain('Open a ChordWiki chord chart');
+    expect(root.textContent).toContain('Nothing to show for this page yet');
     get.mockRestore();
     dispose();
   });
@@ -677,7 +689,7 @@ describe('the popup on a chart', () => {
   // Working out which page the popup is over takes two round trips after the
   // settings have already been shown, and nothing else tells "not a chart"
   // from "still asking". Said and taken back inside a frame is still said.
-  it('never says there is no chart here, not even for a moment', async () => {
+  it('never says there is nothing to show before it has looked', async () => {
     await onATab(ADDRESS, detection());
 
     const root = document.createElement('div');
@@ -689,7 +701,7 @@ describe('the popup on a chart', () => {
     // between them — which is every state this is asking about.
     const seen: boolean[] = [];
     for (let tick = 0; tick < 200; tick++) {
-      seen.push(root.textContent?.includes('Open a ChordWiki chord chart') ?? false);
+      seen.push(root.textContent?.includes('Nothing to show for this page yet') ?? false);
       await Promise.resolve();
     }
 
@@ -699,11 +711,11 @@ describe('the popup on a chart', () => {
   });
 
   // And still says it where there is no chart, once it has asked.
-  it('says there is no chart here once it has asked', async () => {
+  it('says there is nothing to show once it has asked', async () => {
     await onATab('https://ja.chordwiki.org/');
     const { root, dispose } = await open();
 
-    expect(root.textContent).toContain('Open a ChordWiki chord chart');
+    expect(root.textContent).toContain('Nothing to show for this page yet');
     dispose();
   });
 
@@ -796,7 +808,7 @@ describe('the popup on a chart', () => {
     }) as never);
 
     const { root, dispose } = await open();
-    expect(root.textContent).not.toContain('Open a ChordWiki chord chart');
+    expect(root.textContent).not.toContain('Nothing to show for this page yet');
 
     broken = false;
     await new Promise((resolve) => setTimeout(resolve, 400));
@@ -887,7 +899,7 @@ describe('the popup on a chart', () => {
     await new Promise((resolve) => setTimeout(resolve, 400));
 
     expect(asking.mock.calls).toHaveLength(asked);
-    expect(root.textContent).toContain('Open a ChordWiki chord chart');
+    expect(root.textContent).toContain('Nothing to show for this page yet');
     dispose();
   });
 
@@ -1434,7 +1446,7 @@ describe('the popup on a chart', () => {
 
     const { root, dispose } = await open();
 
-    expect(root.textContent).toContain('Open a ChordWiki chord chart');
+    expect(root.textContent).toContain('Nothing to show for this page yet');
     dispose();
   });
 

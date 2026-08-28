@@ -700,7 +700,8 @@ function App() {
             <Show when={unread() && readable()}>
               <p class={styles.warning}>
                 Your settings could not be read. These are the defaults, not your answers, and no
-                chart is being named until you change something here.
+                chart is being named until you change something here — which replaces what is
+                stored, including any keys you had set for charts.
               </p>
             </Show>
 
@@ -751,7 +752,25 @@ function App() {
                   <Show
                     when={unplaced() || lost()}
                     fallback={
-                      <p class={styles.note}>Open a ChordWiki chord chart to use Degreeify.</p>
+                      /*
+                       * Nothing yet rather than nothing here. A chart whose
+                       * record has not arrived is not a page with no chart on
+                       * it: a content script waits for the page's own font
+                       * before it measures anything, which on a slow page is
+                       * seconds, and this is a popup opened inside those
+                       * seconds on the chart the reader is looking at.
+                       *
+                       * The two cannot be told apart from here. A popup has
+                       * the address of the tab and nothing else, and every
+                       * page on the site has an address that looks like a
+                       * chart's — so the line says what is true of both, and
+                       * the advice that is useful in one is left standing for
+                       * the other.
+                       */
+                      <p class={styles.note}>
+                        Nothing to show for this page yet — open a ChordWiki chord chart, or give
+                        this one a moment.
+                      </p>
                     }
                   >
                     <p class={styles.warning}>

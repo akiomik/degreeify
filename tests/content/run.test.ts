@@ -1020,6 +1020,39 @@ describe('records of pages the reader has left', () => {
     stop();
   });
 
+  // A record from a later build is a page that has read the same chart and
+  // written down what it found, not a record thrown away. Taken for
+  // forgotten, two builds on one chart in two windows would each read the
+  // other's write as a deletion and put its own back for as long as both
+  // stayed open.
+  it('leaves a record written by a later build where it is', async () => {
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+    expect(await readDetection(RECORD)).not.toBeNull();
+
+    await browser.storage.local.set({
+      [RECORD]: { version: SCHEMA_VERSION + 1, pageId: PAGE, updatedAt: 2 },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const left = (await browser.storage.local.get(RECORD))[RECORD];
+    expect(left).toMatchObject({ version: SCHEMA_VERSION + 1 });
+    stop();
+  });
+
+  // And a record left in a shape no build wrote is still forgotten, which is
+  // what makes a corrupted one heal.
+  it('writes the record again where what is there is not one', async () => {
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+
+    await browser.storage.local.set({ [RECORD]: { pageId: PAGE } });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(await readDetection(RECORD)).toMatchObject({ named: 6 });
+    stop();
+  });
+
   // Once for each page a reader opens, and not for each time it is read:
   // changing a setting must not walk the whole of storage on every open tab.
   it('are not tidied again every time the page is read', async () => {

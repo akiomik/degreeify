@@ -488,8 +488,15 @@ export function watchForgetting(key: string, onForgotten: () => void): () => voi
     // behind for a removed key differs — absent in one, null in another — and
     // asking what it is rather than what it is missing is the same question
     // without that difference in it.
+    //
+    // Except a record from a later build, which is a page that has read the
+    // same chart and written down what it found. Taken for forgotten, two
+    // builds on one chart in two windows would each read the other's write as
+    // a deletion and put its own back, for as long as both stayed open. There
+    // is no later build to write one today; the change that makes one is not
+    // the place to discover this.
     const change = changes[key];
-    if (change && !isDetection(change.newValue)) onForgotten();
+    if (change && !isDetection(change.newValue) && !isFromLater(change.newValue)) onForgotten();
   };
 
   browser.storage.onChanged.addListener(listener);
