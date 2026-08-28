@@ -563,7 +563,13 @@ function isFromLater(value: unknown): boolean {
 function isSettings(value: unknown): value is Settings {
   if (!isRecord(value) || value.version !== SCHEMA_VERSION) return false;
 
-  return value.keyOverrides === undefined || isRecord(value.keyOverrides);
+  // Not an array, which `isRecord` would take for one of these. Read, it
+  // degrades to nothing — no chart is named after a number — but the first
+  // key a reader sets is spread over it, and the numbers come along as
+  // overrides for charts that do not exist, taking places among the two
+  // hundred kept and reachable from nowhere.
+  const keys = value.keyOverrides;
+  return keys === undefined || (isRecord(keys) && !Array.isArray(keys));
 }
 
 function isDetection(value: unknown): value is Detection {

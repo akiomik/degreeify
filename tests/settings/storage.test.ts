@@ -137,14 +137,22 @@ describe('reading settings that are not settings', () => {
   // And nothing done to any page, for the reason a later version's settings
   // leave every page alone: what would be used instead is this build's own
   // defaults, which say to rewrite every chart.
-  it.each([null, 'nothing', 7])('gives the defaults where the keys are %j', async (overrides) => {
-    await browser.storage.local.set({
-      settings: { ...DEFAULT_SETTINGS, keyOverrides: overrides },
-    });
+  // An array is an object, and read as one it degrades to nothing — no chart
+  // is named after a number. What it does not survive is a key being set: the
+  // first one is spread over it and the numbers come along as overrides for
+  // charts that do not exist, taking places among the ones kept and reachable
+  // from nowhere.
+  it.each([null, 'nothing', 7, [], [{ tonic: 'C', mode: 'major' }]])(
+    'gives the defaults where the keys are %j',
+    async (overrides) => {
+      await browser.storage.local.set({
+        settings: { ...DEFAULT_SETTINGS, keyOverrides: overrides },
+      });
 
-    expect(await loadSettings()).toEqual(DEFAULT_SETTINGS);
-    expect((await readSettings()).understood).toBe(false);
-  });
+      expect(await loadSettings()).toEqual(DEFAULT_SETTINGS);
+      expect((await readSettings()).understood).toBe(false);
+    },
+  );
 
   it('is understood where nothing is stored at all', async () => {
     expect(await readSettings()).toEqual({

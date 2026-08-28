@@ -556,6 +556,53 @@ describe('records of pages the reader has left', () => {
     stop();
   });
 
+  // Whenever a write fails, and not only the first time a page writes. A
+  // record dropped while its page was left open is written again, and if that
+  // write fails for want of room too, a page that had spent its one tidying
+  // would have no way left to make room — stuck without a record for the rest
+  // of its life.
+  it('are tidied again where a later write is the one with no room', async () => {
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+
+    const setting = browser.storage.local.set.bind(browser.storage.local);
+    const room = async () =>
+      Object.keys(await browser.storage.local.get(null)).filter((key) =>
+        key.startsWith('detected:'),
+      ).length < MOST_DETECTIONS;
+
+    vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+      const detections = Object.keys(items).some((name) => name.startsWith('detected:'));
+      if (detections && !(await room())) throw new Error('quota exceeded');
+      return setting(items);
+    }) as never);
+
+    // The store filled after this page had already tidied and written once,
+    // and only then is this page's own record dropped — so the write that
+    // puts it back is one with no room, on a page whose one tidying is spent.
+    for (let index = 0; index < MOST_DETECTIONS; index++) {
+      await setting({
+        [`detected:page-${index}`]: {
+          version: SCHEMA_VERSION,
+          pageId: `chordwiki:chart:${index}`,
+          key: null,
+          source: null,
+          statedKeys: 0,
+          unreadKeys: 0,
+          transposeOffset: 0,
+          named: 0,
+          updatedAt: index,
+        },
+      });
+    }
+
+    await browser.storage.local.remove(RECORD);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(await readDetection(RECORD)).toMatchObject({ named: 6 });
+    stop();
+  });
+
   // Once for each page a reader opens, and not for each time it is read:
   // changing a setting must not walk the whole of storage on every open tab.
   it('are not tidied again every time the page is read', async () => {

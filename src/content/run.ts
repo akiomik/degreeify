@@ -319,13 +319,17 @@ async function remember(
 
   try {
     await writeDetection(stored, found);
-  } catch (error) {
-    if (!tidy) throw error;
-
-    // A store with no room left is the likeliest reason, and this page has
-    // not tidied yet. Tidied and tried once more rather than left to a later
-    // reading: the reader is sitting on this page, so neither a settings
-    // change nor its coming back into view is going to happen on its own.
+  } catch {
+    // A store with no room left is the likeliest reason. Tidied and tried
+    // once more rather than left to a later reading: the reader is sitting on
+    // this page, so neither a settings change nor its coming back into view
+    // is going to happen on its own.
+    //
+    // Whenever a write fails, and not only the first time this page writes.
+    // A record dropped while its page was left open is written again, and if
+    // that write fails for want of room too, a page that had spent its one
+    // tidying would have no way left to make room — stuck without a record
+    // for the rest of its life, which is what this exists to prevent.
     // One short of the number, because what is about to be written is not
     // among what is being counted: this record does not exist yet, so keeping
     // the whole number of others and then adding this one would settle a
