@@ -6,10 +6,10 @@ import {
   asked,
   DEFAULT_SETTINGS,
   type Detection,
+  isStored,
   loadStamp,
   MOST_DETECTIONS,
   pruneDetections,
-  readDetection,
   readSettings,
   recordKey,
   SCHEMA_VERSION,
@@ -336,7 +336,7 @@ async function remember(
     // page wrote before and is writing again is already there and is already
     // the one being kept, so counting it out as well would drop a record that
     // did not need to go.
-    const already = await readDetection(stored).catch(() => null);
+    const already = await isStored(stored).catch(() => false);
     await pruneDetections(already ? MOST_DETECTIONS : MOST_DETECTIONS - 1, stored).catch(() => {});
     await writeDetection(stored, found);
     return;

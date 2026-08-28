@@ -649,6 +649,62 @@ describe('records of pages the reader has left', () => {
     stop();
   });
 
+  // Asked whether anything is there rather than read. A record written under
+  // another version is there, takes a place among the ones kept, and survives
+  // a tidying told to keep it — so counting what is there has to count it,
+  // whether or not this build can make sense of it.
+  it('count a record of this page written in a shape they cannot read', async () => {
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+
+    // Out of view, so that replacing its record below does not have the page
+    // put a readable one straight back.
+    Object.defineProperty(doc, 'hidden', { value: true, configurable: true });
+
+    const setting = browser.storage.local.set.bind(browser.storage.local);
+    const room = async () =>
+      Object.keys(await browser.storage.local.get(null)).filter((key) =>
+        key.startsWith('detected:'),
+      ).length < MOST_DETECTIONS;
+
+    for (let index = 0; index < MOST_DETECTIONS - 1; index++) {
+      await setting({
+        [`detected:page-${index}`]: {
+          version: SCHEMA_VERSION,
+          pageId: `chordwiki:chart:${index}`,
+          key: null,
+          source: null,
+          statedKeys: 0,
+          unreadKeys: 0,
+          transposeOffset: 0,
+          named: 0,
+          updatedAt: index,
+        },
+      });
+    }
+
+    // This page's own, in a shape this build has no name for.
+    await setting({
+      [RECORD]: { version: SCHEMA_VERSION + 1, pageId: 'chordwiki:chart:Test Song' },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+      const detections = Object.keys(items).some((name) => name.startsWith('detected:'));
+      if (detections && !(await room())) throw new Error('quota exceeded');
+      return setting(items);
+    }) as never);
+
+    await saveOnly({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const all = await browser.storage.local.get(null);
+    expect(Object.keys(all).filter((key) => key.startsWith('detected:'))).toHaveLength(
+      MOST_DETECTIONS,
+    );
+    stop();
+  });
+
   // Once for each page a reader opens, and not for each time it is read:
   // changing a setting must not walk the whole of storage on every open tab.
   it('are not tidied again every time the page is read', async () => {

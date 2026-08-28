@@ -77,12 +77,24 @@ function App() {
    */
   const [unread, setUnread] = createSignal(false);
 
-  // What is stored is what was chosen, once it has arrived. A key loaded from
+  /** Whether the mode on offer is one the reader has settled, one way or another. */
+  let modeIsSettled = false;
+
+  // What is stored is what was chosen, once it has arrived: a key loaded from
   // storage brings its mode with it, and the control has to show that mode
   // rather than whichever one this happened to start on.
+  //
+  // Once, and not on every reading. This runs again whenever what was found
+  // on the page changes, which a page writes for reasons of its own — and a
+  // reader who has just chosen a mode has not had that choice written yet,
+  // so the reading would put the control back where they moved it from and
+  // save the next tonic they picked in the mode they had left.
   createEffect(() => {
     const found = override();
-    if (found) setPendingMode(found.mode);
+    if (!found || modeIsSettled) return;
+
+    modeIsSettled = true;
+    setPendingMode(found.mode);
   });
 
   onMount(async () => {
@@ -294,7 +306,10 @@ function App() {
     // back on major and three of the minor tonics gone from the list — and
     // the next tonic they chose saved as a major key.
     const cleared = override();
-    if (cleared) setPendingMode(cleared.mode);
+    if (cleared) {
+      modeIsSettled = true;
+      setPendingMode(cleared.mode);
+    }
 
     await update((kept) => withoutOverride(kept, found.pageId));
   };
@@ -423,6 +438,7 @@ function App() {
                             value={mode()}
                             onChange={(event) => {
                               const chosen = event.currentTarget.value as Mode;
+                              modeIsSettled = true;
                               setPendingMode(chosen);
 
                               // Where a key is already set, changing the mode

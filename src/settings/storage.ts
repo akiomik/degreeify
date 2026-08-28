@@ -449,6 +449,18 @@ export function watchForgetting(key: string, onForgotten: () => void): () => voi
   return () => browser.storage.onChanged.removeListener(listener);
 }
 
+/**
+ * Whether anything at all is stored under a key.
+ *
+ * Asked rather than read, because reading asks a second question. A record
+ * written under another version is there, takes a place among the ones kept,
+ * and survives a tidying that is told to keep it — so a caller counting what
+ * is there has to count it, whether or not this build can make sense of it.
+ */
+export async function isStored(key: string): Promise<boolean> {
+  return (await browser.storage.local.get(key))[key] !== undefined;
+}
+
 export async function writeDetection(key: string, detection: Detection): Promise<void> {
   await browser.storage.local.set({ [key]: detection });
 }

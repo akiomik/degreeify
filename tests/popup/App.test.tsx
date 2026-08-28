@@ -715,6 +715,47 @@ describe('the popup on a chart', () => {
     },
   );
 
+  // The reading of what is on the page runs again whenever a page writes it,
+  // for reasons of its own. A reader who has just chosen a mode has not had
+  // that choice written yet, so a reading in that window would put the
+  // control back where they moved it from — and save the next tonic they
+  // picked in the mode they had left.
+  it('keeps the mode just chosen when the page writes what it found', async () => {
+    await saveKept(
+      withOverride(EMPTY, 'chordwiki:chart:Test Song', KEY_OF_G, 0, 1).settings,
+      { 'chordwiki:chart:Test Song': 1 },
+      {},
+    );
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+    const [tonics, modes] = [...root.querySelectorAll('select')];
+    if (!tonics || !modes) throw new Error('there is a key control');
+
+    // The reader's choice takes a moment to be written, which is the window
+    // this is about.
+    const real = browser.storage.local.set.bind(browser.storage.local);
+    vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+      if (Object.hasOwn(items, 'settings')) {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      }
+      return real(items);
+    }) as never);
+
+    modes.value = 'minor';
+    modes.dispatchEvent(new Event('change', { bubbles: true }));
+
+    // The page writes what it found, inside that window.
+    const key = recordKey(ADDRESS);
+    if (!key) throw new Error('that is an address');
+    await real({ [key]: detection({ named: 7 }) });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(modes.value).toBe('minor');
+    expect([...tonics.options].map((option) => option.value)).toContain('F#');
+    dispose();
+  });
+
   // A record is written by a content script and read by a popup, and an
   // extension is updated with pages already open. A record from another shape
   // read as though it were this one is a popup counting `undefined` chords.
