@@ -223,8 +223,15 @@ export async function saveKept(
 
   // And a failure to remove them is not a failure. The caller shows a reader
   // that nothing was kept, which would be untrue: the settings are written,
-  // the page is already following them, and what is left behind is a record
-  // nothing reads that the next write clears.
+  // the page is already following them, and what is left behind is a few
+  // bytes nothing reads.
+  //
+  // Nothing sweeps them up on a schedule. What is removed is worked out from
+  // the difference between what was read and what is being written, and a
+  // change to the names or the numerals passes the stamps through unchanged
+  // — so an orphan left here stays until the reader next sets or clears a key
+  // on some chart. That is the price of not walking every key on every write,
+  // and it is a few bytes.
   if (gone.length > 0) await browser.storage.local.remove(gone).catch(() => {});
 }
 
@@ -282,10 +289,13 @@ export interface StoredSettings {
  * say to rewrite every chart, and a reader who had turned that off would find
  * it back on.
  *
- * An earlier version is included, though it may be written over. Knowing what
- * a shape is to be replaced with is not knowing what it said, and the day the
- * version first moves is the day the change that moved it owes those readers
- * a migration — until which their answers are as unread as anyone else's.
+ * An earlier version is included: nothing is done to a page over one either.
+ * Knowing what a shape is to be replaced with is not knowing what it said,
+ * and the day the version first moves is the day the change that moved it
+ * owes those readers a migration — until which their answers are as unread as
+ * anyone else's. Where it differs is in the writing, which
+ * {@link storedSettingsAreReadable} allows for an earlier version and refuses
+ * for a later one.
  *
  * Here rather than in the settings themselves. A value nobody chose, sitting
  * where a setting goes, is one the next write takes for an answer — which is
