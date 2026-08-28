@@ -94,7 +94,7 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   let read = false;
 
   const retry = async (): Promise<void> => {
-    if (read) return;
+    if (read && recorded) return;
     await queue(settingsNow).catch(() => {});
   };
 
@@ -273,7 +273,16 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   // another tab — and then it stops. A read that is still failing after five
   // seconds is failing for a reason waiting will not fix, and a page that
   // asks forever is a page that asks forever on every tab a reader has open.
-  const retries = read ? [] : RETRY_AFTER.map((after) => setTimeout(() => void retry(), after));
+  //
+  // For the record as well as for the settings, and for the same reason the
+  // writing tidies and tries again rather than waiting: the reader is sitting
+  // on this page, so neither a settings change nor its coming back into view
+  // is going to happen on its own. Opening the popup is not either — a
+  // browser action does not hide the page behind it — so a record that failed
+  // to write twice would leave the popup saying to open a chord chart, on the
+  // chord chart the reader opened it over.
+  const retries =
+    read && recorded ? [] : RETRY_AFTER.map((after) => setTimeout(() => void retry(), after));
 
   return () => {
     stop();

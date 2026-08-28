@@ -10,6 +10,25 @@ import {
   SHARP_CHARS,
 } from './pitch';
 
+/**
+ * How many keys a chart may state and still be one a single key can answer
+ * for.
+ *
+ * Past that it changes key, and one key given for a whole page cannot be
+ * right for every section of it.
+ *
+ * Here because both sides of setting a key need it and neither owns it: the
+ * page decides whether to take one, the popup decides whether to offer one,
+ * and they have to draw the line in the same place. Kept in two places that
+ * agreed, the day one moved would be the day a reader set a key, was told it
+ * was kept, and watched the page ignore it.
+ *
+ * In `core` rather than beside either of them, and rather than beside the
+ * keys a reader has set. Both of those reach storage, and the page reads this
+ * from a module whose whole point is that it reads nothing.
+ */
+export const MOST_STATED_KEYS_TO_OVERRIDE = 1;
+
 export type Mode = 'major' | 'minor';
 
 /**

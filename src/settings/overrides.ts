@@ -9,25 +9,6 @@ import {
 } from './storage';
 
 /**
- * How many keys a chart may state and still be one a single key can answer
- * for.
- *
- * Past that it changes key, and one key given for a whole page cannot be
- * right for every section of it.
- *
- * Here because both sides of setting a key need it and neither owns it: the
- * page decides whether to take one, and the popup decides whether to offer
- * one, and they have to draw the line in the same place. Kept in two places
- * that agreed, the day one moved would be the day a reader set a key, was
- * told it was kept, and watched the page ignore it.
- *
- * Which is also why it is not in `apply.ts`, where the page reads it. A popup
- * reaching into the content script for a policy they share is a popup that
- * depends on the DOM rewriting to know what to offer.
- */
-export const MOST_STATED_KEYS_TO_OVERRIDE = 1;
-
-/**
  * Reading and writing the key a person set for a chart.
  *
  * A key is kept as the key of the chart untransposed, and a reader sets and

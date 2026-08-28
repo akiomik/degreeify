@@ -1,8 +1,7 @@
 import { type ChordSymbol, parseChord } from '@/core/chord';
 import { type SpellingPolicy, toDegreeChord } from '@/core/degree';
-import { inferKey, type Key, type KeySource } from '@/core/key';
+import { inferKey, type Key, type KeySource, MOST_STATED_KEYS_TO_OVERRIDE } from '@/core/key';
 import { formatDegreeChord, type Notation } from '@/core/notation';
-import { MOST_STATED_KEYS_TO_OVERRIDE } from '@/settings/overrides';
 import type { ChartItem, ChordNode, SiteAdapter } from '@/sites/types';
 
 /**

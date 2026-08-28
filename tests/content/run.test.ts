@@ -198,6 +198,39 @@ describe('a page whose settings cannot be read', () => {
     }
   });
 
+  // The record too, and for the reason the writing tidies and tries again
+  // rather than waiting: the reader is sitting on this page. Opening the
+  // popup is not a settings change and does not hide the page behind it, so a
+  // record that failed to write twice would leave the popup saying to open a
+  // chord chart on the chord chart it was opened over.
+  it('writes the record again after two writes that failed', async () => {
+    vi.useFakeTimers();
+    try {
+      const real = browser.storage.local.set.bind(browser.storage.local);
+      let failing = true;
+      vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+        if (failing && Object.keys(items).some((name) => name.startsWith('detected:'))) {
+          throw new Error('quota exceeded');
+        }
+        return real(items);
+      }) as never);
+
+      const doc = load('chordwiki-basic');
+      const stop = await run(doc, chordwiki, new URL(ADDRESS));
+
+      expect(shown(doc)[0]).toBe('I');
+      expect(await readDetection(RECORD)).toBeNull();
+
+      failing = false;
+      await vi.advanceTimersByTimeAsync(200);
+
+      expect(await readDetection(RECORD)).toMatchObject({ named: 6 });
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // And gives up, rather than asking a storage that is not coming back for as
   // long as the tab is open.
   it('stops reading the settings again once the tries have run out', async () => {

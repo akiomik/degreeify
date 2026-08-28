@@ -10,12 +10,11 @@ import {
 } from 'solid-js';
 import { browser } from 'wxt/browser';
 import type { SpellingPolicy } from '@/core/degree';
-import { CANONICAL_TONIC, type Key, type Mode } from '@/core/key';
+import { CANONICAL_TONIC, type Key, MOST_STATED_KEYS_TO_OVERRIDE, type Mode } from '@/core/key';
 import type { Notation } from '@/core/notation';
 import { formatNote, parseNote } from '@/core/pitch';
 import {
   type Kept,
-  MOST_STATED_KEYS_TO_OVERRIDE,
   overrideFor,
   usableOffset,
   withOverride,
