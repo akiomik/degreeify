@@ -94,13 +94,25 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   let read = false;
 
   const retry = async (): Promise<void> => {
-    if (read && recorded) return;
+    if (gone || (read && recorded)) return;
     await queue(settingsNow).catch(() => {});
   };
 
   /** Tries spent on whatever is outstanding, and the one waiting to be. */
   let tries = 0;
   let waiting: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Whether the page has been let go of, so that nothing arms a try for it.
+   *
+   * Stopping clears the timer that is waiting, and a try already in flight
+   * has no timer to clear — the run it queued arms the next one when it
+   * settles, after the caller asked for all of this to stop. Nothing calls
+   * the stopping in a content script, where the page outliving the listener
+   * is the normal end of things; a test that calls it and is then written to
+   * from the test before it is the reason the stopping exists.
+   */
+  let gone = false;
 
   /**
    * Arms the next try where the settings or the record are still outstanding.
@@ -118,6 +130,8 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
    * is writes landing.
    */
   const tryAgainIfNeeded = () => {
+    if (gone) return;
+
     if (read && recorded) {
       tries = 0;
       return;
@@ -309,6 +323,7 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   await queue(settingsNow).catch(() => {});
 
   return () => {
+    gone = true;
     stop();
     forgetting();
     doc.removeEventListener('visibilitychange', rewrite);

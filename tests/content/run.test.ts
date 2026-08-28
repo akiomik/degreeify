@@ -267,6 +267,33 @@ describe('a page whose settings cannot be read', () => {
     }
   });
 
+  // Stopping clears the timer that is waiting, and a try already in flight
+  // has no timer to clear — the run it queued would arm the next one after
+  // the caller asked for all of this to stop. Nothing calls the stopping in a
+  // content script; a test that calls it and is then written to by the test
+  // before it is what the stopping is for.
+  it('arms no more tries once it has been stopped', async () => {
+    // Slow and then failing, so that stopping can land while a try is in
+    // flight rather than while one is waiting.
+    const real = browser.storage.local.get.bind(browser.storage.local);
+    const get = vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+      if (query !== 'settings') return real(query);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      throw new Error('context invalidated');
+    }) as never);
+
+    const stop = await run(load('chordwiki-basic'), chordwiki, new URL(ADDRESS));
+
+    // The try armed at 200ms is still reading at 250ms.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    stop();
+
+    const asked = get.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    expect(get.mock.calls).toHaveLength(asked);
+  });
+
   // And gives up, rather than asking a storage that is not coming back for as
   // long as the tab is open.
   it('stops reading the settings again once the tries have run out', async () => {
