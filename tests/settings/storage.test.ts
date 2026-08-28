@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { browser } from 'wxt/browser';
 import { fakeBrowser } from 'wxt/testing/fake-browser';
+import type { Key } from '@/core/key';
+import { parseNote } from '@/core/pitch';
+import { withOverride, withoutOverride } from '@/settings/overrides';
 import {
   DEFAULT_SETTINGS,
   type Detection,
@@ -20,6 +23,8 @@ import {
   watchSettings,
   writeDetection,
 } from '@/settings/storage';
+
+const KEY_OF_C: Key = { tonic: parseNote('C') ?? { letter: 'C', accidental: 0 }, mode: 'major' };
 
 /** Writes settings the way the popup does, leaving the stamps alone. */
 const saveOnly = (settings: Settings) => saveKept(settings, {}, {});
@@ -406,6 +411,24 @@ describe('following a change to the settings', () => {
 
     expect(seen).not.toHaveBeenCalled();
   });
+});
+
+// The browser throws where the extension has been reloaded out from under
+// this, rather than handing back a promise that rejects — so a handler on the
+// promise never runs, and a write that landed is answered with "that could
+// not be saved".
+it('keeps settings that were written where clearing the old stamps throws', async () => {
+  const page = 'chordwiki:chart:Test Song';
+  const kept = withOverride({ settings: DEFAULT_SETTINGS, stamps: {} }, page, KEY_OF_C, 0, 1);
+  await saveKept(kept.settings, kept.stamps, {});
+
+  vi.spyOn(browser.storage.local, 'remove').mockImplementation(() => {
+    throw new Error('Extension context invalidated');
+  });
+
+  const cleared = withoutOverride(kept, page);
+  await expect(saveKept(cleared.settings, cleared.stamps, kept.stamps)).resolves.toBeUndefined();
+  expect((await loadSettings()).keyOverrides).toEqual({});
 });
 
 describe('what was found on a page', () => {

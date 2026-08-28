@@ -276,7 +276,18 @@ export async function saveKept(
   // — so an orphan left here stays until the reader next sets or clears a key
   // on some chart. That is the price of not walking every key on every write,
   // and it is a few bytes.
-  if (gone.length > 0) await browser.storage.local.remove(gone).catch(() => {});
+  if (gone.length > 0) {
+    // Caught rather than attached to. A `.catch` is a handler on a promise,
+    // and the browser throws where the extension has been reloaded out from
+    // under this — which is what a caller of this is most likely to be living
+    // through. Attached to, the throw would go past it and be answered with
+    // "that could not be saved" over settings that were.
+    try {
+      await browser.storage.local.remove(gone);
+    } catch {
+      // Said above: what is left behind is a few bytes nothing reads.
+    }
+  }
 }
 
 /**
