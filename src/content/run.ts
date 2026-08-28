@@ -7,6 +7,8 @@ import {
   type Detection,
   loadSettings,
   loadStamp,
+  MOST_DETECTIONS,
+  pruneDetections,
   recordKey,
   SCHEMA_VERSION,
   type Settings,
@@ -71,6 +73,9 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   /** Counts the writings, so that one can tell whether it is still the last. */
   let writing = 0;
 
+  /** Whether the records have been tidied since this page was opened. */
+  let tidied = false;
+
   /** The settings the page was last shown for, for a run that is not about them. */
   let current = DEFAULT_SETTINGS;
 
@@ -107,6 +112,9 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
       }
 
       if (!recorded && painted) {
+        const first = !tidied;
+        tidied = true;
+
         // Marked against this run rather than as a flag. The writing takes a
         // turn of the loop, and the record can be thrown away inside it — the
         // watcher below would set this back to false and queue a run, and a
@@ -114,7 +122,7 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
         // asked for. The record would stay gone, which is the failure that
         // watcher exists to prevent.
         const mine = ++writing;
-        await remember(pageId, stored, painted);
+        await remember(pageId, stored, painted, first);
 
         if (writing === mine) recorded = true;
       }
@@ -253,6 +261,7 @@ async function remember(
   pageId: string,
   stored: string | null,
   { report, offset }: ReturnType<typeof paint>,
+  tidy: boolean,
 ): Promise<void> {
   // Whether or not the names are being shown, and only where the key was the
   // one the chart was read in.
@@ -272,12 +281,42 @@ async function remember(
   // chord chart they are looking at.
   if (report.source === 'manual') await touchOverride(pageId).catch(() => {});
 
-  // And what was found, last, because it is the one of the two that can
-  // fail on a page that is otherwise fine — a full quota, an extension
-  // reloaded out from under it. Written first, a failure would carry off the
-  // stamp with it, and a key used every day on a page whose records will not
-  // write would age towards being dropped while keys nobody touches do not.
-  if (stored) await writeDetection(stored, record(pageId, report, offset));
+  if (!stored) return;
+
+  // And what was found, last, because it is the one of the two that can fail
+  // on a page that is otherwise fine — a full quota, an extension reloaded
+  // out from under it. Written first, a failure would carry off the stamp
+  // with it, and a key used every day on a page whose records will not write
+  // would age towards being dropped while keys nobody touches do not.
+  const found = record(pageId, report, offset);
+
+  // Tidied here as well as in the popup, once for each page a reader opens.
+  // Tidying only where somebody asked for something leaves a reader who never
+  // opens the popup keeping a record of every chart they have ever read, and
+  // a store that fills is one where the next record does not write — after
+  // which the popup, on a chart, tells them to open a chord chart. Once per
+  // page rather than per reading, so that changing a setting does not walk
+  // the whole of storage on every open tab.
+  //
+  // After the writing, so that what was just written is counted and the store
+  // settles at the number it is held to rather than one above it.
+  const tidying = () => pruneDetections(MOST_DETECTIONS, stored).catch(() => {});
+
+  try {
+    await writeDetection(stored, found);
+  } catch (error) {
+    if (!tidy) throw error;
+
+    // A store with no room left is the likeliest reason, and this page has
+    // not tidied yet. Tidied and tried once more rather than left to a later
+    // reading: the reader is sitting on this page, so neither a settings
+    // change nor its coming back into view is going to happen on its own.
+    await tidying();
+    await writeDetection(stored, found);
+    return;
+  }
+
+  if (tidy) await tidying();
 }
 
 /**

@@ -29,6 +29,7 @@ import {
   loadStamps,
   pruneDetections,
   readDetection,
+  readSettings,
   recordKey,
   type Settings,
   saveKept,
@@ -94,12 +95,14 @@ function App() {
     // reloaded out from under an open popup — would leave a heading and
     // nothing else, which is the state `addressInFront` is wrapped against
     // three lines down.
-    setSettings(
-      await loadSettings().catch(() => {
-        setUnread(true);
-        return DEFAULT_SETTINGS;
-      }),
-    );
+    const stored = await readSettings().catch(() => null);
+    setSettings(stored?.settings ?? DEFAULT_SETTINGS);
+
+    // Not read, whether the read failed or what came back was not settings.
+    // Both leave the controls showing this build's defaults rather than the
+    // reader's answers, and a control showing something nobody chose is worse
+    // for being indistinguishable from one showing an answer.
+    setUnread(!stored?.understood);
     setReadable(await storedSettingsAreReadable().catch(() => true));
 
     const key = await addressInFront();

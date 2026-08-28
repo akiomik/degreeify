@@ -12,11 +12,14 @@ import {
   DEFAULT_SETTINGS,
   loadSettings,
   loadStamp,
+  MOST_DETECTIONS,
   readDetection,
   recordKey,
+  SCHEMA_VERSION,
   type Settings,
   saveKept,
   saveStamp,
+  writeDetection,
 } from '@/settings/storage';
 
 /** Writes settings the way the popup does, leaving the stamps alone. */
@@ -362,6 +365,71 @@ describe('a reading whose record could not be written', () => {
 
     expect(await readDetection(RECORD)).toMatchObject({ named: 6 });
     expect(shown(doc)[1]).toBe('Ⅵm7');
+    stop();
+  });
+});
+
+describe('records of pages the reader has left', () => {
+  // Tidying only where somebody asked for something leaves a reader who never
+  // opens the popup keeping a record of every chart they have ever read — and
+  // a store that fills is one where the next record does not write, after
+  // which the popup, on a chart, tells them to open a chord chart.
+  it('are tidied by a page that opens, not only by the popup', async () => {
+    for (let index = 0; index < MOST_DETECTIONS + 5; index++) {
+      await writeDetection(`detected:page-${index}`, {
+        version: SCHEMA_VERSION,
+        pageId: `chordwiki:chart:${index}`,
+        key: null,
+        source: null,
+        statedKeys: 0,
+        unreadKeys: 0,
+        transposeOffset: 0,
+        named: 0,
+        updatedAt: index,
+      });
+    }
+
+    (await start(load('chordwiki-basic')))();
+
+    const all = await browser.storage.local.get(null);
+    const records = Object.keys(all).filter((key) => key.startsWith('detected:'));
+    expect(records).toHaveLength(MOST_DETECTIONS);
+
+    // Including this page's own, which is what it was asked to keep.
+    expect(await readDetection(RECORD)).not.toBeNull();
+  });
+
+  // The reader is sitting on the page, so neither a settings change nor its
+  // coming back into view is going to happen on its own — a record that
+  // failed to write for want of room has to be tried again here or not at
+  // all.
+  it('are tidied and the record written again where the store had no room', async () => {
+    const real = browser.storage.local.set.bind(browser.storage.local);
+    let full = true;
+    vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+      if (full && Object.keys(items).some((name) => name.startsWith('detected:'))) {
+        full = false;
+        throw new Error('quota exceeded');
+      }
+      return real(items);
+    }) as never);
+
+    (await start(load('chordwiki-basic')))();
+
+    expect(await readDetection(RECORD)).toMatchObject({ named: 6 });
+  });
+
+  // Once for each page a reader opens, and not for each time it is read:
+  // changing a setting must not walk the whole of storage on every open tab.
+  it('are not tidied again every time the page is read', async () => {
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+
+    const everything = vi.spyOn(browser.storage.local, 'get');
+    await saveOnly({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(everything.mock.calls.filter(([query]) => query === null)).toHaveLength(0);
     stop();
   });
 });

@@ -239,8 +239,28 @@ export async function storedSettingsAreReadable(): Promise<boolean> {
   return !isFromLater((await browser.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY]);
 }
 
+/** The settings, and whether what they were read from was settings at all. */
+export interface StoredSettings {
+  readonly settings: Settings;
+  /**
+   * False where something is stored and it is not settings this build knows.
+   *
+   * A caller showing the settings has to be able to say so. What it is
+   * showing then is this build's defaults, and a control showing something
+   * nobody chose is worse for being indistinguishable from one showing an
+   * answer.
+   */
+  readonly understood: boolean;
+}
+
+export async function readSettings(): Promise<StoredSettings> {
+  const stored = (await browser.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY];
+
+  return { settings: settingsIn(stored), understood: stored === undefined || isSettings(stored) };
+}
+
 export async function loadSettings(): Promise<Settings> {
-  return settingsIn((await browser.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY]);
+  return (await readSettings()).settings;
 }
 
 /**
@@ -262,13 +282,18 @@ export async function loadSettings(): Promise<Settings> {
  * hands that page the value its own read would have turned away.
  */
 function settingsIn(stored: unknown): Settings {
-  // Nothing done to any page where the settings came from a later build.
-  // What this build would use instead is its own defaults, which say to
-  // rewrite every chart — and a reader who had turned that off, on a build
-  // that knew how to say so, would find it back on with no way to stop it.
-  if (isFromLater(stored)) return { ...DEFAULT_SETTINGS, enabled: false };
+  // Nothing at all where nothing is stored, which is a reader who has never
+  // set anything and should have the extension working.
+  if (stored === undefined) return DEFAULT_SETTINGS;
 
-  if (!isSettings(stored)) return DEFAULT_SETTINGS;
+  // Nothing done to any page where something is stored and it is not settings
+  // this build knows — whether it came from a later build or from a shape
+  // nothing here can account for. What this build would use instead is its
+  // own defaults, which say to rewrite every chart, and a reader who had
+  // turned that off would find it back on. Read as though nothing were
+  // stored, the two would differ only in which of them the reader can be told
+  // about.
+  if (!isSettings(stored)) return { ...DEFAULT_SETTINGS, enabled: false };
 
   return {
     ...DEFAULT_SETTINGS,

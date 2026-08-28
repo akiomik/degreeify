@@ -321,6 +321,19 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // The same is said where the read worked and what came back was not
+  // settings. Both leave the controls showing this build's defaults rather
+  // than the reader's answers.
+  it('says the controls are showing defaults when the settings were not settings', async () => {
+    await browser.storage.local.set({ settings: { version: SCHEMA_VERSION, keyOverrides: 7 } });
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('could not be read');
+    dispose();
+  });
+
   it('says so when a change could not be saved', async () => {
     await onATab(ADDRESS, detection());
     const { root, dispose } = await open();

@@ -11,6 +11,7 @@ import {
   pruneDetections,
   prunedOverrides,
   readDetection,
+  readSettings,
   recordKey,
   SCHEMA_VERSION,
   type Settings,
@@ -94,10 +95,13 @@ describe('reading settings from a version this does not know', () => {
   // told, untruthfully, that their settings came from something newer.
   it('reads an earlier version as the defaults, and lets them be written over', async () => {
     await browser.storage.local.set({
-      settings: { version: SCHEMA_VERSION - 1, enabled: false },
+      settings: { version: SCHEMA_VERSION - 1, enabled: true },
     });
 
-    expect(await loadSettings()).toEqual(DEFAULT_SETTINGS);
+    // Nothing is done to any page — the defaults say to rewrite every chart,
+    // and these are not the reader's answers — but they may be written over,
+    // which is how a reader gets out of it.
+    expect(await loadSettings()).toEqual({ ...DEFAULT_SETTINGS, enabled: false });
     await expect(saveKept(DEFAULT_SETTINGS, {}, {})).resolves.toBeUndefined();
   });
 
@@ -125,12 +129,20 @@ describe('reading settings that are not settings', () => {
     expect((await loadSettings()).keyOverrides).toEqual({});
   });
 
+  // And nothing done to any page, for the reason a later version's settings
+  // leave every page alone: what would be used instead is this build's own
+  // defaults, which say to rewrite every chart.
   it.each([null, 'nothing', 7])('gives the defaults where the keys are %j', async (overrides) => {
     await browser.storage.local.set({
       settings: { ...DEFAULT_SETTINGS, keyOverrides: overrides },
     });
 
-    expect(await loadSettings()).toEqual(DEFAULT_SETTINGS);
+    expect(await loadSettings()).toEqual({ ...DEFAULT_SETTINGS, enabled: false });
+    expect((await readSettings()).understood).toBe(false);
+  });
+
+  it('is understood where nothing is stored at all', async () => {
+    expect(await readSettings()).toEqual({ settings: DEFAULT_SETTINGS, understood: true });
   });
 });
 
