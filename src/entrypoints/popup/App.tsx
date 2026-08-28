@@ -32,6 +32,7 @@ import {
   recordKey,
   type Settings,
   saveKept,
+  storedSettingsAreReadable,
   watchDetection,
 } from '@/settings/storage';
 import styles from './App.module.css';
@@ -48,6 +49,15 @@ function App() {
   const [pendingMode, setPendingMode] = createSignal<Mode>('major');
 
   const [failed, setFailed] = createSignal(false);
+
+  /**
+   * Whether what is stored is settings this build can write over.
+   *
+   * A reader who has been on a later build and come back to this one has
+   * settings this one reads as the defaults. Offering the controls would be
+   * offering to write those defaults over everything they had.
+   */
+  const [readable, setReadable] = createSignal(true);
 
   // What is stored is what was chosen, once it has arrived. A key loaded from
   // storage brings its mode with it, and the control has to show that mode
@@ -75,6 +85,7 @@ function App() {
     // nothing else, which is the state `addressInFront` is wrapped against
     // three lines down.
     setSettings(await loadSettings().catch(() => DEFAULT_SETTINGS));
+    setReadable(await storedSettingsAreReadable().catch(() => true));
 
     const key = await addressInFront();
     if (key) {
@@ -227,181 +238,190 @@ function App() {
     <main class={styles.popup}>
       <h1 class={styles.title}>Degreeify</h1>
 
-      <Show when={settings()}>
-        {(current) => (
-          <>
-            <Show when={failed()}>
-              <p class={styles.warning}>That could not be saved. Nothing has changed.</p>
-            </Show>
+      <Show
+        when={readable()}
+        fallback={
+          <p class={styles.warning}>
+            These settings were written by a newer version of Degreeify. Update it to change them.
+          </p>
+        }
+      >
+        <Show when={settings()}>
+          {(current) => (
+            <>
+              <Show when={failed()}>
+                <p class={styles.warning}>That could not be saved. Nothing has changed.</p>
+              </Show>
 
-            {/*
-             * Outside what is known about the page, because it is not about
-             * the page. A reader who switched the names off, or who is on a
-             * chart whose content script has not written its record yet, has
-             * to be able to switch them back on — and this is the control
-             * they came for.
-             */}
-            <label class={styles.row}>
-              <input
-                type="checkbox"
-                checked={current().enabled}
-                onChange={(event) => {
-                  const enabled = event.currentTarget.checked;
-                  void update(({ settings, stamps }) => ({
-                    settings: { ...settings, enabled },
-                    stamps,
-                  }));
-                }}
-              />
-              <span>Show degree names</span>
-            </label>
+              {/*
+               * Outside what is known about the page, because it is not about
+               * the page. A reader who switched the names off, or who is on a
+               * chart whose content script has not written its record yet, has
+               * to be able to switch them back on — and this is the control
+               * they came for.
+               */}
+              <label class={styles.row}>
+                <input
+                  type="checkbox"
+                  checked={current().enabled}
+                  onChange={(event) => {
+                    const enabled = event.currentTarget.checked;
+                    void update(({ settings, stamps }) => ({
+                      settings: { ...settings, enabled },
+                      stamps,
+                    }));
+                  }}
+                />
+                <span>Show degree names</span>
+              </label>
 
-            <Show
-              when={detection()}
-              fallback={<p class={styles.note}>Open a ChordWiki chord chart to use Degreeify.</p>}
-            >
-              {(found) => (
-                <>
-                  <p class={styles.reading}>{reading(found(), current().enabled)}</p>
-
-                  {/*
-                   * Only where the chart's own declarations are what was
-                   * followed. A key from outside — set by hand, or guessed
-                   * from the chords — stands in for the line that could not
-                   * be read, and the chart is named end to end; saying a
-                   * section was left alone would be false, and would sit
-                   * directly under a count of the chords that were named.
-                   */}
-                  <Show when={found().unreadKeys > 0 && found().source === 'page'}>
-                    <p class={styles.warning}>
-                      {found().unreadKeys} of {found().statedKeys} key declarations could not be
-                      read. Those sections are left as the chart wrote them.
-                    </p>
-                  </Show>
-
-                  <Show
-                    when={canOverride()}
-                    fallback={
-                      <>
-                        <p class={styles.note}>{whyNotOverridable(found())}</p>
-
-                        {/*
-                         * A key already set is still set, and this is the
-                         * only thing that can remove it. A chart edited to
-                         * declare a second key, or a page that stops saying
-                         * how far it has been transposed, would otherwise
-                         * leave a reader with a key they cannot reach —
-                         * inert, but taking a place among the ones kept.
-                         *
-                         * Asked of the key that is kept rather than of the
-                         * key in force. No key is in force on a page that
-                         * does not say how far it has been transposed, which
-                         * is one of the two cases this is here for — asked
-                         * the other way, the escape hatch is missing from
-                         * half of what it is an escape from.
-                         */}
-                        <Show when={keptFor(current(), found().pageId)}>
-                          <button type="button" onClick={() => void clearOverride()}>
-                            Forget the key set for this chart
-                          </button>
-                        </Show>
-                      </>
-                    }
-                  >
-                    <div class={styles.row}>
-                      <label class={styles.field}>
-                        <span>Key</span>
-                        <select
-                          value={chosenTonic()}
-                          onChange={(event) => {
-                            const tonic = event.currentTarget.value;
-                            if (tonic) void setOverride(tonic, mode());
-                            else void clearOverride();
-                          }}
-                        >
-                          <option value="">Read from the chart</option>
-                          <For each={CANONICAL_TONIC[mode()]}>
-                            {(tonic) => <option value={tonic}>{tonic}</option>}
-                          </For>
-                        </select>
-                      </label>
-
-                      <label class={styles.field}>
-                        <span>Mode</span>
-                        <select
-                          value={mode()}
-                          onChange={(event) => {
-                            const chosen = event.currentTarget.value as Mode;
-                            setPendingMode(chosen);
-
-                            // Where a key is already set, changing the mode
-                            // changes it. Where none is, this is a choice
-                            // about which tonics to offer and nothing has
-                            // been asked for yet.
-                            const current = override();
-                            if (current) void setOverride(formatNoteOf(current), chosen);
-                          }}
-                        >
-                          <option value="major">major</option>
-                          <option value="minor">minor</option>
-                        </select>
-                      </label>
-                    </div>
+              <Show
+                when={detection()}
+                fallback={<p class={styles.note}>Open a ChordWiki chord chart to use Degreeify.</p>}
+              >
+                {(found) => (
+                  <>
+                    <p class={styles.reading}>{reading(found(), current().enabled)}</p>
 
                     {/*
-                     * Offered whenever a key is kept, and not only when one
-                     * is in force. A key stored in some shape this cannot
-                     * read is a key that does nothing and cannot be removed
-                     * — which is the only kind a reader would most want to
-                     * be rid of.
+                     * Only where the chart's own declarations are what was
+                     * followed. A key from outside — set by hand, or guessed
+                     * from the chords — stands in for the line that could not
+                     * be read, and the chart is named end to end; saying a
+                     * section was left alone would be false, and would sit
+                     * directly under a count of the chords that were named.
                      */}
-                    <button
-                      type="button"
-                      disabled={!keptFor(current(), found().pageId)}
-                      onClick={() => void clearOverride()}
+                    <Show when={found().unreadKeys > 0 && found().source === 'page'}>
+                      <p class={styles.warning}>
+                        {found().unreadKeys} of {found().statedKeys} key declarations could not be
+                        read. Those sections are left as the chart wrote them.
+                      </p>
+                    </Show>
+
+                    <Show
+                      when={canOverride()}
+                      fallback={
+                        <>
+                          <p class={styles.note}>{whyNotOverridable(found())}</p>
+
+                          {/*
+                           * A key already set is still set, and this is the
+                           * only thing that can remove it. A chart edited to
+                           * declare a second key, or a page that stops saying
+                           * how far it has been transposed, would otherwise
+                           * leave a reader with a key they cannot reach —
+                           * inert, but taking a place among the ones kept.
+                           *
+                           * Asked of the key that is kept rather than of the
+                           * key in force. No key is in force on a page that
+                           * does not say how far it has been transposed, which
+                           * is one of the two cases this is here for — asked
+                           * the other way, the escape hatch is missing from
+                           * half of what it is an escape from.
+                           */}
+                          <Show when={keptFor(current(), found().pageId)}>
+                            <button type="button" onClick={() => void clearOverride()}>
+                              Forget the key set for this chart
+                            </button>
+                          </Show>
+                        </>
+                      }
                     >
-                      Use the chart's own key
-                    </button>
-                  </Show>
-                </>
-              )}
-            </Show>
+                      <div class={styles.row}>
+                        <label class={styles.field}>
+                          <span>Key</span>
+                          <select
+                            value={chosenTonic()}
+                            onChange={(event) => {
+                              const tonic = event.currentTarget.value;
+                              if (tonic) void setOverride(tonic, mode());
+                              else void clearOverride();
+                            }}
+                          >
+                            <option value="">Read from the chart</option>
+                            <For each={CANONICAL_TONIC[mode()]}>
+                              {(tonic) => <option value={tonic}>{tonic}</option>}
+                            </For>
+                          </select>
+                        </label>
 
-            <label class={styles.field}>
-              <span>Numerals</span>
-              <select
-                value={current().notation}
-                onChange={(event) => {
-                  const notation = event.currentTarget.value as Notation;
-                  void update(({ settings, stamps }) => ({
-                    settings: { ...settings, notation },
-                    stamps,
-                  }));
-                }}
-              >
-                <option value="roman-ascii">I II III (fixed width)</option>
-                <option value="roman-unicode">Ⅰ Ⅱ Ⅲ (one character)</option>
-              </select>
-            </label>
+                        <label class={styles.field}>
+                          <span>Mode</span>
+                          <select
+                            value={mode()}
+                            onChange={(event) => {
+                              const chosen = event.currentTarget.value as Mode;
+                              setPendingMode(chosen);
 
-            <label class={styles.field}>
-              <span>Spelling</span>
-              <select
-                value={current().spelling}
-                onChange={(event) => {
-                  const spelling = event.currentTarget.value as SpellingPolicy;
-                  void update(({ settings, stamps }) => ({
-                    settings: { ...settings, spelling },
-                    stamps,
-                  }));
-                }}
-              >
-                <option value="canonical">Consistent</option>
-                <option value="source">As the chart spells it</option>
-              </select>
-            </label>
-          </>
-        )}
+                              // Where a key is already set, changing the mode
+                              // changes it. Where none is, this is a choice
+                              // about which tonics to offer and nothing has
+                              // been asked for yet.
+                              const current = override();
+                              if (current) void setOverride(formatNoteOf(current), chosen);
+                            }}
+                          >
+                            <option value="major">major</option>
+                            <option value="minor">minor</option>
+                          </select>
+                        </label>
+                      </div>
+
+                      {/*
+                       * Offered whenever a key is kept, and not only when one
+                       * is in force. A key stored in some shape this cannot
+                       * read is a key that does nothing and cannot be removed
+                       * — which is the only kind a reader would most want to
+                       * be rid of.
+                       */}
+                      <button
+                        type="button"
+                        disabled={!keptFor(current(), found().pageId)}
+                        onClick={() => void clearOverride()}
+                      >
+                        Use the chart's own key
+                      </button>
+                    </Show>
+                  </>
+                )}
+              </Show>
+
+              <label class={styles.field}>
+                <span>Numerals</span>
+                <select
+                  value={current().notation}
+                  onChange={(event) => {
+                    const notation = event.currentTarget.value as Notation;
+                    void update(({ settings, stamps }) => ({
+                      settings: { ...settings, notation },
+                      stamps,
+                    }));
+                  }}
+                >
+                  <option value="roman-ascii">I II III (fixed width)</option>
+                  <option value="roman-unicode">Ⅰ Ⅱ Ⅲ (one character)</option>
+                </select>
+              </label>
+
+              <label class={styles.field}>
+                <span>Spelling</span>
+                <select
+                  value={current().spelling}
+                  onChange={(event) => {
+                    const spelling = event.currentTarget.value as SpellingPolicy;
+                    void update(({ settings, stamps }) => ({
+                      settings: { ...settings, spelling },
+                      stamps,
+                    }));
+                  }}
+                >
+                  <option value="canonical">Consistent</option>
+                  <option value="source">As the chart spells it</option>
+                </select>
+              </label>
+            </>
+          )}
+        </Show>
       </Show>
     </main>
   );

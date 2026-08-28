@@ -287,6 +287,26 @@ describe('reading a setting this build has no name for', () => {
   });
 });
 
+describe('writing over settings this build cannot read', () => {
+  // A read that falls back is not a write that may. The defaults this build
+  // read would go over settings it could not read, and every key the reader
+  // had set with them.
+  it('is refused', async () => {
+    await browser.storage.local.set({
+      settings: { ...DEFAULT_SETTINGS, version: SCHEMA_VERSION + 1, enabled: false },
+    });
+
+    await expect(saveKept(DEFAULT_SETTINGS, {}, {})).rejects.toThrow();
+    expect(
+      ((await browser.storage.local.get('settings')).settings as { version: number }).version,
+    ).toBe(SCHEMA_VERSION + 1);
+  });
+
+  it('is allowed where nothing is stored at all', async () => {
+    await expect(saveKept(DEFAULT_SETTINGS, {}, {})).resolves.toBeUndefined();
+  });
+});
+
 describe('following a change to the settings', () => {
   it('hands the new settings to whoever is watching', async () => {
     const seen = vi.fn();
@@ -358,6 +378,23 @@ describe('what was found on a page', () => {
   // matters and the oldest by the only one there is: a record is written
   // once, so a chart left open while the reader browses has a stamp that
   // stops moving.
+  // Records are ordered by when they were written to decide which are
+  // dropped, and a comparison against something that is not a number is not a
+  // number — a sort given one of those leaves the list in no particular
+  // order, and what is dropped is whatever the ordering happened to leave
+  // last, the record the popup is about to show among it.
+  it('passes over a record whose time cannot be read', async () => {
+    await browser.storage.local.set({
+      'detected:broken': { ...detection(1), updatedAt: 'yesterday' },
+    });
+    await writeDetection('detected:kept', detection(2));
+
+    await pruneDetections(1);
+
+    expect(await readDetection('detected:kept')).not.toBeNull();
+    expect((await browser.storage.local.get('detected:broken'))['detected:broken']).toBeUndefined();
+  });
+
   it('keeps the one it is asked to keep, and counts it', async () => {
     await writeDetection('detected:open', detection(1));
     await writeDetection('detected:newer', detection(2));

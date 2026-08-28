@@ -179,6 +179,11 @@ export async function saveKept(
   stamps: KeyStamps,
   before: KeyStamps,
 ): Promise<void> {
+  // Nothing at all where what is stored is not this build's. Writing would
+  // put the defaults this build read over settings it could not read, and
+  // every key the reader had set with them.
+  if (!(await storedSettingsAreReadable())) throw new Error('the stored settings are not readable');
+
   // Only the stamps that changed. Written whole, this would put back every
   // stamp as it stood when the popup read them — undoing a page that stamped
   // a key in the meantime, which is the clobber the split into one key per
@@ -204,6 +209,22 @@ export async function saveKept(
   // the page is already following them, and what is left behind is a record
   // nothing reads that the next write clears.
   if (gone.length > 0) await browser.storage.local.remove(gone).catch(() => {});
+}
+
+/**
+ * Whether what is stored is settings this build can write over.
+ *
+ * Asked before writing, because a read that falls back is not a write that
+ * may. A reader who has been on a later build and comes back to this one has
+ * settings this build reads as the defaults — and a first click would write
+ * those defaults over everything they had, every key they had set among it,
+ * and report that it worked.
+ *
+ * True where nothing is stored, which is a reader who has never set anything.
+ */
+export async function storedSettingsAreReadable(): Promise<boolean> {
+  const stored = (await browser.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY];
+  return stored === undefined || isSettings(stored);
 }
 
 export async function loadSettings(): Promise<Settings> {
@@ -373,13 +394,6 @@ export const MOST_DETECTIONS = 50;
 export const MOST_OVERRIDES = 200;
 
 /**
- * The overrides, with the least recently used dropped where there are too
- * many.
- *
- * A number rather than none, because a record kept for every chart anyone
- * ever opened grows without ever being read again.
- */
-/**
  * When a chart's key was last used, and nought where it never was.
  *
  * Asked of the object itself. A bare lookup finds a `constructor` on
@@ -392,6 +406,13 @@ function usedAt(stamps: KeyStamps, pageId: string): number {
   return Object.hasOwn(stamps, pageId) ? (stamps[pageId] ?? 0) : 0;
 }
 
+/**
+ * The overrides, with the least recently used dropped where there are too
+ * many.
+ *
+ * A number rather than none, because a record kept for every chart anyone
+ * ever opened grows without ever being read again.
+ */
 export function prunedOverrides(
   overrides: Readonly<Record<string, KeyOverride>>,
   stamps: KeyStamps,
@@ -424,7 +445,17 @@ function isSettings(value: unknown): value is Settings {
 }
 
 function isDetection(value: unknown): value is Detection {
-  return isRecord(value) && value.version === SCHEMA_VERSION && typeof value.pageId === 'string';
+  return (
+    isRecord(value) &&
+    value.version === SCHEMA_VERSION &&
+    typeof value.pageId === 'string' &&
+    // Read before it is compared. Records are ordered by this to decide which
+    // are dropped, and a comparison against something that is not a number is
+    // not a number — a sort given one of those leaves the list in no
+    // particular order, and what is dropped is whatever the ordering happened
+    // to leave last, the record the popup is about to show among it.
+    typeof value.updatedAt === 'number'
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

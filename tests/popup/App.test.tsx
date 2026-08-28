@@ -133,6 +133,26 @@ describe('the popup where it cannot work out which tab it is on', () => {
   });
 });
 
+describe('the popup over settings this build cannot read', () => {
+  // A reader who has been on a later build and come back to this one has
+  // settings this one reads as the defaults. Offering the controls would be
+  // offering to write those defaults over everything they had, every key they
+  // had set among it — and to report that it worked.
+  it('says so instead of offering to change them', async () => {
+    await browser.storage.local.set({
+      settings: { ...DEFAULT_SETTINGS, version: SCHEMA_VERSION + 1 },
+    });
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('written by a newer version');
+    expect(root.querySelectorAll('select')).toHaveLength(0);
+    expect(root.querySelector('input[type="checkbox"]')).toBeNull();
+    dispose();
+  });
+});
+
 describe('the popup on a chart', () => {
   it('says what the chart was read as', async () => {
     await onATab(ADDRESS, detection());
