@@ -100,10 +100,17 @@ export function withoutOverride({ settings, stamps }: Kept, pageId: string): Kep
  * read: overrides are capped and stamps were not, so a reader who set and
  * cleared keys across enough charts would carry every chart they had ever
  * touched, read in full on every write.
+ *
+ * A key with no stamp is left without one rather than given a nought. The
+ * write that follows this sends every stamp that differs from what was read,
+ * and a nought differs from nothing at all — so a page that stamped a chart
+ * for the first time while a reader was changing something else would have
+ * that stamp written back to nought, which is the clobber one key to a chart
+ * is here to rule out.
  */
 function kept(settings: Settings, overrides: Record<string, KeyOverride>, stamps: KeyStamps): Kept {
   const surviving = prunedOverrides(overrides, stamps, MOST_OVERRIDES);
-  const theirs = Object.keys(surviving).map((pageId) => [pageId, stamps[pageId] ?? 0] as const);
+  const theirs = Object.entries(stamps).filter(([pageId]) => pageId in surviving);
 
   return {
     settings: { ...settings, keyOverrides: surviving },

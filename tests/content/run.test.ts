@@ -299,6 +299,49 @@ describe('a key kept for a chart that has since been given two', () => {
   });
 });
 
+describe('a reading whose record could not be written', () => {
+  // The popup reads what was written down, and what is on the page and what
+  // was written down are two questions. Tied to the repaint, a record that
+  // failed to write goes on describing the chart as it was before the
+  // reader's last change until something makes the page repaint — which a
+  // change about another chart, rightly, does not.
+  it('is written again at the next change, whatever the change was about', async () => {
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+    await browser.storage.local.remove(RECORD);
+
+    const real = browser.storage.local.set.bind(browser.storage.local);
+    const failing = vi.spyOn(browser.storage.local, 'set').mockImplementation((async (
+      items: never,
+    ) => {
+      if (Object.keys(items).some((name) => name.startsWith('detected:'))) {
+        throw new Error('quota exceeded');
+      }
+      return real(items);
+    }) as never);
+
+    await saveSettings({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(await readDetection(RECORD)).toBeNull();
+    failing.mockRestore();
+
+    // A key set for another chart, which this page is right not to repaint
+    // for — and which must still let it write down what it is showing.
+    const elsewhere: Kept = {
+      settings: { ...DEFAULT_SETTINGS, notation: 'roman-unicode' },
+      stamps: {},
+    };
+    await saveSettings(
+      withOverride(elsewhere, 'chordwiki:chart:Another Song', key('G'), 0, 1).settings,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(await readDetection(RECORD)).toMatchObject({ named: 6 });
+    expect(shown(doc)[1]).toBe('Ⅵm7');
+    stop();
+  });
+});
+
 describe('a settings change about somewhere else', () => {
   const OTHER = 'chordwiki:chart:Another Song';
 

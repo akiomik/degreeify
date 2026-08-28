@@ -1,7 +1,7 @@
 import { browser } from 'wxt/browser';
-import type { SpellingPolicy } from '@/core/degree';
+import { SPELLING_POLICIES, type SpellingPolicy } from '@/core/degree';
 import type { KeySource, Mode } from '@/core/key';
-import type { Notation } from '@/core/notation';
+import { NOTATIONS, type Notation } from '@/core/notation';
 
 /**
  * The settings, and the two things this extension keeps in storage.
@@ -199,8 +199,29 @@ export async function saveKept(
 
 export async function loadSettings(): Promise<Settings> {
   const stored = (await browser.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY];
+  if (!isSettings(stored)) return DEFAULT_SETTINGS;
 
-  return isSettings(stored) ? { ...DEFAULT_SETTINGS, ...stored } : DEFAULT_SETTINGS;
+  // Field by field, taking what is stored only where it is one of the things
+  // that field can be. A notation is used to choose a table of numerals, so
+  // one this build has never heard of is not a setting it disagrees with —
+  // it is an index into nothing, and the throw comes out of naming the chart.
+  //
+  // The likeliest way to get one is not corruption. Adding a third notation
+  // is not a change of shape, so the version would not obviously move, and an
+  // older build or a second profile would then read a value it cannot use.
+  // Falling back a field at a time keeps the rest of a reader's settings.
+  return {
+    ...DEFAULT_SETTINGS,
+    ...stored,
+    enabled: typeof stored.enabled === 'boolean' ? stored.enabled : DEFAULT_SETTINGS.enabled,
+    notation: oneOf(NOTATIONS, stored.notation) ?? DEFAULT_SETTINGS.notation,
+    spelling: oneOf(SPELLING_POLICIES, stored.spelling) ?? DEFAULT_SETTINGS.spelling,
+  };
+}
+
+/** `value` where it is one of `allowed`, and nothing where it is not. */
+function oneOf<T extends string>(allowed: readonly T[], value: unknown): T | undefined {
+  return allowed.find((one) => one === value);
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {

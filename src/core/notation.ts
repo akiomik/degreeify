@@ -30,7 +30,9 @@ import type { Degree, DegreeChord, Numeral } from './degree';
  * depend on it. If it turns out to be the wrong trade, the thing to try next
  * is ASCII numerals with the symbol accidentals.
  */
-export type Notation = 'roman-ascii' | 'roman-unicode';
+export const NOTATIONS = ['roman-ascii', 'roman-unicode'] as const;
+
+export type Notation = (typeof NOTATIONS)[number];
 
 const NUMERALS: Record<Notation, Record<Numeral, string>> = {
   'roman-ascii': { 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII' },

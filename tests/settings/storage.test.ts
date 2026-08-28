@@ -197,6 +197,38 @@ describe('the settings and the stamps written together', () => {
   });
 });
 
+describe('reading a setting this build has no name for', () => {
+  // A notation chooses a table of numerals, so one this build has never heard
+  // of is not a setting it disagrees with — it is an index into nothing, and
+  // the throw comes out of naming the chart. Adding a third notation is not a
+  // change of shape, so the version would not obviously move.
+  it('falls back a field at a time rather than losing the rest', async () => {
+    await browser.storage.local.set({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        enabled: false,
+        notation: 'roman-numerals-in-a-circle',
+        spelling: 'whatever',
+      },
+    });
+
+    const settings = await loadSettings();
+    expect(settings.enabled).toBe(false);
+    expect(settings.notation).toBe(DEFAULT_SETTINGS.notation);
+    expect(settings.spelling).toBe(DEFAULT_SETTINGS.spelling);
+  });
+
+  it('keeps a setting it does have a name for', async () => {
+    await browser.storage.local.set({
+      settings: { ...DEFAULT_SETTINGS, notation: 'roman-unicode', spelling: 'source' },
+    });
+
+    const settings = await loadSettings();
+    expect(settings.notation).toBe('roman-unicode');
+    expect(settings.spelling).toBe('source');
+  });
+});
+
 describe('following a change to the settings', () => {
   it('hands the new settings to whoever is watching', async () => {
     const seen = vi.fn();

@@ -61,6 +61,12 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   // a key on one.
   let showed: string | null = null;
 
+  // What was painted, and whether it has been written down. The two are not
+  // the same question: the page can be right while the record the popup reads
+  // is stale, and only the second is worth trying again.
+  let painted: ReturnType<typeof paint> | null = null;
+  let recorded = false;
+
   let showing = Promise.resolve();
   const queue = (settings: () => Settings | Promise<Settings>) => {
     // Queued behind whatever is already running. Two runs at once would have
@@ -75,17 +81,28 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
     const next = async () => {
       const current = await settings();
       const wanted = matters(current, pageId);
-      if (wanted === showed) return;
 
-      // Recorded once the page shows it, which is neither before the showing
-      // nor after everything that follows it. Before, a run that threw while
-      // painting would be remembered as the one on the page and a change back
-      // to it skipped as a change to nothing; after, the same is true of a
-      // run that painted and then failed to write down what it found.
-      const painted = paint(doc, adapter, current, pageId);
-      showed = wanted;
+      // Painted only where the page is not already showing this, and
+      // recorded whether or not it was. `showed` is about the page: a run
+      // that threw while painting must not be remembered as the one on the
+      // page, and one that painted and then failed to write down what it
+      // found has painted all the same.
+      //
+      // Which leaves the writing to be tried again on its own. Left to the
+      // same guard, a record that failed to write would go on describing the
+      // chart as it was before the reader's last change, and every settings
+      // change that came back to this one would be skipped as a change to
+      // nothing — with no way back short of a reload.
+      if (wanted !== showed) {
+        painted = paint(doc, adapter, current, pageId);
+        showed = wanted;
+        recorded = false;
+      }
 
-      await remember(pageId, stored, painted);
+      if (!recorded && painted) {
+        await remember(pageId, stored, painted);
+        recorded = true;
+      }
     };
     showing = showing.then(next, next);
     return showing;

@@ -155,4 +155,24 @@ describe('setting a key from what is on the screen', () => {
 
     expect(withoutOverride(set, PAGE).stamps).toEqual({});
   });
+
+  // And a key with no stamp is left without one rather than given a nought.
+  // The write that follows sends every stamp that differs from what was read,
+  // and a nought differs from nothing at all — so a page stamping a chart for
+  // the first time, while a reader changed something else, would have that
+  // stamp written back to nought.
+  it('does not invent a stamp for a key that has none', () => {
+    const settings: Settings = {
+      ...DEFAULT_SETTINGS,
+      keyOverrides: {
+        [PAGE]: { tonic: 'C', mode: 'major' },
+        other: { tonic: 'D', mode: 'major' },
+      },
+    };
+
+    const left = withoutOverride({ settings, stamps: { [PAGE]: 1 } }, PAGE);
+
+    expect(left.settings.keyOverrides).toEqual({ other: { tonic: 'D', mode: 'major' } });
+    expect(left.stamps).toEqual({});
+  });
 });
