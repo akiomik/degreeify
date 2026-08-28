@@ -154,6 +154,21 @@ describe('reading settings that are not settings', () => {
     },
   );
 
+  // A browser that has just had a key removed says absent or null and they do
+  // not agree about which. Read as "something is there that cannot be read",
+  // a settings key removed on the one that says null would have every open
+  // chart strip its names and keep them off, where a fresh install has them
+  // on.
+  it.each([undefined, null])('is understood where the key holds %j', async (stored) => {
+    await browser.storage.local.set({ settings: stored });
+
+    expect(await readSettings()).toEqual({
+      settings: DEFAULT_SETTINGS,
+      fromLater: false,
+      understood: true,
+    });
+  });
+
   it('is understood where nothing is stored at all', async () => {
     expect(await readSettings()).toEqual({
       settings: DEFAULT_SETTINGS,

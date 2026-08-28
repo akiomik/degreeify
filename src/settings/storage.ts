@@ -312,7 +312,7 @@ export async function readSettings(): Promise<StoredSettings> {
   return {
     settings: settingsIn(stored),
     fromLater: isFromLater(stored),
-    understood: stored === undefined || isSettings(stored),
+    understood: nothingStored(stored) || isSettings(stored),
   };
 }
 
@@ -389,7 +389,7 @@ export function watchSettings(onChange: (stored: StoredSettings) => void): () =>
     onChange({
       settings: settingsIn(change.newValue),
       fromLater: isFromLater(change.newValue),
-      understood: change.newValue === undefined || isSettings(change.newValue),
+      understood: nothingStored(change.newValue) || isSettings(change.newValue),
     });
   };
 
@@ -572,6 +572,20 @@ function isFromLater(value: unknown): boolean {
  * thing it looks up. Reachable only from storage somebody has edited or
  * corrupted, which is reason enough to answer no rather than to trust it.
  */
+/**
+ * Whether a key holds nothing, which is a reader who has never set anything.
+ *
+ * Absent or null, because a browser that has just had a key removed says one
+ * or the other and they do not agree about which — the same difference the
+ * watcher for a forgotten record is written around. Read as "something is
+ * there that cannot be read", a settings key removed on the browser that
+ * says null would have every open chart strip its names and keep them off,
+ * where a fresh install has them on.
+ */
+function nothingStored(value: unknown): boolean {
+  return value === undefined || value === null;
+}
+
 function isSettings(value: unknown): value is Settings {
   if (!isRecord(value) || value.version !== SCHEMA_VERSION) return false;
 
