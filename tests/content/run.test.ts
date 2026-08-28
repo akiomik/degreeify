@@ -110,17 +110,32 @@ describe('running on a chart', () => {
 });
 
 describe('a page whose settings cannot be read', () => {
-  // Before there were settings this needed no storage at all. A storage read
-  // that throws — an extension reloaded out from under an open page is the
-  // ordinary way — must not be the difference between a chart in degree names
-  // and a chart in none.
-  it('names the chart with the defaults rather than not at all', async () => {
+  // The defaults say to rewrite every chart, and a reader who has turned that
+  // off has said the opposite. A setting that cannot be read is not a setting
+  // that was never made, so the page is left as the site served it.
+  it('leaves the chart alone rather than writing on it with the defaults', async () => {
     vi.spyOn(browser.storage.local, 'get').mockRejectedValue(new Error('context invalidated'));
 
     const doc = load('chordwiki-basic');
     const stop = await run(doc, chordwiki, new URL(ADDRESS));
 
-    expect(shown(doc)[0]).toBe('I');
+    expect(shown(doc)[0]).toBe('C');
+    stop();
+  });
+
+  // Read all the same, so the popup has something to say about the page even
+  // where nothing could be done to it.
+  it('still reads the chart', async () => {
+    const real = browser.storage.local.get.bind(browser.storage.local);
+    vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+      if (query === 'settings') throw new Error('context invalidated');
+      return real(query);
+    }) as never);
+
+    const doc = load('chordwiki-basic');
+    const stop = await run(doc, chordwiki, new URL(ADDRESS));
+
+    expect(await readDetection(RECORD)).toMatchObject({ source: 'page', named: 6 });
     stop();
   });
 });
@@ -570,6 +585,27 @@ describe('a key set for the chart', () => {
     (await start(load('chordwiki-basic')))();
 
     expect(await loadStamp(PAGE)).toBeLessThan(ahead);
+  });
+
+  // The record write is the one of the two that can fail on a page that is
+  // otherwise fine. Written first, a failure would carry off the stamp with
+  // it — and a key used every day on a page whose records will not write
+  // would age towards being dropped while keys nobody touches do not.
+  it('is stamped even where what was found could not be written down', async () => {
+    await saveOnly(withOverride(EMPTY, PAGE, key('G'), 0, 1).settings);
+    await saveStamp(PAGE, 1);
+
+    const real = browser.storage.local.set.bind(browser.storage.local);
+    vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+      if (Object.keys(items).some((name) => name.startsWith('detected:'))) {
+        throw new Error('quota exceeded');
+      }
+      return real(items);
+    }) as never);
+
+    (await start(load('chordwiki-basic')))();
+
+    expect(await loadStamp(PAGE)).toBeGreaterThan(1);
   });
 
   it('is stamped as used no more than once a day', async () => {

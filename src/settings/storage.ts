@@ -212,19 +212,23 @@ export async function saveKept(
 }
 
 /**
- * Whether what is stored is settings this build can write over.
+ * Whether what is stored is settings this build may write over.
  *
  * Asked before writing, because a read that falls back is not a write that
  * may. A reader who has been on a later build and comes back to this one has
- * settings this build reads as the defaults — and a first click would write
- * those defaults over everything they had, every key they had set among it,
- * and report that it worked.
+ * settings this build cannot read — and a first click would write what it
+ * read instead over everything they had, every key they had set among it, and
+ * report that it worked.
+ *
+ * Only a later version is refused. An earlier one is a shape this build knows
+ * what to replace, and refusing it would strand every reader on the day the
+ * version first moves — told, untruthfully, that their settings came from
+ * something newer.
  *
  * True where nothing is stored, which is a reader who has never set anything.
  */
 export async function storedSettingsAreReadable(): Promise<boolean> {
-  const stored = (await browser.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY];
-  return stored === undefined || isSettings(stored);
+  return !isFromLater((await browser.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY]);
 }
 
 export async function loadSettings(): Promise<Settings> {
@@ -250,6 +254,12 @@ export async function loadSettings(): Promise<Settings> {
  * hands that page the value its own read would have turned away.
  */
 function settingsIn(stored: unknown): Settings {
+  // Nothing done to any page where the settings came from a later build.
+  // What this build would use instead is its own defaults, which say to
+  // rewrite every chart — and a reader who had turned that off, on a build
+  // that knew how to say so, would find it back on with no way to stop it.
+  if (isFromLater(stored)) return { ...DEFAULT_SETTINGS, enabled: false };
+
   if (!isSettings(stored)) return DEFAULT_SETTINGS;
 
   return {
@@ -438,6 +448,25 @@ export const USED_AT_GRANULARITY = 24 * 60 * 60 * 1000;
  * thing it looks up. Reachable only from storage somebody has edited or
  * corrupted, which is reason enough to answer no rather than to trust it.
  */
+/**
+ * Whether what is stored was written by a build after this one.
+ *
+ * The version moving is a change of shape, and a shape from the future is one
+ * this cannot guess at: a field may have been renamed, and reading the old
+ * name would be reading something else. A shape from the past is the opposite
+ * problem and a smaller one — this build knows what it is replacing — so it
+ * is replaced rather than refused.
+ *
+ * When the version does move, that replacing is what a migration goes in
+ * front of. There is nothing to migrate from yet, and a reader arriving here
+ * with an older shape has settings this build will read as its defaults; the
+ * day a second version exists, the change that adds it is the change that
+ * owes them better.
+ */
+function isFromLater(value: unknown): boolean {
+  return isRecord(value) && typeof value.version === 'number' && value.version > SCHEMA_VERSION;
+}
+
 function isSettings(value: unknown): value is Settings {
   if (!isRecord(value) || value.version !== SCHEMA_VERSION) return false;
 

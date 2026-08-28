@@ -181,12 +181,14 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   // honest state for a page this could not read, and the next change is still
   // acted on.
   //
-  // And a reading that fails falls back to the defaults rather than leaving
-  // the page unnamed. Before there were settings this needed no storage at
-  // all; a storage read that throws — an extension reloaded out from under an
-  // open page is the ordinary way — must not be the difference between a
-  // chart in degree names and a chart in none.
-  await queue(() => loadSettings().catch(() => DEFAULT_SETTINGS)).catch(() => {});
+  // And a reading that fails leaves the page alone rather than writing on it
+  // with the defaults. The chart is still read and still written down, so the
+  // popup has something to say — but the defaults say to rewrite every chart,
+  // and a reader who has turned that off has said the opposite. A setting
+  // that cannot be read is not a setting that was never made.
+  await queue(() => loadSettings().catch(() => ({ ...DEFAULT_SETTINGS, enabled: false }))).catch(
+    () => {},
+  );
 
   return () => {
     stop();
@@ -252,8 +254,6 @@ async function remember(
   stored: string | null,
   { report, offset }: ReturnType<typeof paint>,
 ): Promise<void> {
-  if (stored) await writeDetection(stored, record(pageId, report, offset));
-
   // Whether or not the names are being shown, and only where the key was the
   // one the chart was read in.
   //
@@ -267,6 +267,13 @@ async function remember(
   // chart there. Stamping it anyway would keep an inert key fresh on every
   // visit, and it would outlive keys that are doing something.
   if (report.source === 'manual') await touchOverride(pageId);
+
+  // And what was found, last, because it is the one of the two that can
+  // fail on a page that is otherwise fine — a full quota, an extension
+  // reloaded out from under it. Written first, a failure would carry off the
+  // stamp with it, and a key used every day on a page whose records will not
+  // write would age towards being dropped while keys nobody touches do not.
+  if (stored) await writeDetection(stored, record(pageId, report, offset));
 }
 
 /**

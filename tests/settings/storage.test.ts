@@ -77,13 +77,28 @@ describe('reading settings that were never written', () => {
 
 describe('reading settings from a version this does not know', () => {
   // Guessing which fields moved is guessing, and a wrong guess is a reader's
-  // settings quietly changed into something they did not choose.
-  it('gives the defaults rather than reading them anyway', async () => {
+  // settings quietly changed into something they did not choose. Nothing is
+  // done to any page either: what this build would use instead says to
+  // rewrite every chart, and a reader who had turned that off on a build that
+  // knew how to say so would find it back on with no way to stop it.
+  it('gives the defaults, with nothing done to any page', async () => {
     await browser.storage.local.set({
-      settings: { version: SCHEMA_VERSION + 1, enabled: false, notation: 'roman-unicode' },
+      settings: { version: SCHEMA_VERSION + 1, enabled: true, notation: 'roman-unicode' },
+    });
+
+    expect(await loadSettings()).toEqual({ ...DEFAULT_SETTINGS, enabled: false });
+  });
+
+  // An earlier version is a shape this build knows what to replace. Refused,
+  // every reader would be stranded on the day the version first moves — and
+  // told, untruthfully, that their settings came from something newer.
+  it('reads an earlier version as the defaults, and lets them be written over', async () => {
+    await browser.storage.local.set({
+      settings: { version: SCHEMA_VERSION - 1, enabled: false },
     });
 
     expect(await loadSettings()).toEqual(DEFAULT_SETTINGS);
+    await expect(saveKept(DEFAULT_SETTINGS, {}, {})).resolves.toBeUndefined();
   });
 
   it('fills in a field a known version did not have', async () => {
