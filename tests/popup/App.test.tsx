@@ -401,6 +401,65 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // Left standing, the line saying the settings could not be read goes on
+  // saying it about settings the reader has just replaced — and the change
+  // reads as not having taken.
+  it('stops saying its own read failed once a change has been written', async () => {
+    const real = browser.storage.local.get.bind(browser.storage.local);
+    let broken = true;
+    vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+      if (broken) throw new Error('context invalidated');
+      return real(query);
+    }) as never);
+
+    await onATab(ADDRESS, detection());
+    const { root, dispose } = await open();
+    expect(root.textContent).toContain('could not be read here');
+
+    broken = false;
+    const toggle = root.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    if (!toggle) throw new Error('there is a toggle');
+    toggle.click();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(root.textContent).not.toContain('could not be read');
+    dispose();
+  });
+
+  // That read gates everything, and the controls that would put it right are
+  // among what it switched off: a reader whose chart is named in a key they
+  // set by hand is looking at a popup saying the key came from the chart,
+  // with nothing to press. Nothing else asks again.
+  it('reads the settings again where the read it opened with failed', async () => {
+    await saveKept(
+      withOverride(EMPTY, 'chordwiki:chart:Test Song', { tonic: note('Db'), mode: 'major' }, 0, 1)
+        .settings,
+      { 'chordwiki:chart:Test Song': 1 },
+      {},
+    );
+    await onATab(ADDRESS, detection());
+
+    const real = browser.storage.local.get.bind(browser.storage.local);
+    let broken = true;
+    const get = vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+      if (broken && query === 'settings') throw new Error('context invalidated');
+      return real(query);
+    }) as never);
+
+    const { root, dispose } = await open();
+    const [tonics] = [...root.querySelectorAll('select')];
+    if (!tonics) throw new Error('there is a key control');
+    expect(tonics.value).toBe('');
+
+    broken = false;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(tonics.value).toBe('Db');
+    expect(root.textContent).not.toContain('could not be read');
+    get.mockRestore();
+    dispose();
+  });
+
   // And says nothing about the charts, because this failure says nothing
   // about them. The pages made their own reads of the same settings, and one
   // that threw here says nothing about one that did not throw there — a

@@ -37,6 +37,9 @@ import {
 } from '@/settings/storage';
 import styles from './App.module.css';
 
+/** How long to wait before reading the settings again, in milliseconds. */
+const RETRY_AFTER = [200, 1000, 5000];
+
 function App() {
   const [settings, setSettings] = createSignal<Settings | null>(null);
   const [detection, setDetection] = createSignal<Detection | null>(null);
@@ -202,6 +205,21 @@ function App() {
     // Here rather than in the content script, which runs on every page a
     // reader opens. Tidying belongs where somebody asked for something.
     await pruneDetections(undefined, key).catch(() => {});
+
+    // And asked again where the first read failed, on the same schedule the
+    // page uses for the same failure. A popup is open for seconds rather than
+    // for the life of a tab, so the tries that matter are the early ones —
+    // the last is there for a reader who leaves it open while whatever broke
+    // storage sorts itself out.
+    if (!unreachable()) return;
+
+    const again = RETRY_AFTER.map((after) => setTimeout(() => void reread(), after));
+    const clear = () => {
+      for (const timer of again) clearTimeout(timer);
+    };
+
+    if (owner) runWithOwner(owner, () => onCleanup(clear));
+    else clear();
   });
 
   /**
@@ -224,6 +242,48 @@ function App() {
    */
   let writing: Promise<void> = Promise.resolve();
 
+  /**
+   * Runs `work` after everything else this popup has asked storage for.
+   *
+   * On both sides, so that one failure does not leave every change after it
+   * skipped over a chain that has already rejected.
+   */
+  const inTurn = <T,>(work: () => Promise<T>): Promise<T> => {
+    const done = writing.then(work, work);
+    writing = done.then(
+      () => undefined,
+      () => undefined,
+    );
+    return done;
+  };
+
+  /**
+   * Reads the settings again where the read this popup opened with failed.
+   *
+   * That read gates everything: the controls show this build's defaults, and
+   * the ones about the key are switched off outright, because a key nothing
+   * could read is a key nothing knows about. Nothing else would ask again —
+   * a change reads before it writes, but the controls that would forget a key
+   * are the ones the failed read disabled — so a reader whose chart is named
+   * in a key they set by hand is looking at a popup that says the key came
+   * from the chart, with nothing to press.
+   *
+   * In turn with the writes, so that an answer arriving in the middle of a
+   * change cannot put the controls back to what they showed before it.
+   */
+  const reread = () =>
+    inTurn(async () => {
+      if (!unreachable()) return;
+
+      const stored = await readSettings().catch(() => null);
+      if (!stored) return;
+
+      setReadable(!stored.fromLater);
+      setUnread(!stored.understood);
+      setUnreachable(false);
+      setSettings(asked(stored));
+    });
+
   const update = (change: (kept: Kept) => Kept): Promise<boolean> => {
     const next = async () => {
       try {
@@ -236,10 +296,12 @@ function App() {
         setFailed(false);
 
         // What is stored is now what this build wrote, whatever it was
-        // before. Left standing, the line saying the settings could not be
-        // read goes on saying it about settings the reader has just replaced
-        // — which reads as the change not having taken.
+        // before, and it was read on the way there. Left standing, either
+        // line saying the settings could not be read goes on saying it about
+        // settings the reader has just replaced and this has just read —
+        // which reads as the change not having taken.
         setUnread(false);
+        setUnreachable(false);
         return true;
       } catch {
         setFailed(true);
@@ -254,17 +316,11 @@ function App() {
       }
     };
 
-    // On both sides, so that one failure does not leave every change after it
-    // skipped over a chain that has already rejected.
-    //
     // Whether it was kept is handed back, because not everything a change
     // moves is in the settings: a control the popup drives itself has to be
     // put back by whoever moved it, and only this knows whether there is
     // anything to put back.
-    const kept = writing.then(next, next);
-    writing = kept.then(() => undefined);
-
-    return kept;
+    return inTurn(next);
   };
 
   /** The key set for this chart, as the chart is being shown. */
