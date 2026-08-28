@@ -185,7 +185,12 @@ export async function saveKept(
   // chart was made to rule out. It would also write two hundred keys for a
   // checkbox.
   const changed = Object.entries(stamps)
-    .filter(([page, at]) => before[page] !== at)
+    // Asked of the object itself, for the reason the removal below is: a bare
+    // lookup finds a `constructor` on anything. It changes no answer here — an
+    // inherited hit is never a time, so the stamp reads as changed, and a
+    // stamp that is not in `before` has changed — but a reader should not have
+    // to work that out to know the line is safe.
+    .filter(([page, at]) => (Object.hasOwn(before, page) ? before[page] : undefined) !== at)
     .map(([page, at]) => [`${STAMP_PREFIX}${page}`, at]);
 
   await browser.storage.local.set({ [SETTINGS_KEY]: settings, ...Object.fromEntries(changed) });
@@ -246,10 +251,6 @@ function settingsIn(stored: unknown): Settings {
 /** `value` where it is one of `allowed`, and nothing where it is not. */
 function oneOf<T extends string>(allowed: readonly T[], value: unknown): T | undefined {
   return allowed.find((one) => one === value);
-}
-
-export async function saveSettings(settings: Settings): Promise<void> {
-  await browser.storage.local.set({ [SETTINGS_KEY]: settings });
 }
 
 /**
@@ -378,13 +379,26 @@ export const MOST_OVERRIDES = 200;
  * A number rather than none, because a record kept for every chart anyone
  * ever opened grows without ever being read again.
  */
+/**
+ * When a chart's key was last used, and nought where it never was.
+ *
+ * Asked of the object itself. A bare lookup finds a `constructor` on
+ * anything, and what is looked up here is a chart's name — a function comes
+ * back, the comparison against it is not a number, and a sort given one of
+ * those puts the list in no particular order. What would be dropped at the
+ * cap is then whichever keys the ordering happened to leave last.
+ */
+function usedAt(stamps: KeyStamps, pageId: string): number {
+  return Object.hasOwn(stamps, pageId) ? (stamps[pageId] ?? 0) : 0;
+}
+
 export function prunedOverrides(
   overrides: Readonly<Record<string, KeyOverride>>,
   stamps: KeyStamps,
   most = MOST_OVERRIDES,
 ): Record<string, KeyOverride> {
   const kept = Object.entries(overrides)
-    .sort(([a], [b]) => (stamps[b] ?? 0) - (stamps[a] ?? 0))
+    .sort(([a], [b]) => usedAt(stamps, b) - usedAt(stamps, a))
     .slice(0, most);
 
   return Object.fromEntries(kept);

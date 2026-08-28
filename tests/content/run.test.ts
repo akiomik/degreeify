@@ -14,9 +14,14 @@ import {
   loadStamp,
   readDetection,
   recordKey,
-  saveSettings,
+  type Settings,
+  saveKept,
   saveStamp,
 } from '@/settings/storage';
+
+/** Writes settings the way the popup does, leaving the stamps alone. */
+const saveOnly = (settings: Settings) => saveKept(settings, {}, {});
+
 import { chordwiki } from '@/sites/chordwiki/adapter';
 
 const FIXTURES = join(import.meta.dirname, '../fixtures');
@@ -83,7 +88,7 @@ describe('running on a chart', () => {
   // what key the chart is in, and would find that display empty for no reason
   // they could see if the reading stopped here.
   it('reads a chart it has been told not to name', async () => {
-    await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
+    await saveOnly({ ...DEFAULT_SETTINGS, enabled: false });
 
     const doc = load('chordwiki-basic');
     const stop = await start(doc);
@@ -125,7 +130,7 @@ describe('following the settings', () => {
     const doc = load('chordwiki-basic');
     const stop = await start(doc);
 
-    await saveSettings({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
+    await saveOnly({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
     await Promise.resolve();
 
     expect(shown(doc)[1]).toBe('Ⅵm7');
@@ -138,7 +143,7 @@ describe('following the settings', () => {
     const before = doc.body.innerHTML;
     const stop = await start(doc);
 
-    await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
+    await saveOnly({ ...DEFAULT_SETTINGS, enabled: false });
     await Promise.resolve();
 
     expect(doc.body.innerHTML).toBe(before);
@@ -150,7 +155,7 @@ describe('following the settings', () => {
     const doc = load('chordwiki-basic');
     (await start(doc))();
 
-    await saveSettings({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
+    await saveOnly({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
     await Promise.resolve();
 
     expect(shown(doc)[1]).toBe('VIm7');
@@ -163,13 +168,13 @@ describe('a setting changed while the page is still being read', () => {
   // this page started with, whatever they changed would be undone — and the
   // only sign of it would be a setting that went back on its own.
   it('is not undone by the page writing down that it used a key', async () => {
-    await saveSettings(withOverride(EMPTY, PAGE, key('G'), 0, 1).settings);
+    await saveOnly(withOverride(EMPTY, PAGE, key('G'), 0, 1).settings);
     await saveStamp(PAGE, Date.now() - 25 * 60 * 60 * 1000);
 
     const doc = load('chordwiki-basic');
     const running = run(doc, chordwiki, new URL(ADDRESS));
 
-    await saveSettings({ ...(await loadSettings()), enabled: false, notation: 'roman-unicode' });
+    await saveOnly({ ...(await loadSettings()), enabled: false, notation: 'roman-unicode' });
     (await running)();
 
     const settings = await loadSettings();
@@ -197,7 +202,7 @@ describe('a setting changed while the page is still being read', () => {
     const running = run(doc, chordwiki, new URL(ADDRESS));
 
     await new Promise((resolve) => setTimeout(resolve, 5));
-    await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
+    await saveOnly({ ...DEFAULT_SETTINGS, enabled: false });
     slow.mockRestore();
 
     const stop = await running;
@@ -232,7 +237,7 @@ describe('a setting changed while the first reading is being loaded', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 5));
     slow.mockRestore();
-    await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
+    await saveOnly({ ...DEFAULT_SETTINGS, enabled: false });
 
     const stop = await running;
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -261,12 +266,12 @@ describe('a showing that failed', () => {
     const stop = await run(doc, brittle, new URL(ADDRESS));
 
     breaking = true;
-    await saveSettings({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
+    await saveOnly({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(shown(doc)[1]).toBe('Am7');
 
     breaking = false;
-    await saveSettings({ ...DEFAULT_SETTINGS, spelling: 'source' });
+    await saveOnly({ ...DEFAULT_SETTINGS, spelling: 'source' });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(shown(doc)[1]).toBe('VIm7');
@@ -280,7 +285,7 @@ describe('a key kept for a chart that has since been given two', () => {
   // would keep itself fresh on every visit and outlive keys that are doing
   // something.
   it('is not marked as used', async () => {
-    await saveSettings(withOverride(EMPTY, PAGE, key('G'), 0, 1).settings);
+    await saveOnly(withOverride(EMPTY, PAGE, key('G'), 0, 1).settings);
     await saveStamp(PAGE, 1);
 
     const doc = parse(`
@@ -324,7 +329,7 @@ describe('a reading whose record could not be written', () => {
     await browser.storage.local.remove(RECORD);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    await saveSettings({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
+    await saveOnly({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(await readDetection(RECORD)).toBeNull();
     failing.mockRestore();
@@ -335,7 +340,7 @@ describe('a reading whose record could not be written', () => {
       settings: { ...DEFAULT_SETTINGS, notation: 'roman-unicode' },
       stamps: {},
     };
-    await saveSettings(
+    await saveOnly(
       withOverride(elsewhere, 'chordwiki:chart:Another Song', key('G'), 0, 1).settings,
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -384,7 +389,7 @@ describe('a record thrown away while the page is still open', () => {
       return writing;
     }) as never);
 
-    await saveSettings({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
+    await saveOnly({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
     await new Promise((resolve) => setTimeout(resolve, 0));
     vi.restoreAllMocks();
 
@@ -461,7 +466,7 @@ describe('a settings change about somewhere else', () => {
     const stop = await start(doc);
     const wrote = vi.spyOn(browser.storage.local, 'set');
 
-    await saveSettings(withOverride(EMPTY, OTHER, key('G'), 0, 1).settings);
+    await saveOnly(withOverride(EMPTY, OTHER, key('G'), 0, 1).settings);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(readings(wrote)).toBe(0);
@@ -471,13 +476,13 @@ describe('a settings change about somewhere else', () => {
   // Nor does a stamp moving, which is written by whichever page used the key
   // and is displayed nowhere.
   it('does not make the page read itself again for a stamp either', async () => {
-    await saveSettings(withOverride(EMPTY, 'chordwiki:chart:Test Song', key('G'), 0, 1).settings);
+    await saveOnly(withOverride(EMPTY, 'chordwiki:chart:Test Song', key('G'), 0, 1).settings);
 
     const doc = load('chordwiki-basic');
     const stop = await start(doc);
     const wrote = vi.spyOn(browser.storage.local, 'set');
 
-    await saveSettings(withOverride(EMPTY, 'chordwiki:chart:Test Song', key('G'), 0, 1).settings);
+    await saveOnly(withOverride(EMPTY, 'chordwiki:chart:Test Song', key('G'), 0, 1).settings);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(readings(wrote)).toBe(0);
@@ -489,7 +494,7 @@ describe('a settings change about somewhere else', () => {
     const doc = load('chordwiki-basic');
     const stop = await start(doc);
 
-    await saveSettings(withOverride(EMPTY, 'chordwiki:chart:Test Song', key('G'), 0, 1).settings);
+    await saveOnly(withOverride(EMPTY, 'chordwiki:chart:Test Song', key('G'), 0, 1).settings);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(shown(doc)[0]).toBe('IV');
@@ -511,7 +516,7 @@ describe('a page that could not write down what it found', () => {
     const stop = await run(doc, chordwiki, new URL(ADDRESS)).catch(() => () => {});
     failing.mockRestore();
 
-    await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
+    await saveOnly({ ...DEFAULT_SETTINGS, enabled: false });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(shown(doc)[0]).toBe('C');
@@ -522,7 +527,7 @@ describe('a page that could not write down what it found', () => {
 describe('a key set for the chart', () => {
   it('is used, and named as set by hand', async () => {
     const doc = load('chordwiki-basic');
-    await saveSettings(withOverride(EMPTY, 'chordwiki:chart:Test Song', key('G'), 0, 1).settings);
+    await saveOnly(withOverride(EMPTY, 'chordwiki:chart:Test Song', key('G'), 0, 1).settings);
 
     const stop = await start(doc);
 
@@ -537,7 +542,7 @@ describe('a key set for the chart', () => {
   // button that changes nothing about the song.
   it('moves with a chart that has been transposed', async () => {
     const doc = load('chordwiki-transposed');
-    await saveSettings(withOverride(EMPTY, 'chordwiki:chart:Test Song', key('C'), 0, 1).settings);
+    await saveOnly(withOverride(EMPTY, 'chordwiki:chart:Test Song', key('C'), 0, 1).settings);
 
     const stop = await start(doc);
 
@@ -558,7 +563,7 @@ describe('a key set for the chart', () => {
   // fresh for good — never re-stamped, never the oldest, never dropped, while
   // keys the reader actually uses go around it.
   it('is stamped again where the stamp is in the future', async () => {
-    await saveSettings(withOverride(EMPTY, PAGE, key('G'), 0, 1).settings);
+    await saveOnly(withOverride(EMPTY, PAGE, key('G'), 0, 1).settings);
     const ahead = Date.now() + 25 * 60 * 60 * 1000;
     await saveStamp(PAGE, ahead);
 
@@ -570,7 +575,7 @@ describe('a key set for the chart', () => {
   it('is stamped as used no more than once a day', async () => {
     const doc = load('chordwiki-basic');
     const yesterday = Date.now() - 25 * 60 * 60 * 1000;
-    await saveSettings(withOverride(EMPTY, PAGE, key('G'), 0, 1).settings);
+    await saveOnly(withOverride(EMPTY, PAGE, key('G'), 0, 1).settings);
     await saveStamp(PAGE, yesterday);
 
     (await start(doc))();

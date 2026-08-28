@@ -12,9 +12,12 @@ import {
   loadSettings,
   recordKey,
   SCHEMA_VERSION,
+  type Settings,
   saveKept,
-  saveSettings,
 } from '@/settings/storage';
+
+/** Writes settings the way the popup does, leaving the stamps alone. */
+const saveOnly = (settings: Settings) => saveKept(settings, {}, {});
 
 const ADDRESS = 'https://ja.chordwiki.org/wiki/Test%20Song';
 
@@ -150,7 +153,7 @@ describe('the popup on a chart', () => {
   });
 
   it('shows what the setting says rather than its own idea of it', async () => {
-    await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
+    await saveOnly({ ...DEFAULT_SETTINGS, enabled: false });
     await onATab(ADDRESS, detection());
     const { root, dispose } = await open();
 
@@ -193,7 +196,7 @@ describe('the popup on a chart', () => {
   // The chart is read whether or not the names are shown, so with them off
   // this count is of names that are not on the page.
   it('says the names would be written rather than that they were', async () => {
-    await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
+    await saveOnly({ ...DEFAULT_SETTINGS, enabled: false });
     await onATab(ADDRESS, detection());
     const { root, dispose } = await open();
 
@@ -302,7 +305,7 @@ describe('the popup on a chart', () => {
   // beside the one that sets it — so a chart edited to declare a second key
   // leaves the reader with a key they cannot reach.
   it('can still forget a key set for a chart that can no longer take one', async () => {
-    await saveSettings(withOverride(EMPTY, 'chordwiki:chart:Test Song', KEY_OF_G, 0, 1).settings);
+    await saveOnly(withOverride(EMPTY, 'chordwiki:chart:Test Song', KEY_OF_G, 0, 1).settings);
     await onATab(ADDRESS, detection({ statedKeys: 7 }));
 
     const { root, dispose } = await open();
@@ -347,9 +350,7 @@ describe('the popup on a chart', () => {
   // control back on major, three of the tonics gone, and the next one they
   // choose saved as a major key.
   it('goes on offering the minor tonics after a minor key is cleared', async () => {
-    await saveSettings(
-      withOverride(EMPTY, 'chordwiki:chart:Test Song', KEY_OF_C_MINOR, 0, 1).settings,
-    );
+    await saveOnly(withOverride(EMPTY, 'chordwiki:chart:Test Song', KEY_OF_C_MINOR, 0, 1).settings);
     await onATab(ADDRESS, detection({ statedKeys: 0, key: null, source: null }));
 
     const { root, dispose } = await open();

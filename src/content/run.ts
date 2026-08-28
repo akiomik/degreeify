@@ -144,12 +144,18 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
     : () => {};
 
   // And when the page comes back into view. Writing it back only where the
-  // page is being looked at is what keeps this from undoing the tidying: the
-  // popup drops the oldest records and every open tab would put its own
-  // straight back, so the store would settle above the number it is held to
-  // and the tidying would be a burst of writes and nothing else. A record is
-  // read by a popup, and a popup is opened over the page in front of the
-  // reader.
+  // page is being looked at is what keeps the tidying from being undone as it
+  // happens: the popup drops the oldest records, and every open tab putting
+  // its own straight back would make the tidying a burst of writes and
+  // nothing else. A record is read by a popup, and a popup is opened over the
+  // page in front of the reader.
+  //
+  // Which bounds this and does not cap it. A settings change is answered by
+  // every open tab, hidden ones included — each is showing something new and
+  // has to say so — so a reader with more chart tabs open than the store
+  // holds will put it back above that number until they next open the popup.
+  // What the number rules out is a store that grows with every chart anyone
+  // has ever opened, and that it still does.
   doc.addEventListener('visibilitychange', rewrite);
 
   // Listening before reading, so that a change made while the page is still

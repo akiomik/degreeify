@@ -13,12 +13,15 @@ import {
   readDetection,
   recordKey,
   SCHEMA_VERSION,
+  type Settings,
   saveKept,
-  saveSettings,
   saveStamp,
   watchSettings,
   writeDetection,
 } from '@/settings/storage';
+
+/** Writes settings the way the popup does, leaving the stamps alone. */
+const saveOnly = (settings: Settings) => saveKept(settings, {}, {});
 
 beforeEach(() => {
   fakeBrowser.reset();
@@ -122,7 +125,7 @@ describe('when a key was last used', () => {
   // changing a setting, and a whole-object write from either would undo the
   // other's.
   it('is written without touching the settings', async () => {
-    await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
+    await saveOnly({ ...DEFAULT_SETTINGS, enabled: false });
     await saveStamp('page', 5);
 
     expect((await loadSettings()).enabled).toBe(false);
@@ -289,7 +292,7 @@ describe('following a change to the settings', () => {
     const seen = vi.fn();
     const stop = watchSettings(seen);
 
-    await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
+    await saveOnly({ ...DEFAULT_SETTINGS, enabled: false });
 
     expect(seen).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
     stop();
@@ -299,7 +302,7 @@ describe('following a change to the settings', () => {
     const seen = vi.fn();
     watchSettings(seen)();
 
-    await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
+    await saveOnly({ ...DEFAULT_SETTINGS, enabled: false });
 
     expect(seen).not.toHaveBeenCalled();
   });
@@ -370,7 +373,7 @@ describe('what was found on a page', () => {
 
   // The settings live in the same storage area and are not a page record.
   it('leaves the settings alone', async () => {
-    await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
+    await saveOnly({ ...DEFAULT_SETTINGS, enabled: false });
     await writeDetection('detected:page', detection(1));
 
     await pruneDetections(0);
@@ -380,6 +383,19 @@ describe('what was found on a page', () => {
 });
 
 describe('keys kept for too many charts', () => {
+  // Asked of the object itself. A bare lookup finds a `constructor` on
+  // anything, and a comparison against a function is not a number — a sort
+  // given one of those puts the list in no particular order, so what is
+  // dropped at the cap is whichever keys the ordering happened to leave last.
+  it('drops the least recently used where a chart is called constructor', () => {
+    const overrides = {
+      constructor: { tonic: 'C', mode: 'major' as const },
+      used: { tonic: 'D', mode: 'major' as const },
+    };
+
+    expect(Object.keys(prunedOverrides(overrides, { used: 1 }, 1))).toEqual(['used']);
+  });
+
   const overrides = {
     old: { tonic: 'C', mode: 'major' as const },
     newer: { tonic: 'D', mode: 'major' as const },
