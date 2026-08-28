@@ -603,6 +603,52 @@ describe('records of pages the reader has left', () => {
     stop();
   });
 
+  // A record this page wrote before and is writing again is already there and
+  // is already the one being kept, so counting it out as well would drop a
+  // record that did not need to go.
+  it('are counted with this page own record where it already has one', async () => {
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+
+    const setting = browser.storage.local.set.bind(browser.storage.local);
+    const room = async () =>
+      Object.keys(await browser.storage.local.get(null)).filter((key) =>
+        key.startsWith('detected:'),
+      ).length < MOST_DETECTIONS;
+
+    // Full, with this page's own record among the number.
+    for (let index = 0; index < MOST_DETECTIONS - 1; index++) {
+      await setting({
+        [`detected:page-${index}`]: {
+          version: SCHEMA_VERSION,
+          pageId: `chordwiki:chart:${index}`,
+          key: null,
+          source: null,
+          statedKeys: 0,
+          unreadKeys: 0,
+          transposeOffset: 0,
+          named: 0,
+          updatedAt: index,
+        },
+      });
+    }
+
+    vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+      const detections = Object.keys(items).some((name) => name.startsWith('detected:'));
+      if (detections && !(await room())) throw new Error('quota exceeded');
+      return setting(items);
+    }) as never);
+
+    await saveOnly({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const all = await browser.storage.local.get(null);
+    expect(Object.keys(all).filter((key) => key.startsWith('detected:'))).toHaveLength(
+      MOST_DETECTIONS,
+    );
+    stop();
+  });
+
   // Once for each page a reader opens, and not for each time it is read:
   // changing a setting must not walk the whole of storage on every open tab.
   it('are not tidied again every time the page is read', async () => {

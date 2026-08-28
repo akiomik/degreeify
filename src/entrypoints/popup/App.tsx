@@ -66,6 +66,14 @@ function App() {
    * read may well succeed — but what they show until then is this build's
    * defaults rather than the reader's answers, and a control showing
    * something nobody chose has to say so.
+   *
+   * It has to say one more thing, because two true things about this state
+   * disagree with each other on the face of it: no chart is being named, and
+   * the defaults say to name every one. The first is what the checkbox shows,
+   * so a reader who wants the names has one click rather than two; the second
+   * is what any change here writes, so changing the numerals turns the names
+   * on as well. Neither is wrong and the pair is surprising, so the line says
+   * what will happen rather than leaving it to be found out.
    */
   const [unread, setUnread] = createSignal(false);
 
@@ -312,7 +320,8 @@ function App() {
 
               <Show when={unread()}>
                 <p class={styles.warning}>
-                  Your settings could not be read. These are the defaults, not your answers.
+                  Your settings could not be read. These are the defaults, not your answers, and no
+                  chart is being named until you change something here.
                 </p>
               </Show>
 

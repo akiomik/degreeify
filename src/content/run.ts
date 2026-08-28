@@ -9,6 +9,7 @@ import {
   loadStamp,
   MOST_DETECTIONS,
   pruneDetections,
+  readDetection,
   readSettings,
   recordKey,
   SCHEMA_VERSION,
@@ -330,11 +331,13 @@ async function remember(
     // that write fails for want of room too, a page that had spent its one
     // tidying would have no way left to make room — stuck without a record
     // for the rest of its life, which is what this exists to prevent.
-    // One short of the number, because what is about to be written is not
-    // among what is being counted: this record does not exist yet, so keeping
-    // the whole number of others and then adding this one would settle a
-    // record above it.
-    await pruneDetections(MOST_DETECTIONS - 1, stored).catch(() => {});
+    // One short of the number where what is about to be written is not among
+    // what is being counted, and the whole number where it is. A record this
+    // page wrote before and is writing again is already there and is already
+    // the one being kept, so counting it out as well would drop a record that
+    // did not need to go.
+    const already = await readDetection(stored).catch(() => null);
+    await pruneDetections(already ? MOST_DETECTIONS : MOST_DETECTIONS - 1, stored).catch(() => {});
     await writeDetection(stored, found);
     return;
   }

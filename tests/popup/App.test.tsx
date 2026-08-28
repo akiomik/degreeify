@@ -342,6 +342,11 @@ describe('the popup on a chart', () => {
     const { root, dispose } = await open();
 
     expect(root.textContent).toContain('could not be read');
+
+    // And what will happen, because two true things about this state
+    // disagree on the face of it: no chart is being named, and the defaults
+    // say to name every one.
+    expect(root.textContent).toContain('until you change something here');
     expect(root.querySelector('input[type="checkbox"]')).not.toBeNull();
     dispose();
   });
