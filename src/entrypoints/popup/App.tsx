@@ -112,6 +112,12 @@ function App() {
     // defaults, the checkbox would say the names are on while no page is
     // naming anything — one failure answered two ways, and the one the reader
     // can see would be the wrong one.
+    //
+    // Only where the read itself failed. Settings that were read and were not
+    // settings show as the defaults, which is what they are and what the line
+    // above them says: the page leaves itself alone over them, and that is
+    // the page's business rather than a value to be shown as an answer and
+    // written back as one.
     setSettings(stored?.settings ?? { ...DEFAULT_SETTINGS, enabled: false });
 
     const key = await addressInFront();
@@ -178,6 +184,12 @@ function App() {
 
         setSettings(changed.settings);
         setFailed(false);
+
+        // What is stored is now what this build wrote, whatever it was
+        // before. Left standing, the line saying the settings could not be
+        // read goes on saying it about settings the reader has just replaced
+        // — which reads as the change not having taken.
+        setUnread(false);
       } catch {
         setFailed(true);
 

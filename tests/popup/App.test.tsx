@@ -406,6 +406,45 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // What is stored is now what this build wrote, whatever it was before. Left
+  // standing, the line goes on saying the settings could not be read about
+  // settings the reader has just replaced — which reads as the change not
+  // having taken.
+  it('stops saying the settings could not be read once they have been written', async () => {
+    await browser.storage.local.set({ settings: { version: SCHEMA_VERSION, keyOverrides: 7 } });
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+    expect(root.textContent).toContain('could not be read');
+
+    const toggle = root.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    toggle?.click();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(root.textContent).not.toContain('could not be read');
+    dispose();
+  });
+
+  // The reading this build could not use is not written back as an answer. A
+  // value nobody chose, sitting where a setting goes, is one the next change
+  // to something else takes for the reader's own.
+  it('does not write back a setting it only fell back to', async () => {
+    await browser.storage.local.set({ settings: { version: SCHEMA_VERSION, keyOverrides: 7 } });
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+    const selects = [...root.querySelectorAll('select')];
+    const numerals = selects.at(-2);
+    if (!numerals) throw new Error('there is a numerals control');
+
+    numerals.value = 'roman-unicode';
+    numerals.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(await loadSettings()).toMatchObject({ enabled: true, notation: 'roman-unicode' });
+    dispose();
+  });
+
   it('says so when a change could not be saved', async () => {
     await onATab(ADDRESS, detection());
     const { root, dispose } = await open();

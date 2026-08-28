@@ -143,6 +143,27 @@ describe('a page whose settings cannot be read', () => {
   });
 });
 
+describe('a page whose settings are not settings', () => {
+  // What would be used instead is this build's own defaults, which say to
+  // rewrite every chart — and a reader who had turned that off, on a build
+  // that knew how to say so, would find it back on. Decided here rather than
+  // carried in the settings: a value nobody chose, sitting where a setting
+  // goes, is one the next write takes for an answer.
+  it.each([
+    ['from a later build', { ...DEFAULT_SETTINGS, version: SCHEMA_VERSION + 1 }],
+    ['in a shape nothing accounts for', { ...DEFAULT_SETTINGS, keyOverrides: 7 }],
+  ])('leaves the chart alone where they are %s', async (_what, settings) => {
+    await browser.storage.local.set({ settings });
+
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+
+    expect(shown(doc)[0]).toBe('C');
+    expect(await readDetection(RECORD)).toMatchObject({ source: 'page' });
+    stop();
+  });
+});
+
 describe('following the settings', () => {
   it('names the chart again when a setting changes', async () => {
     const doc = load('chordwiki-basic');

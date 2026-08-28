@@ -82,12 +82,16 @@ describe('reading settings from a version this does not know', () => {
   // done to any page either: what this build would use instead says to
   // rewrite every chart, and a reader who had turned that off on a build that
   // knew how to say so would find it back on with no way to stop it.
-  it('gives the defaults, with nothing done to any page', async () => {
+  it('gives the defaults', async () => {
     await browser.storage.local.set({
       settings: { version: SCHEMA_VERSION + 1, enabled: true, notation: 'roman-unicode' },
     });
 
-    expect(await loadSettings()).toEqual({ ...DEFAULT_SETTINGS, enabled: false });
+    // The defaults plainly. Whether a page should be left alone is a
+    // different question from what the settings are, and a value nobody chose
+    // sitting where a setting goes is one the next write takes for an answer.
+    expect(await loadSettings()).toEqual(DEFAULT_SETTINGS);
+    expect(await readSettings()).toMatchObject({ understood: false, fromLater: true });
   });
 
   // An earlier version is a shape this build knows what to replace. Refused,
@@ -98,10 +102,11 @@ describe('reading settings from a version this does not know', () => {
       settings: { version: SCHEMA_VERSION - 1, enabled: true },
     });
 
-    // Nothing is done to any page — the defaults say to rewrite every chart,
-    // and these are not the reader's answers — but they may be written over,
-    // which is how a reader gets out of it.
-    expect(await loadSettings()).toEqual({ ...DEFAULT_SETTINGS, enabled: false });
+    // Read as the defaults and written over freely, which is how a reader
+    // gets out of it. That no page is touched meanwhile is the caller's to
+    // decide, from `understood`.
+    expect(await loadSettings()).toEqual(DEFAULT_SETTINGS);
+    expect((await readSettings()).understood).toBe(false);
     await expect(saveKept(DEFAULT_SETTINGS, {}, {})).resolves.toBeUndefined();
   });
 
@@ -137,7 +142,7 @@ describe('reading settings that are not settings', () => {
       settings: { ...DEFAULT_SETTINGS, keyOverrides: overrides },
     });
 
-    expect(await loadSettings()).toEqual({ ...DEFAULT_SETTINGS, enabled: false });
+    expect(await loadSettings()).toEqual(DEFAULT_SETTINGS);
     expect((await readSettings()).understood).toBe(false);
   });
 
@@ -314,7 +319,9 @@ describe('reading a setting this build has no name for', () => {
     });
 
     expect(seen).toHaveBeenCalledWith(
-      expect.objectContaining({ notation: DEFAULT_SETTINGS.notation }),
+      expect.objectContaining({
+        settings: expect.objectContaining({ notation: DEFAULT_SETTINGS.notation }),
+      }),
     );
     stop();
   });
@@ -357,7 +364,9 @@ describe('following a change to the settings', () => {
 
     await saveOnly({ ...DEFAULT_SETTINGS, enabled: false });
 
-    expect(seen).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
+    expect(seen).toHaveBeenCalledWith(
+      expect.objectContaining({ settings: expect.objectContaining({ enabled: false }) }),
+    );
     stop();
   });
 

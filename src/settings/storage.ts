@@ -297,18 +297,17 @@ export async function loadSettings(): Promise<Settings> {
  * hands that page the value its own read would have turned away.
  */
 function settingsIn(stored: unknown): Settings {
-  // Nothing at all where nothing is stored, which is a reader who has never
-  // set anything and should have the extension working.
-  if (stored === undefined) return DEFAULT_SETTINGS;
-
-  // Nothing done to any page where something is stored and it is not settings
-  // this build knows — whether it came from a later build or from a shape
-  // nothing here can account for. What this build would use instead is its
-  // own defaults, which say to rewrite every chart, and a reader who had
-  // turned that off would find it back on. Read as though nothing were
-  // stored, the two would differ only in which of them the reader can be told
-  // about.
-  if (!isSettings(stored)) return { ...DEFAULT_SETTINGS, enabled: false };
+  // The defaults where nothing is stored, and where what is stored is not
+  // settings this build knows.
+  //
+  // The defaults plainly, and not with the names turned off. Whether a page
+  // should be left alone is a different question from what the settings are,
+  // and folding the first into the second put a value nobody chose where a
+  // setting goes — from which the next write took it and kept it, turning the
+  // extension off for good over a change to something else. What to do about
+  // settings that could not be read is {@link StoredSettings.understood}'s to
+  // tell a caller, and the caller's to decide.
+  if (!isSettings(stored)) return DEFAULT_SETTINGS;
 
   return {
     ...DEFAULT_SETTINGS,
@@ -338,14 +337,18 @@ function oneOf<T extends string>(allowed: readonly T[], value: unknown): T | und
  * A content script and a popup are two readers of one setting, and the page
  * has to follow the popup without being asked twice.
  */
-export function watchSettings(onChange: (settings: Settings) => void): () => void {
+export function watchSettings(onChange: (stored: StoredSettings) => void): () => void {
   const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
     if (area !== 'local') return;
 
     const change = changes[SETTINGS_KEY];
     if (!change) return;
 
-    onChange(settingsIn(change.newValue));
+    onChange({
+      settings: settingsIn(change.newValue),
+      fromLater: isFromLater(change.newValue),
+      understood: change.newValue === undefined || isSettings(change.newValue),
+    });
   };
 
   browser.storage.onChanged.addListener(listener);
