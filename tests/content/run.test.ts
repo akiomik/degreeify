@@ -728,6 +728,58 @@ describe('records of pages the reader has left', () => {
     stop();
   });
 
+  // A sweep that landed is not carried off by the write that follows it. The
+  // store stays full, the second write throws too, and a page that lost the
+  // sweep with it walks the whole store again on every try that is left.
+  it('keeps a sweep that landed where the write after it did not', async () => {
+    for (let index = 0; index < MOST_DETECTIONS + 5; index++) {
+      await writeDetection(`detected:page-${index}`, {
+        version: SCHEMA_VERSION,
+        pageId: `chordwiki:chart:${index}`,
+        key: null,
+        source: null,
+        statedKeys: 0,
+        unreadKeys: 0,
+        transposeOffset: 0,
+        named: 0,
+        applied: true,
+        updatedAt: index,
+      });
+    }
+
+    // Both writes of this run fail, so the sweep between them lands and the
+    // run throws on top of it.
+    const setting = browser.storage.local.set.bind(browser.storage.local);
+    let failing = true;
+    vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+      if (failing && Object.keys(items).some((name) => name.startsWith('detected:'))) {
+        throw new Error('quota exceeded');
+      }
+      return setting(items);
+    }) as never);
+
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+
+    // The sweep did land, whatever became of the writes around it.
+    const all = await browser.storage.local.get(null);
+    expect(Object.keys(all).filter((key) => key.startsWith('detected:'))).toHaveLength(
+      MOST_DETECTIONS - 1,
+    );
+
+    // And the run that finally writes does not sweep again, which is what
+    // losing it costs: another walk of the whole store, for a store that has
+    // already been swept.
+    failing = false;
+    const walking = vi.spyOn(browser.storage.local, 'get');
+    await saveOnly({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(await readDetection(RECORD)).toMatchObject({ named: 6 });
+    expect(walking.mock.calls.filter(([query]) => query === null)).toEqual([]);
+    stop();
+  });
+
   // Asking whether the record is already there can fail for the same reasons
   // the write just did, and the answer decides how much room to make. Guessed
   // the other way, a page that has been writing all along throws away a

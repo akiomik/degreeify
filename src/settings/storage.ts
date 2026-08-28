@@ -36,6 +36,27 @@ import { NOTATIONS, type Notation } from '@/core/notation';
  */
 export const SCHEMA_VERSION = 1;
 
+/**
+ * How long to wait before asking storage again, in milliseconds.
+ *
+ * Three tries, spread far enough apart to outlast the sort of failure this is
+ * for — an extension reloaded under an open page, storage busy behind another
+ * tab — and then it stops. Something still failing after five seconds is
+ * failing for a reason waiting will not fix, and a page that asks forever is
+ * a page that asks forever on every tab a reader has open.
+ *
+ * One schedule, because both sides of this are waiting on the same storage
+ * for the same reasons, and both say so. Kept in two places that agreed, the
+ * day one moved would be the day the comment on the other stopped being true
+ * without anything saying so.
+ *
+ * Armed one at a time on both sides, and only where something is still
+ * outstanding. Fired from a single instant, three tries against a slow
+ * storage are three answers to the first question rather than three attempts
+ * at it.
+ */
+export const RETRY_AFTER = [200, 1000, 5000];
+
 /** A key a person set for a page, as it is kept. */
 export interface KeyOverride {
   /** The tonic, spelled as `core` spells one: a letter and its accidentals. */

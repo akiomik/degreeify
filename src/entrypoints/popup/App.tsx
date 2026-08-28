@@ -28,6 +28,7 @@ import {
   loadSettings,
   loadStamps,
   pruneDetections,
+  RETRY_AFTER,
   readDetection,
   readSettings,
   recordKey,
@@ -38,9 +39,6 @@ import {
   watchSettings,
 } from '@/settings/storage';
 import styles from './App.module.css';
-
-/** How long to wait before reading the settings again, in milliseconds. */
-const RETRY_AFTER = [200, 1000, 5000];
 
 function App() {
   const [settings, setSettings] = createSignal<Settings | null>(null);
@@ -215,6 +213,48 @@ function App() {
     setSettings(stored ? asked(stored) : { ...DEFAULT_SETTINGS, enabled: false });
   };
 
+  /** Tries spent on whatever is outstanding, and the one waiting to be. */
+  let tries = 0;
+  let waiting: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Arms the next try where anything the popup opened needing is outstanding.
+   *
+   * One at a time, and only after the try before it has answered. Fired from
+   * a single instant, three tries against a storage that is merely slow are
+   * three answers to the first question rather than three attempts at it.
+   *
+   * A popup is open for seconds rather than for the life of a tab, so the
+   * tries that matter are the early ones; the last is there for a reader who
+   * leaves it open while whatever broke storage sorts itself out.
+   *
+   * Nothing cancels these where there is nobody to register the cleanup with,
+   * which is the opposite of what the watching does with the same question. A
+   * listener nobody can remove goes on being told things; a timer nobody can
+   * clear goes off once and is done, and cancelling it to be tidy would
+   * cancel the retrying this popup opened needing.
+   */
+  const tryAgainIfNeeded = () => {
+    if (!unreachable() && !lost && !unplaced && tidied) {
+      tries = 0;
+      return;
+    }
+    if (waiting !== null) return;
+
+    const after = RETRY_AFTER[tries];
+    if (after === undefined) return;
+
+    tries++;
+    waiting = setTimeout(() => {
+      waiting = null;
+      void reread().then(tryAgainIfNeeded, tryAgainIfNeeded);
+    }, after);
+  };
+
+  onCleanup(() => {
+    if (waiting !== null) clearTimeout(waiting);
+  });
+
   /** Whether the records have been tidied, which is once per popup. */
   let tidied = false;
 
@@ -361,30 +401,7 @@ function App() {
 
     await tidy();
 
-    // And asked again where any of that failed, on the same schedule the page
-    // uses for the same failure. A popup is open for seconds rather than for
-    // the life of a tab, so the tries that matter are the early ones — the
-    // last is there for a reader who leaves it open while whatever broke
-    // storage sorts itself out.
-    if (!unreachable() && !lost && !unplaced && tidied) return;
-
-    const again = RETRY_AFTER.map((after) => setTimeout(() => void reread(), after));
-
-    // And nothing where there is nobody to register the cleanup with, which
-    // is the opposite of what the watching does with the same question. A
-    // listener nobody can remove is one that goes on being told things; three
-    // timers nobody can clear go off once each and are done, and cancelling
-    // them to be tidy would cancel the retrying this popup opened needing.
-    //
-    // Unreachable as it stands: the owner is taken in the body of a component
-    // being rendered, where there is always one. It is here because there is
-    // no way to say that in the types.
-    if (owner)
-      runWithOwner(owner, () =>
-        onCleanup(() => {
-          for (const timer of again) clearTimeout(timer);
-        }),
-      );
+    tryAgainIfNeeded();
   });
 
   /**

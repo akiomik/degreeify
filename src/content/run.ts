@@ -10,6 +10,7 @@ import {
   loadStamp,
   MOST_DETECTIONS,
   pruneDetections,
+  RETRY_AFTER,
   readSettings,
   recordKey,
   SCHEMA_VERSION,
@@ -113,12 +114,6 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
    * read the record from before the change and say six chords are named over
    * a chart showing chord names.
    *
-   * Three tries, spread far enough apart to outlast the sort of failure this
-   * is for — an extension reloaded under an open page, storage busy behind
-   * another tab — and then it stops. Something still failing after five
-   * seconds is failing for a reason waiting will not fix, and a page that
-   * asks forever is a page that asks forever on every tab a reader has open.
-   *
    * Spent per spell of trouble rather than per page: a run that settles hands
    * the next failure a fresh three. Which cannot run away, because settling
    * is writes landing.
@@ -201,7 +196,16 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
         // asked for. The record would stay gone, which is the failure that
         // watcher exists to prevent.
         const mine = ++writing;
-        const swept = await remember(pageId, stored, painted, first);
+
+        // And only where it was done. A prune that failed on its own — a read
+        // of the whole store that would not answer, a removal that would not
+        // land — resolves quietly, and spending the flag on it leaves the
+        // page never sweeping again for the rest of its life. Told rather
+        // than asked, so that a write throwing after a sweep that landed does
+        // not carry the sweep off with it.
+        await remember(pageId, stored, painted, first, () => {
+          tidied = true;
+        });
 
         // Both marked only once the whole of it has been done. Marked before,
         // a tidying that never finished would be spent all the same — and a
@@ -209,12 +213,6 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
         // popup would go on telling its reader to open a chord chart on the
         // chord chart in front of them for the rest of that page's life.
         if (writing === mine) recorded = true;
-
-        // And only where it was done. A prune that failed on its own — a read
-        // of the whole store that would not answer, a removal that would not
-        // land — resolves quietly, and spending the flag on it leaves the
-        // page never sweeping again for the rest of its life.
-        if (swept) tidied = true;
       }
     };
 
@@ -319,9 +317,6 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   };
 }
 
-/** How long to wait before reading the settings again, in milliseconds. */
-const RETRY_AFTER = [200, 1000, 5000];
-
 /**
  * Everything about the settings that this page is shown from.
  *
@@ -379,7 +374,8 @@ async function remember(
   stored: string | null,
   { report, offset, applied }: ReturnType<typeof paint>,
   tidy: boolean,
-): Promise<boolean> {
+  swept: () => void,
+): Promise<void> {
   // Whether or not the names are being shown, and only where the key was the
   // one the chart was read in.
   //
@@ -401,7 +397,10 @@ async function remember(
   // Spent, on a page with nowhere to write. There is nothing to sweep for and
   // nothing a later run could do differently, and the sweep is only ever
   // asked for once.
-  if (!stored) return true;
+  if (!stored) {
+    swept();
+    return;
+  }
 
   // And what was found, last, because it is the one of the two that can fail
   // on a page that is otherwise fine — a full quota, an extension reloaded
@@ -421,14 +420,18 @@ async function remember(
   // After the writing, so that what was just written is counted and the store
   // settles at the number it is held to rather than one above it.
   //
-  // Says whether it was done. Failing is allowed — the record is written
-  // either way, and a store one record over the number it is held to is not
-  // worth a page in chord names — but it must not be mistaken for done.
-  const tidying = (most: number) =>
-    pruneDetections(most, stored).then(
+  // Told as soon as it is done rather than handed back at the end. Failing is
+  // allowed — the record is written either way, and a store one record over
+  // the number it is held to is not worth a page in chord names — but a sweep
+  // that landed must not be lost by what happens after it. Below, what
+  // happens after it is a write that can throw.
+  const tidying = async (most: number) => {
+    const done = await pruneDetections(most, stored).then(
       () => true,
       () => false,
     );
+    if (done) swept();
+  };
 
   try {
     await writeDetection(stored, found);
@@ -453,12 +456,12 @@ async function remember(
     // most likely has one, and guessing the other way evicts a record that
     // did not need to go.
     const already = await isStored(stored).catch(() => true);
-    const swept = await tidying(already ? MOST_DETECTIONS : MOST_DETECTIONS - 1);
+    await tidying(already ? MOST_DETECTIONS : MOST_DETECTIONS - 1);
     await writeDetection(stored, found);
-    return swept;
+    return;
   }
 
-  return tidy ? await tidying(MOST_DETECTIONS) : true;
+  if (tidy) await tidying(MOST_DETECTIONS);
 }
 
 /**
