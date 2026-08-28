@@ -264,6 +264,29 @@ export interface StoredSettings {
   readonly understood: boolean;
 }
 
+/**
+ * The settings as anything should act on them, or show them.
+ *
+ * Nothing done to any page where what is stored is not settings this build
+ * knows — whether it came from a later build or from a shape nothing here can
+ * account for. What would be used instead is this build's own defaults, which
+ * say to rewrite every chart, and a reader who had turned that off would find
+ * it back on.
+ *
+ * An earlier version is included, though it may be written over. Knowing what
+ * a shape is to be replaced with is not knowing what it said, and the day the
+ * version first moves is the day the change that moved it owes those readers
+ * a migration — until which their answers are as unread as anyone else's.
+ *
+ * Here rather than in the settings themselves. A value nobody chose, sitting
+ * where a setting goes, is one the next write takes for an answer — which is
+ * why what is written starts from {@link StoredSettings.settings} and only
+ * what is shown and acted on comes through here.
+ */
+export function asked({ settings, understood }: StoredSettings): Settings {
+  return understood ? settings : { ...settings, enabled: false };
+}
+
 export async function readSettings(): Promise<StoredSettings> {
   const stored = (await browser.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY];
 

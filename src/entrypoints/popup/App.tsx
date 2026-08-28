@@ -22,6 +22,7 @@ import {
   withoutOverride,
 } from '@/settings/overrides';
 import {
+  asked,
   DEFAULT_SETTINGS,
   type Detection,
   type KeyOverride,
@@ -113,12 +114,16 @@ function App() {
     // naming anything — one failure answered two ways, and the one the reader
     // can see would be the wrong one.
     //
-    // Only where the read itself failed. Settings that were read and were not
-    // settings show as the defaults, which is what they are and what the line
-    // above them says: the page leaves itself alone over them, and that is
-    // the page's business rather than a value to be shown as an answer and
-    // written back as one.
-    setSettings(stored?.settings ?? { ...DEFAULT_SETTINGS, enabled: false });
+    // As every page is acting on them, which for settings that could not be
+    // read is with the names off. Shown as the plain defaults, the checkbox
+    // would say the names are on while no chart anywhere is named — and the
+    // reader's first click would turn them off again, so it would take two to
+    // turn them on.
+    //
+    // What is written still starts from what was read rather than from this.
+    // A value nobody chose, sitting where a setting goes, is one the next
+    // write takes for an answer.
+    setSettings(stored ? asked(stored) : { ...DEFAULT_SETTINGS, enabled: false });
 
     const key = await addressInFront();
     if (key) {

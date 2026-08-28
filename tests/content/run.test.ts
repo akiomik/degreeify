@@ -152,6 +152,11 @@ describe('a page whose settings are not settings', () => {
   it.each([
     ['from a later build', { ...DEFAULT_SETTINGS, version: SCHEMA_VERSION + 1 }],
     ['in a shape nothing accounts for', { ...DEFAULT_SETTINGS, keyOverrides: 7 }],
+    // Included, though they may be written over. Knowing what a shape is to
+    // be replaced with is not knowing what it said, and until the change that
+    // moves the version brings a migration those answers are as unread as
+    // anyone else's.
+    ['from an earlier build', { ...DEFAULT_SETTINGS, version: SCHEMA_VERSION - 1 }],
   ])('leaves the chart alone where they are %s', async (_what, settings) => {
     await browser.storage.local.set({ settings });
 

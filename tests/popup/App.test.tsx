@@ -425,6 +425,34 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // Shown as every page is acting on them. Shown as the plain defaults, the
+  // checkbox would say the names are on while no chart anywhere is named —
+  // and the reader's first click would turn them off again, so it would take
+  // two to turn them on.
+  it('shows the names as off where the settings were not settings', async () => {
+    await browser.storage.local.set({ settings: { version: SCHEMA_VERSION, keyOverrides: 7 } });
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+
+    expect(root.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(false);
+    dispose();
+  });
+
+  // And one click turns them on, because what is written starts from what was
+  // read rather than from what is shown.
+  it('turns the names on with one click from there', async () => {
+    await browser.storage.local.set({ settings: { version: SCHEMA_VERSION, keyOverrides: 7 } });
+    await onATab(ADDRESS, detection());
+
+    const { root, dispose } = await open();
+    root.querySelector<HTMLInputElement>('input[type="checkbox"]')?.click();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect((await loadSettings()).enabled).toBe(true);
+    dispose();
+  });
+
   // The reading this build could not use is not written back as an answer. A
   // value nobody chose, sitting where a setting goes, is one the next change
   // to something else takes for the reader's own.

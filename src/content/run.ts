@@ -3,6 +3,7 @@ import type { Key } from '@/core/key';
 import { formatNote } from '@/core/pitch';
 import { overrideFor } from '@/settings/overrides';
 import {
+  asked,
   DEFAULT_SETTINGS,
   type Detection,
   loadStamp,
@@ -12,7 +13,6 @@ import {
   recordKey,
   SCHEMA_VERSION,
   type Settings,
-  type StoredSettings,
   saveStamp,
   USED_AT_GRANULARITY,
   watchForgetting,
@@ -206,23 +206,6 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
     forgetting();
     doc.removeEventListener('visibilitychange', rewrite);
   };
-}
-
-/**
- * The settings as this page should act on them.
- *
- * Nothing done to any page where what is stored is not settings this build
- * knows — whether it came from a later build or from a shape nothing here can
- * account for. What would be used instead is this build's own defaults, which
- * say to rewrite every chart, and a reader who had turned that off would find
- * it back on.
- *
- * Decided here rather than carried in the settings. A value nobody chose,
- * sitting where a setting goes, is one the next write takes for an answer:
- * kept there, a reader changing something else wrote it back as their own.
- */
-function asked({ settings, understood }: StoredSettings): Settings {
-  return understood ? settings : { ...settings, enabled: false };
 }
 
 /**
