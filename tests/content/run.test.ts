@@ -321,6 +321,57 @@ describe('a page whose settings cannot be read', () => {
     expect(shown(doc)[1]).toBe('Ⅵm7');
   });
 
+  // The two fail apart. Tries spent on a settings read that will not answer,
+  // on a page whose record writes fine, must not be charged to a record that
+  // will not write later — the reader changes a setting, the writing of what
+  // the page now shows fails, and nothing tries again for the rest of that
+  // page's life.
+  it('has tries left for the record where the settings spent theirs', async () => {
+    vi.useFakeTimers();
+    try {
+      const reading = browser.storage.local.get.bind(browser.storage.local);
+      let unreadable = true;
+      vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+        if (unreadable && query === 'settings') throw new Error('context invalidated');
+        return reading(query);
+      }) as never);
+
+      const doc = load('chordwiki-basic');
+      const stop = await run(doc, chordwiki, new URL(ADDRESS));
+
+      // The record wrote; the settings never read, so the page is left in
+      // chord names. Every try goes on the read, and they run out.
+      expect(await readDetection(RECORD)).toMatchObject({ named: 6, applied: false });
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      // And now the other one fails, on a page that has spent nothing on it.
+      unreadable = false;
+      const writing = browser.storage.local.set.bind(browser.storage.local);
+      let full = true;
+      vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+        if (full && Object.keys(items).some((name) => name.startsWith('detected:'))) {
+          throw new Error('quota exceeded');
+        }
+        return writing(items);
+      }) as never);
+
+      await saveKept({ ...DEFAULT_SETTINGS, enabled: true }, {}, {});
+      await vi.advanceTimersByTimeAsync(0);
+
+      // The page is named now, and the record still says it is not.
+      expect(shown(doc)[0]).toBe('I');
+      expect(await readDetection(RECORD)).toMatchObject({ applied: false });
+
+      full = false;
+      await vi.advanceTimersByTimeAsync(200);
+
+      expect(await readDetection(RECORD)).toMatchObject({ applied: true });
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // And gives up, rather than asking a storage that is not coming back for as
   // long as the tab is open.
   it('stops reading the settings again once the tries have run out', async () => {

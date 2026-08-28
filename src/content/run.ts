@@ -99,6 +99,10 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
 
   /** Tries spent on whatever is outstanding, and the one waiting to be. */
   let tries = 0;
+
+  /** What was done as of the last arming, so that getting more done shows. */
+  let hadRead = false;
+  let hadRecorded = false;
   let waiting: ReturnType<typeof setTimeout> | null = null;
 
   /**
@@ -124,17 +128,25 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
    * read the record from before the change and say six chords are named over
    * a chart showing chord names.
    *
-   * Spent per spell of trouble rather than per page: a run that settles hands
-   * the next failure a fresh three. Which cannot run away, because settling
-   * is writes landing.
+   * Spent per spell of trouble rather than per page: a run that gets one of
+   * the two done hands what is left a fresh three. Which cannot run away,
+   * because getting one done is a read or a write landing.
+   *
+   * On either of them rather than on both. The two fail apart — a settings
+   * read that will not answer on a page whose record writes fine is the
+   * ordinary shape of it — and spending the tries on one of them and then
+   * charging them to the other leaves the second failure with nothing: the
+   * reader changes a setting, the record will not write, and nothing tries
+   * again for the rest of that page's life.
    */
   const tryAgainIfNeeded = () => {
     if (gone) return;
 
-    if (read && recorded) {
-      tries = 0;
-      return;
-    }
+    if ((read && !hadRead) || (recorded && !hadRecorded)) tries = 0;
+    hadRead = read;
+    hadRecorded = recorded;
+
+    if (read && recorded) return;
     if (waiting !== null) return;
 
     const after = RETRY_AFTER[tries];
