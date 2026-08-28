@@ -159,8 +159,12 @@ describe('reading settings that are not settings', () => {
   // a settings key removed on the one that says null would have every open
   // chart strip its names and keep them off, where a fresh install has them
   // on.
+  //
+  // Answered rather than stored, because this storage drops a null on the way
+  // in and hands back an absent key — which is one of the two answers and not
+  // the one this is about.
   it.each([undefined, null])('is understood where the key holds %j', async (stored) => {
-    await browser.storage.local.set({ settings: stored });
+    vi.spyOn(browser.storage.local, 'get').mockResolvedValue({ settings: stored } as never);
 
     expect(await readSettings()).toEqual({
       settings: DEFAULT_SETTINGS,
