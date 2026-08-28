@@ -417,6 +417,22 @@ describe('what was found on a page', () => {
     expect(await readDetection(key)).toEqual(detection(1));
   });
 
+  // Every field the popup reads out or decides by. Checked on the version
+  // alone, a record carrying the right one and less than the whole shape puts
+  // the popup back where the guard was written to keep it from: counting
+  // `undefined` chords, and offering to set a key on a chart that changes key
+  // because `undefined > 1` is false.
+  it.each(['statedKeys', 'unreadKeys', 'named', 'transposeOffset', 'source', 'key', 'applied'])(
+    'is nothing where the record has no %s',
+    async (field) => {
+      const { [field]: dropped, ...rest } = detection(1) as unknown as Record<string, unknown>;
+      expect(dropped).not.toBeUndefined();
+
+      await browser.storage.local.set({ 'detected:partial': rest });
+      expect(await readDetection('detected:partial')).toBeNull();
+    },
+  );
+
   it('is nothing where nothing was written', async () => {
     expect(await readDetection('detected:nothing')).toBeNull();
   });

@@ -619,6 +619,29 @@ describe('the popup on a chart', () => {
     expect(get.mock.calls).toHaveLength(asked);
   });
 
+  // A content script writes its record as soon as it has read the page — the
+  // seconds the "give this one a moment" line is about. Counting to the
+  // number without it leaves the store one over as soon as it lands, on
+  // exactly the page the reader is looking at.
+  it('leaves room for the record of a page that has not written one yet', async () => {
+    for (let index = 0; index < MOST_DETECTIONS + 5; index++) {
+      await writeDetection(`detected:page-${index}`, {
+        ...detection(),
+        pageId: `chordwiki:chart:${index}`,
+        updatedAt: index + 2,
+      });
+    }
+    await onATab(ADDRESS);
+
+    const { dispose } = await open();
+
+    const all = await browser.storage.local.get(null);
+    expect(Object.keys(all).filter((key) => key.startsWith('detected:'))).toHaveLength(
+      MOST_DETECTIONS - 1,
+    );
+    dispose();
+  });
+
   // A chart whose record has not arrived is not a page with no chart on it.
   // A content script waits for the page's own font before it measures
   // anything, which on a slow page is seconds — and a popup opened inside
@@ -1380,17 +1403,26 @@ describe('the popup on a chart', () => {
   // be read with. Asked a looser one, it would take a key the page then
   // refuses — a reader looking at a key they chose and a page that has never
   // heard of it.
-  it.each([1.5, '3'])(
-    'does not offer a key where the page says it has moved by %s',
-    async (offset) => {
-      await onATab(ADDRESS, detection({ statedKeys: 1, transposeOffset: offset as never }));
-      const { root, dispose } = await open();
+  it('does not offer a key where the page says it has moved by 1.5', async () => {
+    await onATab(ADDRESS, detection({ statedKeys: 1, transposeOffset: 1.5 }));
+    const { root, dispose } = await open();
 
-      expect(root.textContent).toContain('does not say how far the chart has been transposed');
-      expect(root.querySelectorAll('select')).toHaveLength(2);
-      dispose();
-    },
-  );
+    expect(root.textContent).toContain('does not say how far the chart has been transposed');
+    expect(root.querySelectorAll('select')).toHaveLength(2);
+    dispose();
+  });
+
+  // A number the page could not have meant is one thing; something that is
+  // not a number is another. The first is a page saying where it is in a way
+  // this cannot use, and the popup says so; the second is not a record at
+  // all, and there is nothing to say about the page it claims to describe.
+  it('has nothing to say where the record says it has moved by "3"', async () => {
+    await onATab(ADDRESS, detection({ statedKeys: 1, transposeOffset: '3' as never }));
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('Nothing to show for this page yet');
+    dispose();
+  });
 
   // The reading of what is on the page runs again whenever a page writes it,
   // for reasons of its own. A reader who has just chosen a mode has not had

@@ -172,6 +172,12 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
     // rejected for good, and the page would stop following the settings
     // silently and for the rest of its life.
     const next = async () => {
+      // Nothing for a page that has been let go of. Stopping takes away the
+      // listeners and the tries, and a run already queued behind them would
+      // still paint the page and write down what it found — which in a test
+      // is the next one's storage, and is what the stopping is for.
+      if (gone) return;
+
       current = await settings();
       const wanted = matters(current, pageId);
 

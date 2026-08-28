@@ -27,6 +27,7 @@ import {
   type KeyStamps,
   loadSettings,
   loadStamps,
+  MOST_DETECTIONS,
   pruneDetections,
   RETRY_AFTER,
   readDetection,
@@ -307,7 +308,14 @@ function App() {
     // tidying, and taking it for one leaves the popup — which is where the
     // tidying belongs — never doing it, so the records stay over the number
     // they are held to until the next one opens.
-    tidied = await pruneDetections(undefined, where).then(
+    // One short of the number where this page has no record yet. Its content
+    // script writes one as soon as it has read the page — the seconds the
+    // "give this one a moment" line is about — and counting to the number
+    // without it leaves the store one over as soon as it lands, on exactly
+    // the page the reader is looking at.
+    const room = MOST_DETECTIONS - (detection() ? 0 : 1);
+
+    tidied = await pruneDetections(room, where).then(
       () => true,
       () => false,
     );

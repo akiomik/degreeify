@@ -294,6 +294,33 @@ describe('a page whose settings cannot be read', () => {
     expect(get.mock.calls).toHaveLength(asked);
   });
 
+  // Stopping takes away the listeners and the tries, and a run already queued
+  // behind them would still paint the page and write down what it found —
+  // which in a test is the next one's storage.
+  it('does not finish a run queued before it was stopped', async () => {
+    const doc = load('chordwiki-basic');
+    const stop = await start(doc);
+
+    // Slow enough to write that a change arriving behind it waits its turn,
+    // which is the window the stopping has to reach into.
+    const setting = browser.storage.local.set.bind(browser.storage.local);
+    vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+      const written = await setting(items);
+      if (Object.keys(items).some((name) => name.startsWith('detected:'))) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return written;
+    }) as never);
+
+    await saveOnly({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' });
+    await saveOnly({ ...DEFAULT_SETTINGS, enabled: false });
+    stop();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // The first change was shown; the one queued behind it was not.
+    expect(shown(doc)[1]).toBe('Ⅵm7');
+  });
+
   // And gives up, rather than asking a storage that is not coming back for as
   // long as the tab is open.
   it('stops reading the settings again once the tries have run out', async () => {

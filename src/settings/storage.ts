@@ -655,7 +655,30 @@ function isDetection(value: unknown): value is Detection {
     // without it would read as a page that named nothing. Better no record —
     // which the popup already has a line for, and which the page replaces on
     // its next run — than a confident wrong count.
-    typeof value.applied === 'boolean'
+    typeof value.applied === 'boolean' &&
+    // And every field the popup reads out or decides by, which is the whole
+    // of the rest. Checking the version alone leaves the record this guard
+    // was written against — a popup counting `undefined` chords and offering
+    // to set a key on a chart that changes key, because `undefined > 1` is
+    // false — reachable from anything carrying the right version and less
+    // than the whole shape.
+    typeof value.statedKeys === 'number' &&
+    typeof value.unreadKeys === 'number' &&
+    typeof value.named === 'number' &&
+    (value.transposeOffset === null || typeof value.transposeOffset === 'number') &&
+    (value.source === null || KEY_SOURCES.includes(value.source as KeySource)) &&
+    isReadKey(value.key)
+  );
+}
+
+const KEY_SOURCES: readonly KeySource[] = ['page', 'inferred', 'manual'];
+const MODES: readonly Mode[] = ['major', 'minor'];
+
+/** The key a chart was read in, as a record carries it. */
+function isReadKey(value: unknown): boolean {
+  return (
+    value === null ||
+    (isRecord(value) && typeof value.tonic === 'string' && MODES.includes(value.mode as Mode))
   );
 }
 
