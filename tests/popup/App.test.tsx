@@ -154,13 +154,13 @@ describe('the popup where it cannot work out which tab it is on', () => {
   // looking, the popup shows a heading, the settings, and a gap where
   // everything about the page goes — with nothing to say whether it is still
   // asking, gave up, or is simply not on a chart.
-  it('says it could not work out which page this is once the tries are spent', async () => {
+  it('says it could not find out about the page once the tries are spent', async () => {
     vi.spyOn(browser.tabs, 'query').mockRejectedValue(new Error('no window'));
     const { root, dispose } = await open();
 
     await new Promise((resolve) => setTimeout(resolve, 7000));
 
-    expect(root.textContent).toContain('could not work out which page this is');
+    expect(root.textContent).toContain('could not find out about this page');
     expect(root.textContent).not.toContain('Open a ChordWiki chord chart');
     dispose();
   }, 15000);
@@ -538,12 +538,15 @@ describe('the popup on a chart', () => {
     }) as never);
 
     const { root, dispose } = await open();
-    expect(root.textContent).toContain('Open a ChordWiki chord chart');
+
+    // Not that there is no chart here, which is a different thing from a read
+    // that would not answer — and would be a guess about a chart that may
+    // well be named end to end.
+    expect(root.textContent).not.toContain('Open a ChordWiki chord chart');
 
     broken = false;
     await new Promise((resolve) => setTimeout(resolve, 400));
 
-    expect(root.textContent).not.toContain('Open a ChordWiki chord chart');
     expect(root.textContent).toContain('C — from the chart');
     get.mockRestore();
     dispose();

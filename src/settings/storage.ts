@@ -395,9 +395,12 @@ function settingsIn(stored: unknown): Settings {
   // tell a caller, and the caller's to decide.
   if (!isSettings(stored)) return DEFAULT_SETTINGS;
 
+  // Field by field, and not by spreading what was stored over the defaults.
+  // Every field this build knows is named below, so the spread would carry
+  // only the ones it does not — which nothing reads, and which the reader's
+  // next click would write back to storage under this build's name.
   return {
     ...DEFAULT_SETTINGS,
-    ...stored,
     enabled: typeof stored.enabled === 'boolean' ? stored.enabled : DEFAULT_SETTINGS.enabled,
     // Spread over rather than left to the spread. A stored object may carry
     // the field with nothing in it — the guard above allows that, and a

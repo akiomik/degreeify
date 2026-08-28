@@ -175,7 +175,7 @@ function App() {
 
   const place = (key: string) => {
     where = key;
-    lost = true;
+    setLost(true);
 
     listen(() =>
       watchDetection(key, (found) => {
@@ -183,7 +183,7 @@ function App() {
         // that arrives on its own is a record, and asking again for one the
         // popup is already showing is three round trips whose answers it
         // would throw away.
-        lost = false;
+        setLost(false);
         setDetection(found);
       }),
     );
@@ -237,15 +237,9 @@ function App() {
    * A popup is open for seconds rather than for the life of a tab, so the
    * tries that matter are the early ones; the last is there for a reader who
    * leaves it open while whatever broke storage sorts itself out.
-   *
-   * Nothing cancels these where there is nobody to register the cleanup with,
-   * which is the opposite of what the watching does with the same question. A
-   * listener nobody can remove goes on being told things; a timer nobody can
-   * clear goes off once and is done, and cancelling it to be tidy would
-   * cancel the retrying this popup opened needing.
    */
   const tryAgainIfNeeded = () => {
-    if (!unreachable() && !lost && !unplaced() && tidied) {
+    if (!unreachable() && !lost() && !unplaced() && tidied) {
       tries = 0;
       return;
     }
@@ -318,7 +312,7 @@ function App() {
 
     try {
       const found = await readDetection(where);
-      lost = false;
+      setLost(false);
 
       // Only where nothing has arrived in the meantime. What the watcher
       // heard is newer than what the read was sent to fetch.
@@ -331,11 +325,14 @@ function App() {
   /**
    * Whether the record for that page could not be read.
    *
-   * Told apart from there being none. A page that is not a chart has no
-   * record and never will, and asking again would be asking about nothing;
-   * a read that failed is a chart the popup has been told nothing about.
+   * Told apart from there being none, in what is asked again and in what is
+   * shown. A page that is not a chart has no record and never will, so asking
+   * again would be asking about nothing and "open a chord chart" is the truth
+   * about it. A read that failed is a chart the popup has been told nothing
+   * about, and that sentence would be a guess — on a chart that may well be
+   * named end to end.
    */
-  let lost = false;
+  const [lost, setLost] = createSignal(false);
 
   // What is stored is what was chosen, once it has arrived: a key loaded from
   // storage brings its mode with it, and the control has to show that mode
@@ -410,12 +407,13 @@ function App() {
       await fetchRecord();
     }
 
-    // Whatever came of it, so long as it was asked. A chart whose content
-    // script has not written a record yet has none to show, and telling its
-    // reader to open a chord chart is what the popup has to say until one
-    // arrives — saying it before asking is what this is about, and a page
-    // this could not place has not been asked about.
-    if (!unplaced()) setLooking(false);
+    // Whatever came of it, so long as it was asked and answered. A chart
+    // whose content script has not written a record yet has none to show, and
+    // telling its reader to open a chord chart is what the popup has to say
+    // until one arrives — saying it before asking is what this is about. A
+    // page this could not place has not been asked about, and one whose
+    // record would not read has been asked and told nothing.
+    if (!unplaced() && !lost()) setLooking(false);
 
     await tidy();
 
@@ -506,7 +504,10 @@ function App() {
       // on the chord chart in front of the reader, for as long as it stayed
       // open. Once the settings arrive it would say it while looking
       // otherwise well.
-      if (lost) await fetchRecord();
+      if (lost()) {
+        await fetchRecord();
+        if (!lost()) setLooking(false);
+      }
 
       // Last, because it was waiting on the address and because it is the one
       // thing here nobody is looking at.
@@ -732,13 +733,13 @@ function App() {
                    * is worth reopening it for.
                    */}
                   <Show
-                    when={unplaced()}
+                    when={unplaced() || lost()}
                     fallback={
                       <p class={styles.note}>Open a ChordWiki chord chart to use Degreeify.</p>
                     }
                   >
                     <p class={styles.warning}>
-                      Degreeify could not work out which page this is. Close this and open it again.
+                      Degreeify could not find out about this page. Close this and open it again.
                     </p>
                   </Show>
                 </Show>
