@@ -231,6 +231,42 @@ describe('a page whose settings cannot be read', () => {
     }
   });
 
+  // A later run can fail where the first did not. The reader turns the names
+  // off, the page repaints, and the writing of what it now shows fails twice
+  // — and the popup goes on reading the record from before the change, saying
+  // six chords are named over a chart showing chord names.
+  it('writes the record again where a later run was the one that failed', async () => {
+    vi.useFakeTimers();
+    try {
+      const doc = load('chordwiki-basic');
+      const stop = await run(doc, chordwiki, new URL(ADDRESS));
+      expect(await readDetection(RECORD)).toMatchObject({ named: 6, applied: true });
+
+      const real = browser.storage.local.set.bind(browser.storage.local);
+      let failing = true;
+      vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+        if (failing && Object.keys(items).some((name) => name.startsWith('detected:'))) {
+          throw new Error('quota exceeded');
+        }
+        return real(items);
+      }) as never);
+
+      await saveOnly({ ...DEFAULT_SETTINGS, enabled: false });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(shown(doc)[0]).toBe('C');
+      expect(await readDetection(RECORD)).toMatchObject({ applied: true });
+
+      failing = false;
+      await vi.advanceTimersByTimeAsync(200);
+
+      expect(await readDetection(RECORD)).toMatchObject({ applied: false });
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // And gives up, rather than asking a storage that is not coming back for as
   // long as the tab is open.
   it('stops reading the settings again once the tries have run out', async () => {

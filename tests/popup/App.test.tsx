@@ -512,6 +512,39 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // Working out which page the popup is over takes two round trips after the
+  // settings have already been shown, and nothing else tells "not a chart"
+  // from "still asking". Said and taken back inside a frame is still said.
+  it('never says there is no chart here, not even for a moment', async () => {
+    await onATab(ADDRESS, detection());
+
+    const root = document.createElement('div');
+    document.body.append(root);
+    const dispose = render(() => <App />, root);
+
+    // A turn of the microtask queue at a time. The reads this is about resolve
+    // as promises, and a whole turn of the event loop steps over every state
+    // between them — which is every state this is asking about.
+    const seen: boolean[] = [];
+    for (let tick = 0; tick < 200; tick++) {
+      seen.push(root.textContent?.includes('Open a ChordWiki chord chart') ?? false);
+      await Promise.resolve();
+    }
+
+    expect(seen.filter(Boolean)).toEqual([]);
+    expect(root.textContent).toContain('C — from the chart');
+    dispose();
+  });
+
+  // And still says it where there is no chart, once it has asked.
+  it('says there is no chart here once it has asked', async () => {
+    await onATab('https://ja.chordwiki.org/');
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('Open a ChordWiki chord chart');
+    dispose();
+  });
+
   // A popup that cannot ask which tab it is over has been told nothing, not
   // told there is no chart. Answered the same way, it says there is no chart
   // here on a chart, hides the whole key control, and never asks again.

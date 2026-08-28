@@ -95,6 +95,18 @@ function App() {
    */
   const [unreachable, setUnreachable] = createSignal(false);
 
+  /**
+   * Whether the popup is still working out what page it was opened over.
+   *
+   * Which takes two round trips — the address of the tab, then the record
+   * written for it — and both land after the settings, which are asked for
+   * first and on their own. Without this there is nothing to tell "not a
+   * chart" from "still asking", and every popup opened over a chart says
+   * there is no chart here before it says otherwise. Said and taken back
+   * inside a frame is still said.
+   */
+  const [looking, setLooking] = createSignal(true);
+
   /** Whether the mode on offer is one the reader has settled, one way or another. */
   let modeIsSettled = false;
 
@@ -292,6 +304,12 @@ function App() {
       place(key);
       await fetchRecord();
     }
+
+    // Whatever came of it. A chart whose content script has not written a
+    // record yet has none to show, and telling its reader to open a chord
+    // chart is what the popup has to say until one arrives — saying it before
+    // asking is what this is about.
+    setLooking(false);
 
     await tidy();
 
@@ -622,7 +640,11 @@ function App() {
 
             <Show
               when={detection()}
-              fallback={<p class={styles.note}>Open a ChordWiki chord chart to use Degreeify.</p>}
+              fallback={
+                <Show when={!looking()}>
+                  <p class={styles.note}>Open a ChordWiki chord chart to use Degreeify.</p>
+                </Show>
+              }
             >
               {(found) => (
                 <>

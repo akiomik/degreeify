@@ -98,6 +98,48 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
     await queue(settingsNow).catch(() => {});
   };
 
+  /** Tries spent on whatever is outstanding, and the one waiting to be. */
+  let tries = 0;
+  let waiting: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Arms the next try where the settings or the record are still outstanding.
+   *
+   * After every run rather than after the first, because a later run can fail
+   * where the first did not: a reader turns the names off, the page repaints,
+   * and the writing of what it now shows fails twice. Nothing else would try
+   * again — the reader is sitting on the page, and opening the popup is not a
+   * settings change and does not hide the page behind it — so the popup would
+   * read the record from before the change and say six chords are named over
+   * a chart showing chord names.
+   *
+   * Three tries, spread far enough apart to outlast the sort of failure this
+   * is for — an extension reloaded under an open page, storage busy behind
+   * another tab — and then it stops. Something still failing after five
+   * seconds is failing for a reason waiting will not fix, and a page that
+   * asks forever is a page that asks forever on every tab a reader has open.
+   *
+   * Spent per spell of trouble rather than per page: a run that settles hands
+   * the next failure a fresh three. Which cannot run away, because settling
+   * is writes landing.
+   */
+  const tryAgainIfNeeded = () => {
+    if (read && recorded) {
+      tries = 0;
+      return;
+    }
+    if (waiting !== null) return;
+
+    const after = RETRY_AFTER[tries];
+    if (after === undefined) return;
+
+    tries++;
+    waiting = setTimeout(() => {
+      waiting = null;
+      void retry();
+    }, after);
+  };
+
   const settingsNow = async (): Promise<Settings> => {
     if (read) return current;
 
@@ -175,7 +217,8 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
         if (swept) tidied = true;
       }
     };
-    showing = showing.then(next, next);
+
+    showing = showing.then(next, next).finally(tryAgainIfNeeded);
     return showing;
   };
 
@@ -268,27 +311,11 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   // that cannot be read is not a setting that was never made.
   await queue(settingsNow).catch(() => {});
 
-  // Three tries, spread far enough apart to outlast the sort of failure this
-  // is for — an extension reloaded under an open page, storage busy behind
-  // another tab — and then it stops. A read that is still failing after five
-  // seconds is failing for a reason waiting will not fix, and a page that
-  // asks forever is a page that asks forever on every tab a reader has open.
-  //
-  // For the record as well as for the settings, and for the same reason the
-  // writing tidies and tries again rather than waiting: the reader is sitting
-  // on this page, so neither a settings change nor its coming back into view
-  // is going to happen on its own. Opening the popup is not either — a
-  // browser action does not hide the page behind it — so a record that failed
-  // to write twice would leave the popup saying to open a chord chart, on the
-  // chord chart the reader opened it over.
-  const retries =
-    read && recorded ? [] : RETRY_AFTER.map((after) => setTimeout(() => void retry(), after));
-
   return () => {
     stop();
     forgetting();
     doc.removeEventListener('visibilitychange', rewrite);
-    for (const timer of retries) clearTimeout(timer);
+    if (waiting !== null) clearTimeout(waiting);
   };
 }
 
