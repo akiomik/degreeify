@@ -62,6 +62,16 @@ describe('a key set for a chart', () => {
     expect(named(settings, 0)).toBeNull();
   });
 
+  // A transposition that is not a count of semitones reaches the table by way
+  // of arithmetic on it, finds no row, and throws — out of the popup's first
+  // read, where it takes the whole popup with it.
+  it.each([Number.NaN, 1.5, Number.POSITIVE_INFINITY])(
+    'is nothing where the page says it has moved by %s',
+    (offset) => {
+      expect(named(withKey('C'), offset)).toBeNull();
+    },
+  );
+
   it('is nothing where none was set', () => {
     expect(named(DEFAULT_SETTINGS, 0)).toBeNull();
   });

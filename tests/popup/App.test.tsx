@@ -322,9 +322,13 @@ describe('the popup on a chart', () => {
   // how far the chart has been transposed cannot use a key, and cannot let go
   // of one either.
   it('can forget a key on a page that stopped saying how far it has moved', async () => {
-    await saveKept(withOverride(EMPTY, 'chordwiki:chart:Test Song', KEY_OF_G, 0, 1).settings, {
-      'chordwiki:chart:Test Song': 1,
-    });
+    await saveKept(
+      withOverride(EMPTY, 'chordwiki:chart:Test Song', KEY_OF_G, 0, 1).settings,
+      {
+        'chordwiki:chart:Test Song': 1,
+      },
+      {},
+    );
     await onATab(ADDRESS, detection({ statedKeys: 1, transposeOffset: null }));
 
     const { root, dispose } = await open();
@@ -394,6 +398,7 @@ describe('the popup on a chart', () => {
     await saveKept(
       withOverride(EMPTY, 'chordwiki:chart:Test Song', KEY_OF_C_MINOR, 0, 1).settings,
       { 'chordwiki:chart:Test Song': 1 },
+      {},
     );
     await onATab(ADDRESS, detection({ statedKeys: 0, key: null, source: null }));
 
@@ -427,6 +432,7 @@ describe('the popup on a chart', () => {
         keyOverrides: { 'chordwiki:chart:Test Song': { tonic: 'C', mode: 'dorian' as never } },
       },
       { 'chordwiki:chart:Test Song': 1 },
+      {},
     );
     await onATab(ADDRESS, detection());
 
@@ -449,9 +455,13 @@ describe('the popup on a chart', () => {
   // while the line above said it was set by hand.
   it.each(['F#', 'C#', 'G#', 'A'])('shows a stored key of %s minor', async (tonic) => {
     const stored = { tonic: note(tonic), mode: 'minor' } as const;
-    await saveKept(withOverride(EMPTY, 'chordwiki:chart:Test Song', stored, 0, 1).settings, {
-      'chordwiki:chart:Test Song': 1,
-    });
+    await saveKept(
+      withOverride(EMPTY, 'chordwiki:chart:Test Song', stored, 0, 1).settings,
+      {
+        'chordwiki:chart:Test Song': 1,
+      },
+      {},
+    );
     await onATab(ADDRESS, detection({ statedKeys: 0, key: null, source: null }));
 
     const { root, dispose } = await open();
@@ -460,6 +470,18 @@ describe('the popup on a chart', () => {
     const [tonics, modes] = [...root.querySelectorAll('select')];
     expect(modes?.value).toBe('minor');
     expect(tonics?.value).toBe(tonic);
+    dispose();
+  });
+
+  // A chart that changes key states one line per section, and this line is
+  // the only place the reader is told how much of it went unread — the
+  // warning below is for a chart named in spite of a line, and this is a
+  // chart that was not named at all.
+  it('counts the key lines it could not read where none of them could be', async () => {
+    await onATab(ADDRESS, detection({ statedKeys: 7, unreadKeys: 7, key: null, source: null }));
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('states 7 keys, and 7 of them could not be read');
     dispose();
   });
 

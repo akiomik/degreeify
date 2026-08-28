@@ -10,9 +10,9 @@ import {
 } from 'solid-js';
 import { browser } from 'wxt/browser';
 import type { SpellingPolicy } from '@/core/degree';
-import { CANONICAL_TONIC, formatKey, type Key, type Mode } from '@/core/key';
+import { CANONICAL_TONIC, type Key, type Mode } from '@/core/key';
 import type { Notation } from '@/core/notation';
-import { parseNote } from '@/core/pitch';
+import { formatNote, parseNote } from '@/core/pitch';
 import { type Kept, overrideFor, withOverride, withoutOverride } from '@/settings/overrides';
 import {
   DEFAULT_SETTINGS,
@@ -127,7 +127,7 @@ function App() {
         const [settings, stamps] = await Promise.all([loadSettings(), loadStamps()]);
         const changed = change({ settings, stamps });
 
-        await saveKept(changed.settings, changed.stamps);
+        await saveKept(changed.settings, changed.stamps, stamps);
 
         setSettings(changed.settings);
         setFailed(false);
@@ -433,9 +433,16 @@ async function addressInFront(): Promise<string | null> {
 /** What the popup says about the key a chart was read in. */
 function reading(found: Detection, enabled: boolean): string {
   if (!found.key) {
-    return found.statedKeys > 0
-      ? 'This chart states a key this could not read.'
-      : 'This chart states no key, and its chords do not settle one.';
+    if (found.statedKeys === 0)
+      return 'This chart states no key, and its chords do not settle one.';
+
+    // Counted, because a chart that changes key states one line per section
+    // and this is the only place the reader is told how much of it went
+    // unread — the warning below is for a chart that was named in spite of a
+    // line, and this is a chart that was not named at all.
+    return found.unreadKeys > 1
+      ? `This chart states ${found.statedKeys} keys, and ${found.unreadKeys} of them could not be read.`
+      : 'This chart states a key this could not read.';
   }
 
   const key = `${found.key.tonic}${found.key.mode === 'minor' ? 'm' : ''}`;
@@ -466,8 +473,9 @@ function whyNotOverridable(found: Detection): string {
     : 'This page does not say how far the chart has been transposed, so a key set here could not be kept.';
 }
 
+/** The tonic on its own, which is what the control offers and keeps. */
 function formatNoteOf(key: Key | null): string {
-  return key ? formatKey({ ...key, mode: 'major' }) : '';
+  return key ? formatNote(key.tonic) : '';
 }
 
 export default App;

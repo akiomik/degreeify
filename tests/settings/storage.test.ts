@@ -160,17 +160,38 @@ describe('the settings and the stamps written together', () => {
       return real(items);
     }) as never);
 
-    await saveKept({ ...DEFAULT_SETTINGS, enabled: false }, { page: 5 });
+    await saveKept({ ...DEFAULT_SETTINGS, enabled: false }, { page: 5 }, {});
 
     expect(writes).toEqual([['settings', 'used:page']]);
     expect((await loadSettings()).enabled).toBe(false);
     expect(await loadStamps()).toEqual({ page: 5 });
   });
 
+  // Only the stamps that changed. Written whole, this would put back every
+  // stamp as it stood when the popup read them — undoing a page that stamped
+  // a key in the meantime — and would write two hundred keys for a checkbox.
+  it('leave alone a stamp that did not change', async () => {
+    await saveKept(DEFAULT_SETTINGS, { one: 1, two: 2 }, {});
+
+    const writes: string[][] = [];
+    const real = browser.storage.local.set.bind(browser.storage.local);
+    vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+      writes.push(Object.keys(items));
+      return real(items);
+    }) as never);
+
+    // A page stamps `one` while the popup holds what it read a moment ago.
+    await saveStamp('one', 9);
+    await saveKept({ ...DEFAULT_SETTINGS, enabled: false }, { one: 1, two: 2 }, { one: 1, two: 2 });
+
+    expect(writes).toEqual([['used:one'], ['settings']]);
+    expect(await loadStamps()).toEqual({ one: 9, two: 2 });
+  });
+
   // A stamp for a chart that has no key left is a record nothing reads.
   it('forget a stamp whose key has gone', async () => {
-    await saveKept(DEFAULT_SETTINGS, { one: 1, two: 2 });
-    await saveKept(DEFAULT_SETTINGS, { one: 1 });
+    await saveKept(DEFAULT_SETTINGS, { one: 1, two: 2 }, {});
+    await saveKept(DEFAULT_SETTINGS, { one: 1 }, { one: 1, two: 2 });
 
     expect(await loadStamps()).toEqual({ one: 1 });
   });

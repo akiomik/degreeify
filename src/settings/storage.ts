@@ -174,13 +174,23 @@ export async function loadStamps(): Promise<KeyStamps> {
  * Failing to remove them leaves records nothing reads, which the next write
  * clears; failing to write the settings has to be a failure.
  */
-export async function saveKept(settings: Settings, stamps: KeyStamps): Promise<void> {
-  const known = await loadStamps();
+export async function saveKept(
+  settings: Settings,
+  stamps: KeyStamps,
+  before: KeyStamps,
+): Promise<void> {
+  // Only the stamps that changed. Written whole, this would put back every
+  // stamp as it stood when the popup read them — undoing a page that stamped
+  // a key in the meantime, which is the clobber the split into one key per
+  // chart was made to rule out. It would also write two hundred keys for a
+  // checkbox.
+  const changed = Object.entries(stamps)
+    .filter(([page, at]) => before[page] !== at)
+    .map(([page, at]) => [`${STAMP_PREFIX}${page}`, at]);
 
-  const written = Object.entries(stamps).map(([page, at]) => [`${STAMP_PREFIX}${page}`, at]);
-  await browser.storage.local.set({ [SETTINGS_KEY]: settings, ...Object.fromEntries(written) });
+  await browser.storage.local.set({ [SETTINGS_KEY]: settings, ...Object.fromEntries(changed) });
 
-  const gone = Object.keys(known)
+  const gone = Object.keys(before)
     .filter((page) => !(page in stamps))
     .map((page) => `${STAMP_PREFIX}${page}`);
 
