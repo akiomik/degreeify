@@ -53,6 +53,12 @@ const detection = (over: Partial<Detection> = {}): Detection => ({
 });
 
 /** Renders the popup and waits for what it reads out of storage. */
+/** One turn of the event loop, on whichever clock the test is running. */
+const tick0 = () =>
+  vi.isFakeTimers()
+    ? vi.advanceTimersByTimeAsync(0)
+    : new Promise((resolve) => setTimeout(resolve, 0));
+
 const open = async () => {
   const root = document.createElement('div');
   document.body.append(root);
@@ -62,8 +68,12 @@ const open = async () => {
   // The popup reads storage before it can show anything, and how many turns
   // of the loop that takes is not this test's business to know. Waited for by
   // what appears rather than by a count of ticks.
+  //
+  // Turned by whichever clock the test is running on. Under fake timers
+  // nothing moves without an explicit advance, and a popup opened in a test
+  // that has taken the clock over would otherwise never finish reading.
   for (let tick = 0; tick < 50 && !root.querySelector('select'); tick++) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await tick0();
   }
 
   return { root, dispose };
@@ -151,7 +161,7 @@ describe('the popup where it cannot work out which tab it is on', () => {
 
     expect(root.textContent).not.toContain('Nothing to show for this page yet');
     dispose();
-  });
+  }, 30_000);
 
   // And says which of the two it is once the asking has run out. Left
   // looking, the popup shows a heading, the settings, and a gap where
@@ -197,7 +207,7 @@ describe('the popup over settings this build cannot read', () => {
     expect(seen.filter((count) => count > 0)).toEqual([]);
     expect(root.textContent).toContain('written by a newer version');
     dispose();
-  });
+  }, 30_000);
 
   it('says so instead of offering to change them', async () => {
     await browser.storage.local.set({
@@ -497,7 +507,7 @@ describe('the popup on a chart', () => {
     expect(root.textContent).not.toContain('could not be read');
     get.mockRestore();
     dispose();
-  });
+  }, 30_000);
 
   // The key set for a chart lives in the settings, so a read that failed
   // shows no key set — directly under a line, read from the record the page
@@ -553,7 +563,7 @@ describe('the popup on a chart', () => {
     expect(root.textContent).toContain('C — from the chart');
     get.mockRestore();
     dispose();
-  });
+  }, 30_000);
 
   // Said in between the placing and the record, a page just placed and being
   // read is a page the popup is telling its reader it could not find out
@@ -592,7 +602,7 @@ describe('the popup on a chart', () => {
     expect(seen.filter(Boolean)).toEqual([]);
     expect(root.textContent).toContain('C — from the chart');
     dispose();
-  });
+  }, 30_000);
 
   // The cleanup clears the timer that is waiting, and a try already in flight
   // has no timer to clear — its continuation would arm the next one on a root
@@ -620,7 +630,7 @@ describe('the popup on a chart', () => {
     await new Promise((resolve) => setTimeout(resolve, 1500));
 
     expect(get.mock.calls).toHaveLength(asked);
-  });
+  }, 30_000);
 
   // No place is held open for a record that has not arrived. One was, for the
   // page whose content script is still reading it — but nothing here can tell
@@ -710,6 +720,51 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // Four things can be outstanding, and they are not the same failure. A tab
+  // that would not say what it was on the first two tries leaves the record
+  // it then has to read with one — and the popup gives up on a chart whose
+  // content script had simply not written yet.
+  it('has tries left for the record where placing the page spent them', async () => {
+    vi.useFakeTimers();
+    try {
+      await onATab(ADDRESS, detection());
+
+      // Placed on the last of the three tries, so the whole budget goes on
+      // working out which page this is.
+      let asking = 0;
+      vi.spyOn(browser.tabs, 'query').mockImplementation((async () => {
+        asking++;
+        if (asking <= 3) throw new Error('context invalidated');
+        return [{ url: ADDRESS }] as never;
+      }) as never);
+
+      // And the record read is still failing when it is, so it needs tries of
+      // its own.
+      const real = browser.storage.local.get.bind(browser.storage.local);
+      const key = recordKey(ADDRESS);
+      if (!key) throw new Error('that is an address');
+      let broken = true;
+      vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+        if (broken && query === key) throw new Error('context invalidated');
+        return real(query);
+      }) as never);
+
+      const { root, dispose } = await open();
+
+      // Past the third try, which places the page and fails to read it.
+      await vi.advanceTimersByTimeAsync(7000);
+      expect(root.textContent).not.toContain('C — from the chart');
+
+      broken = false;
+      await vi.advanceTimersByTimeAsync(7000);
+
+      expect(root.textContent).toContain('C — from the chart');
+      dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // A record that arrives on its own is a record. Asking again for one the
   // popup is already showing is round trips whose answers it throws away —
   // `fetchRecord` prefers what arrived — and the read failing is not the same
@@ -742,7 +797,7 @@ describe('the popup on a chart', () => {
 
     expect(get.mock.calls.filter(([query]) => query === key)).toHaveLength(asked);
     dispose();
-  });
+  }, 30_000);
 
   // And is asked again, a bounded number of times, where there is none yet.
   // The watching is what normally brings a record, and a listener that could
@@ -792,7 +847,7 @@ describe('the popup on a chart', () => {
     expect(seen.filter(Boolean)).toEqual([]);
     expect(root.textContent).toContain('C — from the chart');
     dispose();
-  });
+  }, 30_000);
 
   // And still says it where there is no chart, once it has asked.
   it('says there is nothing to show once it has asked', async () => {
@@ -947,7 +1002,7 @@ describe('the popup on a chart', () => {
 
     expect(root.textContent).toContain('C — from the chart');
     dispose();
-  });
+  }, 30_000);
 
   // Tidying without knowing which page the popup is over drops the record it
   // is about to read. A reader who has browsed enough charts since has this
@@ -979,7 +1034,7 @@ describe('the popup on a chart', () => {
 
     expect(root.textContent).toContain('C — from the chart');
     dispose();
-  });
+  }, 30_000);
 
   // A walk of the store that would not answer is not a tidying. Taken for
   // one, the popup — which is where the tidying belongs — never does it, and
@@ -1017,7 +1072,7 @@ describe('the popup on a chart', () => {
       MOST_DETECTIONS,
     );
     dispose();
-  });
+  }, 30_000);
 
   // And is not asked again once it has been answered. A tab with no chart
   // address is not going to grow one while the popup is open.
@@ -1033,7 +1088,7 @@ describe('the popup on a chart', () => {
     expect(asking.mock.calls).toHaveLength(asked);
     expect(root.textContent).toContain('Nothing to show for this page yet');
     dispose();
-  });
+  }, 30_000);
 
   // The stamps are read by walking the whole of storage, and a setting that
   // is not about any chart's key hands them straight back — so the walk is a

@@ -247,17 +247,6 @@ function App() {
   let waiting: ReturnType<typeof setTimeout> | null = null;
 
   /**
-   * Arms the next try where anything the popup opened needing is outstanding.
-   *
-   * One at a time, and only after the try before it has answered. Fired from
-   * a single instant, three tries against a storage that is merely slow are
-   * three answers to the first question rather than three attempts at it.
-   *
-   * A popup is open for seconds rather than for the life of a tab, so the
-   * tries that matter are the early ones; the last is there for a reader who
-   * leaves it open while whatever broke storage sorts itself out.
-   */
-  /**
    * Whether the popup has gone, so that nothing arms a try for a dead one.
    *
    * The cleanup clears the timer that is waiting, and a try already in flight
@@ -268,6 +257,26 @@ function App() {
    */
   let gone = false;
 
+  /** What was outstanding when the tries were last handed out. */
+  let left: readonly boolean[] = [];
+
+  /**
+   * Arms the next try where anything the popup opened needing is outstanding.
+   *
+   * One at a time, and only after the try before it has answered. Fired from
+   * a single instant, three tries against a storage that is merely slow are
+   * three answers to the first question rather than three attempts at it.
+   *
+   * A popup is open for seconds rather than for the life of a tab, so the
+   * tries that matter are the early ones; the last is there for a reader who
+   * leaves it open while whatever broke storage sorts itself out.
+   *
+   * Three to a spell, and anything getting done starts a new one. Four things
+   * can be outstanding here and they are not the same failure: a tab that
+   * would not say what it was on the first two tries leaves the record it
+   * then has to read with one, and the popup gives up on a chart whose
+   * content script had simply not written yet.
+   */
   const tryAgainIfNeeded = () => {
     if (gone) return;
 
@@ -279,10 +288,14 @@ function App() {
     // on a page that will never have a record they cost three reads.
     const waited = where !== null && !detection();
 
-    if (!unreachable() && !lost() && !unplaced() && !waited && tidied) {
-      tries = 0;
-      return;
-    }
+    // Compared one by one rather than counted. Placing a page settles one of
+    // these and starts another — the record it can now read — so the number
+    // outstanding can stay where it was over something that plainly got done.
+    const now = [unreachable(), lost(), unplaced(), waited, !tidied];
+    if (now.some((still, index) => !still && left[index])) tries = 0;
+    left = now;
+
+    if (!now.some(Boolean)) return;
     if (waiting !== null) return;
 
     const after = RETRY_AFTER[tries];

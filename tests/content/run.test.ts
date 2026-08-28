@@ -372,6 +372,42 @@ describe('a page whose settings cannot be read', () => {
     }
   });
 
+  // And a spell that ended in the tries running out is still over. The reader
+  // changes one setting whose record will not write, waits out the tries, and
+  // changes another — which must not find the budget already spent.
+  it('has tries left for a failure after one that spent them', async () => {
+    vi.useFakeTimers();
+    try {
+      const stop = await run(load('chordwiki-basic'), chordwiki, new URL(ADDRESS));
+
+      const writing = browser.storage.local.set.bind(browser.storage.local);
+      let tried = 0;
+      vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+        if (Object.keys(items).some((name) => name.startsWith('detected:'))) {
+          tried++;
+          throw new Error('quota exceeded');
+        }
+        return writing(items);
+      }) as never);
+
+      // One spell, spent to the last try.
+      await saveKept({ ...DEFAULT_SETTINGS, enabled: false }, {}, {});
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      const spent = tried;
+      expect(spent).toBeGreaterThan(0);
+
+      // And a second, which has to be tried as often as the first.
+      await saveKept({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' }, {}, {});
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(tried - spent).toBe(spent);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // And gives up, rather than asking a storage that is not coming back for as
   // long as the tab is open.
   it('stops reading the settings again once the tries have run out', async () => {

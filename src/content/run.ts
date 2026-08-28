@@ -100,9 +100,32 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
   /** Tries spent on whatever is outstanding, and the one waiting to be. */
   let tries = 0;
 
-  /** What was done as of the last arming, so that getting more done shows. */
-  let hadRead = false;
-  let hadRecorded = false;
+  /**
+   * Hands the tries back, for a run that is not one of them.
+   *
+   * A spell of trouble is what follows one thing happening: a reader changing
+   * a setting, a record being thrown away, a page coming back into view. Each
+   * of those gets three tries of its own, and a try is not one of them — so
+   * only the causes reset this, and a try that fails leaves what is left of
+   * the three where it was.
+   *
+   * Counted from the causes rather than from what is outstanding, which
+   * cannot tell two spells apart where nothing got better in between: a
+   * reader changes a setting whose record will not write, waits out the
+   * tries, and changes another. Nothing about what is outstanding has moved,
+   * and the second change deserves the tries the first spent.
+   *
+   * Nor from what got done, which misses that case and one more: the settings
+   * and the record fail apart, so tries spent on a read that will not answer
+   * must not be charged to a record that fails later.
+   *
+   * It cannot run away, because nothing here is a cause. Every one of them is
+   * a reader or a browser doing something.
+   */
+  const freshly = <T>(queued: () => T): T => {
+    tries = 0;
+    return queued();
+  };
   let waiting: ReturnType<typeof setTimeout> | null = null;
 
   /**
@@ -128,23 +151,11 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
    * read the record from before the change and say six chords are named over
    * a chart showing chord names.
    *
-   * Spent per spell of trouble rather than per page: a run that gets one of
-   * the two done hands what is left a fresh three. Which cannot run away,
-   * because getting one done is a read or a write landing.
-   *
-   * On either of them rather than on both. The two fail apart — a settings
-   * read that will not answer on a page whose record writes fine is the
-   * ordinary shape of it — and spending the tries on one of them and then
-   * charging them to the other leaves the second failure with nothing: the
-   * reader changes a setting, the record will not write, and nothing tries
-   * again for the rest of that page's life.
+   * Three of them to a spell of trouble, and {@link freshly} is where a spell
+   * starts.
    */
   const tryAgainIfNeeded = () => {
     if (gone) return;
-
-    if ((read && !hadRead) || (recorded && !hadRecorded)) tries = 0;
-    hadRead = read;
-    hadRecorded = recorded;
 
     if (read && recorded) return;
     if (waiting !== null) return;
@@ -263,7 +274,7 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
     // back to a tab is the one thing such a page can still be told about
     // after the tries below have run out.
     if ((recorded && read) || doc.hidden) return;
-    void queue(settingsNow).catch(() => {});
+    void freshly(() => queue(settingsNow)).catch(() => {});
   };
 
   // Wrapped, both of these. Naming the chart needs neither, and the failure
@@ -315,7 +326,7 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
       // is an unhandled rejection, which in a content script is a line in a
       // console the reader will never open — the recovery is above, and this is
       // only about not shouting about it.
-      void queue(() => asked(stored)).catch(() => {});
+      void freshly(() => queue(() => asked(stored))).catch(() => {});
     }),
   );
 
