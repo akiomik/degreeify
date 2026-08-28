@@ -11,11 +11,11 @@ import { type Kept, withOverride } from '@/settings/overrides';
 import {
   DEFAULT_SETTINGS,
   loadSettings,
-  loadStamps,
+  loadStamp,
   readDetection,
   recordKey,
   saveSettings,
-  saveStamps,
+  saveStamp,
 } from '@/settings/storage';
 import { chordwiki } from '@/sites/chordwiki/adapter';
 
@@ -162,7 +162,7 @@ describe('a setting changed while the page is still being read', () => {
   // only sign of it would be a setting that went back on its own.
   it('is not undone by the page writing down that it used a key', async () => {
     await saveSettings(withOverride(EMPTY, PAGE, key('G'), 0, 1).settings);
-    await saveStamps({ [PAGE]: Date.now() - 25 * 60 * 60 * 1000 });
+    await saveStamp(PAGE, Date.now() - 25 * 60 * 60 * 1000);
 
     const doc = load('chordwiki-basic');
     const running = run(doc, chordwiki, new URL(ADDRESS));
@@ -391,13 +391,13 @@ describe('a key set for the chart', () => {
     const doc = load('chordwiki-basic');
     const yesterday = Date.now() - 25 * 60 * 60 * 1000;
     await saveSettings(withOverride(EMPTY, PAGE, key('G'), 0, 1).settings);
-    await saveStamps({ [PAGE]: yesterday });
+    await saveStamp(PAGE, yesterday);
 
     (await start(doc))();
-    const stamped = (await loadStamps())[PAGE] ?? 0;
+    const stamped = await loadStamp(PAGE);
     expect(stamped).toBeGreaterThan(yesterday);
 
     (await start(load('chordwiki-basic')))();
-    expect((await loadStamps())[PAGE]).toBe(stamped);
+    expect(await loadStamp(PAGE)).toBe(stamped);
   });
 });

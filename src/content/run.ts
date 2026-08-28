@@ -6,11 +6,11 @@ import {
   DEFAULT_SETTINGS,
   type Detection,
   loadSettings,
-  loadStamps,
+  loadStamp,
   recordKey,
   SCHEMA_VERSION,
   type Settings,
-  saveStamps,
+  saveStamp,
   USED_AT_GRANULARITY,
   watchSettings,
   writeDetection,
@@ -85,7 +85,7 @@ export async function run(doc: Document, adapter: SiteAdapter, url: URL): Promis
       const painted = paint(doc, adapter, current, pageId);
       showed = wanted;
 
-      await remember(current, pageId, stored, painted);
+      await remember(pageId, stored, painted);
     };
     showing = showing.then(next, next);
     return showing;
@@ -175,13 +175,18 @@ function paint(
  * the page — and the chart is named either way.
  */
 async function remember(
-  settings: Settings,
   pageId: string,
   stored: string | null,
   { report, offset, key }: ReturnType<typeof paint>,
 ): Promise<void> {
   if (stored) await writeDetection(stored, record(pageId, report, offset));
-  if (key && settings.enabled) await touchOverride(pageId);
+
+  // Whether or not the names are being shown. The key was used to read the
+  // chart either way — the report says what it found — and the stamp is the
+  // only thing keeping a key from being the first dropped when there are too
+  // many. A reader who browses with the names off, using the popup to see
+  // what key a chart is in, would otherwise lose the keys they had set.
+  if (key) await touchOverride(pageId);
 }
 
 /**
@@ -192,17 +197,14 @@ async function remember(
  * which would be a storage write for every chart they look at.
  */
 async function touchOverride(pageId: string): Promise<void> {
-  // Written to its own place in storage rather than back into the settings.
-  // A page stamps a key while a reader is changing something in the popup,
-  // and a whole-object write from either would undo the other's — reading
-  // again first narrows that to one round trip and does not close it. Two
-  // keys in storage cannot collide at all.
-  const stamps = await loadStamps();
+  // This chart's stamp and no other, in its own place in storage. A page
+  // stamps a key while a reader is changing something in the popup, and a
+  // write of everything from either would put back what the other had just
+  // dropped — one key each is the only arrangement where that cannot happen.
   const now = Date.now();
+  if (now - (await loadStamp(pageId)) < USED_AT_GRANULARITY) return;
 
-  if (now - (stamps[pageId] ?? 0) < USED_AT_GRANULARITY) return;
-
-  await saveStamps({ ...stamps, [pageId]: now });
+  await saveStamp(pageId, now);
 }
 
 function record(pageId: string, report: ApplyReport, offset: number | null): Detection {

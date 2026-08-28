@@ -103,7 +103,7 @@ export interface Detection {
 }
 
 const SETTINGS_KEY = 'settings';
-const STAMPS_KEY = 'used';
+const STAMP_PREFIX = 'used:';
 const DETECTION_PREFIX = 'detected:';
 
 /**
@@ -131,19 +131,60 @@ export function recordKey(address: string | undefined | null): string | null {
   }
 }
 
-export async function loadStamps(): Promise<KeyStamps> {
-  const stored = (await browser.storage.local.get(STAMPS_KEY))[STAMPS_KEY];
-  if (!isRecord(stored)) return {};
+/**
+ * When one chart's key was last used.
+ *
+ * One storage key per chart, so that a page writing its own can never write
+ * over another's. Kept as one object they could: a page reads the lot, a
+ * reader's popup prunes and writes the lot, and whichever finishes second
+ * puts back what the first had just dropped.
+ */
+export async function loadStamp(pageId: string): Promise<number> {
+  const key = `${STAMP_PREFIX}${pageId}`;
+  const stored = (await browser.storage.local.get(key))[key];
 
-  const stamps = Object.entries(stored).filter(
-    (entry): entry is [string, number] => typeof entry[1] === 'number',
-  );
+  return typeof stored === 'number' ? stored : 0;
+}
+
+export async function saveStamp(pageId: string, at: number): Promise<void> {
+  await browser.storage.local.set({ [`${STAMP_PREFIX}${pageId}`]: at });
+}
+
+/** Every chart's stamp at once, which only the pruning needs. */
+export async function loadStamps(): Promise<KeyStamps> {
+  const all = await browser.storage.local.get(null);
+
+  const stamps = Object.entries(all)
+    .filter((entry): entry is [string, number] => typeof entry[1] === 'number')
+    .filter(([key]) => key.startsWith(STAMP_PREFIX))
+    .map(([key, at]) => [key.slice(STAMP_PREFIX.length), at] as const);
 
   return Object.fromEntries(stamps);
 }
 
-export async function saveStamps(stamps: KeyStamps): Promise<void> {
-  await browser.storage.local.set({ [STAMPS_KEY]: stamps });
+/**
+ * The settings and the stamps, written as one thing.
+ *
+ * In one call, because they are one answer: a reader who sets a key has
+ * chosen the key and made it the most recently used, and a write that lands
+ * halfway would have the popup say nothing was kept while the page went on
+ * showing what it had kept.
+ *
+ * The stamps of keys that have gone are removed afterwards and separately.
+ * Failing to remove them leaves records nothing reads, which the next write
+ * clears; failing to write the settings has to be a failure.
+ */
+export async function saveKept(settings: Settings, stamps: KeyStamps): Promise<void> {
+  const known = await loadStamps();
+
+  const written = Object.entries(stamps).map(([page, at]) => [`${STAMP_PREFIX}${page}`, at]);
+  await browser.storage.local.set({ [SETTINGS_KEY]: settings, ...Object.fromEntries(written) });
+
+  const gone = Object.keys(known)
+    .filter((page) => !(page in stamps))
+    .map((page) => `${STAMP_PREFIX}${page}`);
+
+  if (gone.length > 0) await browser.storage.local.remove(gone);
 }
 
 export async function loadSettings(): Promise<Settings> {

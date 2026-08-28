@@ -5,6 +5,7 @@ import {
   DEFAULT_SETTINGS,
   type Detection,
   loadSettings,
+  loadStamp,
   loadStamps,
   MOST_DETECTIONS,
   pruneDetections,
@@ -12,14 +13,20 @@ import {
   readDetection,
   recordKey,
   SCHEMA_VERSION,
+  saveKept,
   saveSettings,
-  saveStamps,
+  saveStamp,
   watchSettings,
   writeDetection,
 } from '@/settings/storage';
 
 beforeEach(() => {
   fakeBrowser.reset();
+
+  // Storage is faked per test and the spies over it are not: a spy left in
+  // place is the same spy the next `spyOn` hands back, carrying every call
+  // the test before it made.
+  vi.restoreAllMocks();
 });
 
 const detection = (updatedAt: number): Detection => ({
@@ -105,17 +112,67 @@ describe('when a key was last used', () => {
   // other's.
   it('is written without touching the settings', async () => {
     await saveSettings({ ...DEFAULT_SETTINGS, enabled: false });
-    await saveStamps({ page: 5 });
+    await saveStamp('page', 5);
 
     expect((await loadSettings()).enabled).toBe(false);
     expect(await loadStamps()).toEqual({ page: 5 });
   });
 
+  // One storage key per chart, and nothing else touched. Kept as one object,
+  // a page writing its own stamp writes every other chart's with it — and a
+  // page that read before the popup pruned puts back what the popup dropped.
+  it('is written for one chart without writing another', async () => {
+    await saveStamp('one', 1);
+    await saveStamp('two', 2);
+
+    const writes: string[][] = [];
+    const real = browser.storage.local.set.bind(browser.storage.local);
+    vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+      writes.push(Object.keys(items));
+      return real(items);
+    }) as never);
+
+    await saveStamp('one', 3);
+
+    expect(writes).toEqual([['used:one']]);
+    expect(await loadStamps()).toEqual({ one: 3, two: 2 });
+  });
+
   it('is nothing where nothing was written, and ignores what is not a time', async () => {
+    expect(await loadStamp('page')).toBe(0);
     expect(await loadStamps()).toEqual({});
 
-    await browser.storage.local.set({ used: { page: 'yesterday', other: 3 } });
-    expect(await loadStamps()).toEqual({ other: 3 });
+    await browser.storage.local.set({ 'used:page': 'yesterday' });
+    expect(await loadStamp('page')).toBe(0);
+    expect(await loadStamps()).toEqual({});
+  });
+});
+
+describe('the settings and the stamps written together', () => {
+  // A reader who sets a key has chosen the key and made it the most recently
+  // used, and a write that landed halfway would have the popup say nothing
+  // was kept while the page went on showing what it had kept.
+  it('are one write', async () => {
+    const writes: string[][] = [];
+    const real = browser.storage.local.set.bind(browser.storage.local);
+    vi.spyOn(browser.storage.local, 'set').mockImplementation((async (items: never) => {
+      writes.push(Object.keys(items));
+      return real(items);
+    }) as never);
+
+    await saveKept({ ...DEFAULT_SETTINGS, enabled: false }, { page: 5 });
+
+    expect(writes).toEqual([['settings', 'used:page']]);
+    expect((await loadSettings()).enabled).toBe(false);
+    expect(await loadStamps()).toEqual({ page: 5 });
+  });
+
+  // A stamp for a chart that has no key left is a record nothing reads.
+  it('forget a stamp whose key has gone', async () => {
+    await saveKept(DEFAULT_SETTINGS, { one: 1, two: 2 });
+    await saveKept(DEFAULT_SETTINGS, { one: 1 });
+
+    expect(await loadStamps()).toEqual({ one: 1 });
   });
 });
 

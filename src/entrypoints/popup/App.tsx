@@ -14,8 +14,7 @@ import {
   readDetection,
   recordKey,
   type Settings,
-  saveSettings,
-  saveStamps,
+  saveKept,
   watchDetection,
 } from '@/settings/storage';
 import styles from './App.module.css';
@@ -111,8 +110,7 @@ function App() {
         const [settings, stamps] = await Promise.all([loadSettings(), loadStamps()]);
         const changed = change({ settings, stamps });
 
-        await saveSettings(changed.settings);
-        if (changed.stamps !== stamps) await saveStamps(changed.stamps);
+        await saveKept(changed.settings, changed.stamps);
 
         setSettings(changed.settings);
         setFailed(false);
@@ -250,8 +248,15 @@ function App() {
                          * how far it has been transposed, would otherwise
                          * leave a reader with a key they cannot reach —
                          * inert, but taking a place among the ones kept.
+                         *
+                         * Asked of the key that is kept rather than of the
+                         * key in force. No key is in force on a page that
+                         * does not say how far it has been transposed, which
+                         * is one of the two cases this is here for — asked
+                         * the other way, the escape hatch is missing from
+                         * half of what it is an escape from.
                          */}
-                        <Show when={override()}>
+                        <Show when={current().keyOverrides[found().pageId]}>
                           <button type="button" onClick={() => void clearOverride()}>
                             Forget the key set for this chart
                           </button>

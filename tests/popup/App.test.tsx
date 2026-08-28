@@ -12,6 +12,7 @@ import {
   loadSettings,
   recordKey,
   SCHEMA_VERSION,
+  saveKept,
   saveSettings,
 } from '@/settings/storage';
 
@@ -303,6 +304,28 @@ describe('the popup on a chart', () => {
   it('can still forget a key set for a chart that can no longer take one', async () => {
     await saveSettings(withOverride(EMPTY, 'chordwiki:chart:Test Song', KEY_OF_G, 0, 1).settings);
     await onATab(ADDRESS, detection({ statedKeys: 7 }));
+
+    const { root, dispose } = await open();
+    const button = root.querySelector('button');
+    expect(button?.textContent).toContain('Forget the key');
+
+    button?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect((await loadSettings()).keyOverrides).toEqual({});
+    dispose();
+  });
+
+  // The escape hatch exists for two cases and has to be reachable in both.
+  // Asked of the key in force rather than of the key kept, it would be
+  // missing from the one where no key is in force: a page that does not say
+  // how far the chart has been transposed cannot use a key, and cannot let go
+  // of one either.
+  it('can forget a key on a page that stopped saying how far it has moved', async () => {
+    await saveKept(withOverride(EMPTY, 'chordwiki:chart:Test Song', KEY_OF_G, 0, 1).settings, {
+      'chordwiki:chart:Test Song': 1,
+    });
+    await onATab(ADDRESS, detection({ statedKeys: 1, transposeOffset: null }));
 
     const { root, dispose } = await open();
     const button = root.querySelector('button');
