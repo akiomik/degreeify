@@ -450,16 +450,45 @@ describe('the popup on a chart', () => {
     }) as never);
 
     const { root, dispose } = await open();
-    const [tonics] = [...root.querySelectorAll('select')];
-    if (!tonics) throw new Error('there is a key control');
-    expect(tonics.value).toBe('');
+
+    // Not showing "read from the chart" over a chart with a key set by hand.
+    // The controls know only what this popup could read; the line above them
+    // knows what the page did.
+    expect(root.querySelectorAll('select')).toHaveLength(2);
 
     broken = false;
     await new Promise((resolve) => setTimeout(resolve, 400));
 
+    const [tonics] = [...root.querySelectorAll('select')];
+    if (!tonics) throw new Error('there is a key control');
     expect(tonics.value).toBe('Db');
     expect(root.textContent).not.toContain('could not be read');
     get.mockRestore();
+    dispose();
+  });
+
+  // The key set for a chart lives in the settings, so a read that failed
+  // shows no key set — directly under a line, read from the record the page
+  // wrote, saying the key was set by hand.
+  it('does not offer a key it could not read over a line saying one is set', async () => {
+    await saveKept(
+      withOverride(EMPTY, 'chordwiki:chart:Test Song', { tonic: note('Db'), mode: 'major' }, 0, 1)
+        .settings,
+      { 'chordwiki:chart:Test Song': 1 },
+      {},
+    );
+    await onATab(ADDRESS, detection({ source: 'manual' }));
+
+    const real = browser.storage.local.get.bind(browser.storage.local);
+    vi.spyOn(browser.storage.local, 'get').mockImplementation((async (query: never) => {
+      if (query === 'settings') throw new Error('context invalidated');
+      return real(query);
+    }) as never);
+
+    const { root, dispose } = await open();
+
+    expect(root.textContent).toContain('set by hand');
+    expect(root.textContent).not.toContain('Read from the chart');
     dispose();
   });
 
@@ -542,6 +571,40 @@ describe('the popup on a chart', () => {
     const { root, dispose } = await open();
 
     expect(root.textContent).toContain('Open a ChordWiki chord chart');
+    dispose();
+  });
+
+  // A popup left open while a newer build writes goes on offering controls
+  // that cannot be saved, and the reader's click is answered with "that could
+  // not be saved" rather than with why it was never going to be.
+  it('says a newer build wrote the settings while it was open', async () => {
+    await onATab(ADDRESS, detection());
+    const { root, dispose } = await open();
+    expect(root.querySelector('input[type="checkbox"]')).not.toBeNull();
+
+    await browser.storage.local.set({
+      settings: { ...DEFAULT_SETTINGS, version: SCHEMA_VERSION + 1 },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(root.textContent).toContain('written by a newer version');
+    expect(root.querySelector('input[type="checkbox"]')).toBeNull();
+    dispose();
+  });
+
+  // And follows a change made somewhere else, which is the same listener.
+  it('follows a settings change made while it was open', async () => {
+    await onATab(ADDRESS, detection());
+    const { root, dispose } = await open();
+
+    const toggle = root.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    if (!toggle) throw new Error('there is a toggle');
+    expect(toggle.checked).toBe(true);
+
+    await saveKept({ ...DEFAULT_SETTINGS, enabled: false }, {}, {});
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(toggle.checked).toBe(false);
     dispose();
   });
 

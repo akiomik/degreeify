@@ -26,6 +26,13 @@ import { NOTATIONS, type Notation } from '@/core/notation';
  * unrelated click, because what is written is the whole object. Moving the
  * version is what stops that: the older build then refuses to write at all
  * and says why.
+ *
+ * Refusing runs one way. A version this build has never heard of is a build
+ * from the future and is left alone; a version this build has grown out of is
+ * read as the defaults and then written over on the reader's first click,
+ * carrying off every key they had set. Nothing here can migrate a shape that
+ * does not exist yet, so the change that moves this number is the change that
+ * owes them a migration — or, failing that, the same refusal.
  */
 export const SCHEMA_VERSION = 1;
 

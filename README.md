@@ -25,9 +25,9 @@ extension icon for the rest.
 The popup shows what key the chart was read in and where that came from — the
 page's own declaration, a guess from the chords, or a key you set — along with
 how many chords were named and how many key declarations could not be read. It
-also carries four controls: whether to show the names at all, the key for this
-chart, which numerals to use, and whether to follow the chart's spelling of a
-chord or normalise it.
+also carries the controls: whether to show the names at all, the key and mode
+for this chart, which numerals to use, and whether to follow the chart's
+spelling of a chord or normalise it.
 
 The key you set is kept for that chart rather than for the address it was at,
 so transposing the chart with ChordWiki's own control keeps it. A chart that

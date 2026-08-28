@@ -34,6 +34,7 @@ import {
   type Settings,
   saveKept,
   watchDetection,
+  watchSettings,
 } from '@/settings/storage';
 import styles from './App.module.css';
 
@@ -144,20 +145,27 @@ function App() {
    * A record read once is out of date the moment the page is read again,
    * which is every time something here is changed.
    */
-  const place = (key: string) => {
-    where = key;
-    lost = true;
-
-    // Wrapped like everything else here. Doing without the watching costs a
-    // line that goes stale; throwing here would cost the record read below
-    // it, and the popup would say there is no chart here on a chart.
+  /**
+   * Starts listening, and arranges for it to stop with the popup.
+   *
+   * Wrapped, because doing without the watching costs a line that goes stale
+   * and throwing costs whatever was going to be read next — a popup that
+   * threw here would say there is no chart here on a chart.
+   */
+  const listen = (start: () => () => void) => {
     try {
-      const stop = watchDetection(key, setDetection);
+      const stop = start();
       if (owner) runWithOwner(owner, () => onCleanup(stop));
       else stop();
     } catch {
       // Nothing to undo: a listener that could not be added is not one.
     }
+  };
+
+  const place = (key: string) => {
+    where = key;
+    lost = true;
+    listen(() => watchDetection(key, setDetection));
   };
 
   /** Whether the records have been tidied, which is once per popup. */
@@ -257,6 +265,21 @@ function App() {
     // later — and a reader who clicked inside that moment is told their
     // change could not be saved rather than told why it was never going to
     // be.
+    // Listening before reading, for the reason the record is: a newer build,
+    // or another tab, can write between this read being asked for and its
+    // answer arriving. Read once, a popup left open while a newer build
+    // writes goes on offering controls that cannot be saved — and the reader
+    // is told their change could not be saved rather than told why it was
+    // never going to be.
+    listen(() =>
+      watchSettings((changed) => {
+        setReadable(!changed.fromLater);
+        setUnread(!changed.understood);
+        setUnreachable(false);
+        setSettings(asked(changed));
+      }),
+    );
+
     const stored = await readSettings().catch(() => null);
 
     setReadable(!stored?.fromLater);
@@ -665,7 +688,17 @@ function App() {
                     </p>
                   </Show>
 
-                  <Show when={readable()}>
+                  {/*
+                   * And nothing where the settings could not be read, rather
+                   * than the defaults' answer to a question about a key. The
+                   * key set for this chart is in those settings, so a failed
+                   * read shows no key set — under a line, read from the
+                   * record the page wrote, saying the key was set by hand.
+                   * The controls are the wrong half to trust: they know only
+                   * what this popup could read, and the line knows what the
+                   * page did. Back as soon as a read works.
+                   */}
+                  <Show when={readable() && !unreachable()}>
                     <Show
                       when={canOverride()}
                       fallback={
