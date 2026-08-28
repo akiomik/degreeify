@@ -414,6 +414,12 @@ function App() {
         setReadable(!changed.fromLater);
         setUnread(!changed.understood);
         setUnreachable(false);
+
+        // Whatever was not saved, something has changed since — which is the
+        // half of that line this is about. Left standing over settings
+        // somebody else has just written, "nothing has changed" is said
+        // beside controls that have.
+        setFailed(false);
         setSettings(asked(changed));
       }),
     );

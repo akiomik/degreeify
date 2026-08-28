@@ -861,6 +861,31 @@ describe('the popup on a chart', () => {
     dispose();
   });
 
+  // The line says two things, and something else writing makes the second of
+  // them false: whatever was not saved, something has changed since. Left
+  // standing, "nothing has changed" sits beside controls that have.
+  it('stops saying nothing has changed once something else has', async () => {
+    await onATab(ADDRESS, detection());
+    const { root, dispose } = await open();
+
+    const failing = vi
+      .spyOn(browser.storage.local, 'set')
+      .mockRejectedValue(new Error('quota exceeded'));
+    const toggle = root.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    if (!toggle) throw new Error('there is a toggle');
+    toggle.click();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(root.textContent).toContain('could not be saved');
+
+    failing.mockRestore();
+    await saveKept({ ...DEFAULT_SETTINGS, notation: 'roman-unicode' }, {}, {});
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(root.textContent).not.toContain('could not be saved');
+    dispose();
+  });
+
   // And follows a change made somewhere else, which is the same listener.
   it('follows a settings change made while it was open', async () => {
     await onATab(ADDRESS, detection());
