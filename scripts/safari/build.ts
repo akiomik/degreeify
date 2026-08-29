@@ -115,44 +115,54 @@ let stopping: NodeJS.Signals | null = null;
  * to put back what it took away.
  */
 function interrupted(signal: NodeJS.Signals): void {
-  // Asked for twice, and the second time is not a repeat of the first. The
-  // reader pressing Ctrl-C again is telling us the polite signal did not work
-  // — `xcodebuild` mid-link is slow to honour one and may block it outright —
-  // and sending the same thing again takes the same no-op path, forever. The
-  // wait further down is bounded for this reason; this had no bound at all.
+  // A second one is not a repeat of the first. The reader pressing Ctrl-C
+  // again is telling us the polite signal did not work, and sending the same
+  // thing takes the same path it did not answer.
   const insisted = stopping !== null;
 
   stopping = signal;
 
-  // Nothing started yet, so nothing to wait for: this arrived while the gates
-  // below were being asked, or on the way out of a refusal. Ended here rather
-  // than left for a handler that will never run.
-  if (build === undefined) {
-    const swept = cleanup();
+  if (build?.pid === undefined || build.exitCode !== null) return;
 
-    process.removeAllListeners('exit');
-    if (!swept) process.exitCode = 1;
-    process.removeAllListeners('SIGINT');
-    process.removeAllListeners('SIGTERM');
-    process.kill(process.pid, signal);
-    return;
+  const group = -build.pid;
+
+  try {
+    process.kill(group, insisted ? 'SIGKILL' : signal);
+  } catch {
+    return; // Already gone. There is nothing to stop.
   }
 
-  if (build.pid !== undefined && build.exitCode === null) {
+  if (insisted) return;
+
+  // Escalated on a clock as well as on being asked twice. `xcodebuild`
+  // mid-link is slow to honour a signal and may block one outright, and only a
+  // person at a terminal presses Ctrl-C again: a supervisor — `timeout`, a
+  // cancelled CI job, a wrapper — sends one and then kills this process after
+  // its grace period. The build, in a session of its own, outlives that and
+  // goes on to write the app into `SYMROOT` with nothing left to take it away.
+  //
+  // The same five seconds `settled` waits, for the same reason: a wait that
+  // cannot end turns an interrupt into a hang.
+  setTimeout(() => {
     try {
-      process.kill(-build.pid, insisted ? 'SIGKILL' : signal);
+      process.kill(group, 'SIGKILL');
     } catch {
-      // Already gone, or never grouped. Either way there is nothing to stop.
+      // Gone in the meantime, which is what was being waited for.
     }
-  }
+  }, 5_000).unref();
 }
 
-// Armed before the build exists rather than after it is running. Registered
-// afterwards, a signal arriving in between finds this process on its default
-// disposition and kills it outright — no `exit` listener, no cleanup — while
-// the build, which `detached` has put in a session of its own where Ctrl-C
-// never reaches it, carries on and finishes writing the app into `SYMROOT`.
-// That is the stale second copy this whole script exists to take away.
+// Armed before the two commands below, which are the first thing here that
+// can be interrupted. Without a handler registered, a signal arriving there
+// finds this process on its default disposition and kills it outright — no
+// `exit` listener, no cleanup — and an app left by an earlier build stays
+// registered.
+//
+// Not because the handler could run in the meantime: everything from here to
+// the build is synchronous, so a signal is queued and delivered after it has
+// started, which is why nothing here checks for a build that does not exist
+// yet. What being armed buys is that the signal is queued at all rather than
+// ending the process where it stands.
 process.on('SIGINT', () => interrupted('SIGINT'));
 process.on('SIGTERM', () => interrupted('SIGTERM'));
 
@@ -210,12 +220,6 @@ build = spawn(
   ],
   { stdio: 'inherit', detached: true },
 );
-
-// A signal that arrived while the gates were being asked, answered now that
-// there is something to answer it with. `spawn` has assigned the pid, so
-// unlike the shell — which learned it a statement later — there is no window
-// here where a stop has nothing to stop.
-if (stopping !== null) interrupted(stopping);
 
 // Failing to start is not a build that failed. `xcodebuild` comes with Xcode,
 // and a machine without it gets an error object and no status at all — which,

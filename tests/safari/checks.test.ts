@@ -90,6 +90,19 @@ describe('what the builder refuses', () => {
     expect(said(treeOf({ absent: [PBXPROJ] }))).toContain('project.pbxproj not found');
   });
 
+  /**
+   * A conversion interrupted part way through the write. Nothing in the file
+   * names no identifiers, which the identifier check reads as the converter
+   * having changed where it writes them — the one refusal with no remedy, for
+   * the case whose remedy is the ordinary one.
+   */
+  it('says a project file with nothing in it needs generating again', () => {
+    const said_ = said(treeOf({ files: { [PBXPROJ]: '' } }));
+
+    expect(said_).toContain('safari:xcode');
+    expect(said_).not.toContain('needs rewriting');
+  });
+
   it('refuses a project generated under other names', () => {
     const other = 'com.example.someoneelse.Degreeify';
 
@@ -227,6 +240,18 @@ describe('what the builder refuses', () => {
     expect(
       refusalFor(treeOf({ files: { [PBXPROJ]: bare }, entries: ['manifest.json', 'plain.js'] })),
     ).toBeNull();
+  });
+
+  it('reads an entry whose name holds a backslash', () => {
+    const entries = ['manifest.json', 'back\\slash.js'];
+    const named = [
+      `PRODUCT_BUNDLE_IDENTIFIER = ${BUNDLE_ID};`,
+      `PRODUCT_BUNDLE_IDENTIFIER = "${BUNDLE_ID}.Extension";`,
+      `path = "../../${BUILT}/manifest.json";`,
+      `path = "../../${BUILT}/back\\\\slash.js";`,
+    ].join('\n');
+
+    expect(refusalFor(treeOf({ files: { [PBXPROJ]: named }, entries }))).toBeNull();
   });
 
   it('does not read a reference inside a directory as a top-level entry', () => {

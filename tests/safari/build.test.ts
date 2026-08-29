@@ -406,6 +406,22 @@ describe('the builder as a program', () => {
     expect(existsSync(APP())).toBe(false);
   }, 30_000);
 
+  /**
+   * Only a person at a terminal presses Ctrl-C again. A supervisor — `timeout`,
+   * a cancelled CI job, a wrapper — sends one signal and then kills this
+   * process after its grace period, and the build, in a session of its own,
+   * outlives that and writes the app with nothing left to take it away.
+   */
+  it('escalates on its own when one signal is ignored', async () => {
+    restore();
+    stub("trap '' TERM\nsleep 30");
+
+    const ran = await run({ signal: 'SIGTERM' });
+
+    expect(ran.seconds).toBeLessThan(20);
+    expect(existsSync(APP())).toBe(false);
+  }, 30_000);
+
   it("stops the build's children too", async () => {
     restore();
     stub(`(sleep 2; touch "${GRANDCHILD()}") & sleep 30`);

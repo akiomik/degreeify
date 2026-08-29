@@ -89,7 +89,11 @@ export function namedEntries(pbxproj: string, built: string): readonly string[] 
       // not one of them. Recorded whole it would be an entry no name can
       // equal, and the directory holding it would be reported unnamed — a
       // project called stale for having said more than expected.
-      if (name !== undefined && !name.includes('/')) found.add(name.replaceAll('\\"', '"'));
+      // Every escape undone, not the one that was thought of. The pattern
+      // matches `\\` as readily as `\"`, so a name holding a backslash came
+      // back with it doubled — never equal to what the directory listing says,
+      // and reported as an entry the project does not name when it names it.
+      if (name !== undefined && !name.includes('/')) found.add(name.replaceAll(/\\(.)/g, '$1'));
     }
   }
 

@@ -52,7 +52,13 @@ export function refusalFor(tree: Tree): Refusal | null {
   // reports its own subject missing — several failures, none of them the one.
   const project = tree.read(PBXPROJ);
 
-  if (project === null) {
+  // Empty counts as absent, the way an empty icons record does. A conversion
+  // interrupted part way through the write leaves a file with nothing in it,
+  // and nothing in it names no identifiers — which the check below reads as
+  // the converter having changed where it writes them, and answers with the
+  // one refusal that has no remedy. The remedy is to generate it again, and
+  // that is what a reader should be told.
+  if (project === null || project.trim() === '') {
     return {
       lines: [
         `error: ${PBXPROJ} not found.`,
