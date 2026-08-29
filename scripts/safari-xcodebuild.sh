@@ -264,6 +264,15 @@ interrupted() {
   kill -s "$1" $$
 }
 
+# Empty before the traps are armed, and not left to the assignment after the
+# build starts. A signal can land between launching it and learning its pid,
+# and the handler would then kill nothing, delete the directory, and leave the
+# build it never stopped to put the app back there and register it — the stale
+# second copy this exists to prevent, with nothing left running to remove it.
+# It would also mean `${build:-}` reading whatever the environment happened to
+# call `build`, and killing that.
+build=
+
 trap cleanup EXIT
 trap 'interrupted INT' INT
 trap 'interrupted TERM' TERM
