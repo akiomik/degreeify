@@ -132,8 +132,8 @@ its name from the conversion and its version from nothing.
 
 Two things need the project generated again. The **icons** are one: they are
 all the wrapper takes from the extension, copied in when the project is made,
-so a change to any of them reaches Safari's extension list on a rebuild and
-leaves the app showing the old ones. The **set of top-level files and
+so the app it builds goes on showing the icons of the build it was generated
+from however many times you rebuild. The **set of top-level files and
 directories** in the build is the other, which a new entrypoint adds to and a
 removed or renamed one takes from — the project names them one by one, though
 directories among them by reference, so a file added inside `chunks/` or

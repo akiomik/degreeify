@@ -215,7 +215,34 @@ cleanup() {
   rm -rf "$SCRATCH/sym"
 }
 
-trap cleanup EXIT INT TERM
+# Re-raised rather than swallowed. A handler that returns without exiting
+# leaves the script to run on past the command the signal interrupted — and
+# `xcodebuild` is the last thing here, so it would fall off the end and report
+# success for a build that never finished, to a caller reading the exit status
+# to decide whether the project still compiles.
+#
+# Where the signal reached this script alone rather than the group — `kill` on
+# the pid, a supervisor, a timeout — `xcodebuild` outlives it and may write
+# back what was just removed. The next run of this removes it again; nothing
+# here can do better without killing a process it was not asked to manage.
+interrupted() {
+  cleanup
+  trap - EXIT "$1"
+  kill -s "$1" $$
+
+  # And said outright where that did nothing. A script started in the
+  # background has its interrupt ignored, so re-raising returns and this would
+  # otherwise carry on to the end of the file and exit successfully — the very
+  # thing being fixed, in the one case the obvious fix does not reach.
+  case $1 in
+  INT) exit 130 ;;
+  *) exit 143 ;;
+  esac
+}
+
+trap cleanup EXIT
+trap 'interrupted INT' INT
+trap 'interrupted TERM' TERM
 
 xcodebuild \
   -project "$PROJECT" \
