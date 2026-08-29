@@ -49,6 +49,11 @@ stub() {
   ok) local body='mkdir -p "$sym/Debug/Degreeify.app/Contents"; echo "** BUILD SUCCEEDED **"' ;;
   fails) local body='mkdir -p "$sym/Debug/Degreeify.app/Contents"; echo "** BUILD FAILED **" >&2; exit 65' ;;
   slow) local body='mkdir -p "$sym/Debug/Degreeify.app/Contents"; sleep 20' ;;
+  # Writes the app *after* waiting, which is what an orphan does: a build the
+  # script failed to stop puts it back once cleanup has been and gone. A stub
+  # that writes first cannot show that, and the case below would pass on code
+  # that leaves the orphan running.
+  orphan) local body='sleep 4; mkdir -p "$sym/Debug/Degreeify.app/Contents"' ;;
   esac
 
   cat > "$STUBS/xcodebuild" <<SH
@@ -147,17 +152,26 @@ done
 
 # An action icon sits beside the icon of the same size rather than in place of
 # it, so the one it would have displaced is still watched.
+cp "$BUILT/icon/32.png" "$BUILT/icon/action.png"
+# shellcheck disable=SC2016  # node's script, expanded when node runs it
 node -e '
   const { readFileSync, writeFileSync } = require("node:fs");
   const path = process.argv[1];
   const manifest = JSON.parse(readFileSync(path, "utf8"));
-  manifest.action = { ...manifest.action, default_icon: { "16": "icon/32.png" } };
+  // Somewhere `icons` does not already name: pointed at a file that is in
+  // both, the case passes whether or not action icons are read at all.
+  manifest.action = { ...manifest.action, default_icon: { "16": "icon/action.png" } };
   writeFileSync(path, JSON.stringify(manifest));
 ' "$BUILT/manifest.json"
 ./scripts/safari-xcode.sh >/dev/null 2>&1
 cp "$BUILT/icon/16.png" "$STUBS/held16.png"
 cp "$BUILT/icon/48.png" "$BUILT/icon/16.png"
 expect "an action icon does not hide the icon of its size" 1 "the icons have changed"
+cp "$STUBS/held16.png" "$BUILT/icon/16.png"
+
+# And the action icon itself is watched, not merely tolerated beside the rest.
+cp "$BUILT/icon/16.png" "$BUILT/icon/action.png"
+expect "a changed action icon is noticed" 1 "the icons have changed"
 cp "$STUBS/held16.png" "$BUILT/icon/16.png"
 restore
 
@@ -222,6 +236,33 @@ else
   failed=$((failed + 1))
 fi
 
+# No app is left registered by any path out of here, which is the property the
+# cleanup exists for rather than the cases that prompted it.
+#
+# One path is not reachable from out here and is left uncovered rather than
+# covered badly: a signal landing between starting the build and learning
+# which process it is. That window is two adjacent statements wide, so no
+# amount of timing from outside enters it, and the cases I wrote for it passed
+# against the very handler that has the defect. They are gone. Reaching it
+# needs the seam to be inside the program rather than at its edge.
+
+# A run refused at a gate reaches no build, and is exactly the run a stale
+# project produces — over and over, while the app it is protecting the reader
+# from sits where it was.
+stub ok
+mkdir -p "$SCRATCH/sym/Debug/$APP_NAME.app/Contents"
+touch "$BUILT/selftest-stale.js"
+PATH="$STUBS:$PATH" ./scripts/safari-xcodebuild.sh >/dev/null 2>&1 || true
+rm -f "$BUILT/selftest-stale.js"
+
+if [ -d "$SCRATCH/sym/Debug/$APP_NAME.app" ]; then
+  echo "FAIL a run refused before building still takes the app away" >&2
+  failed=$((failed + 1))
+else
+  echo "ok   a run refused before building still takes the app away"
+  passed=$((passed + 1))
+fi
+
 # --------------------------------------------------------- the generator
 
 # A generation that cannot finish must leave no record. The record says what
@@ -243,15 +284,10 @@ else
   passed=$((passed + 1))
 fi
 
-env BUNDLE_ID="$BUNDLE_PREFIX.does-not-nest" ./scripts/safari-xcode.sh >/dev/null 2>&1 || true
-
-if [ -f "$ICONS_RECORD" ]; then
-  echo "FAIL a generation its checks refused leaves no record" >&2
-  failed=$((failed + 1))
-else
-  echo "ok   a generation its checks refused leaves no record"
-  passed=$((passed + 1))
-fi
+# The other door — a generation refused by its own checks — cannot be opened
+# from here without giving the generator an ambient identifier to read, which
+# is a production seam cut for a test. That property is asserted where it can
+# be asserted without one: `nesting` has its own cases.
 restore
 
 printf '\n%s passed, %s failed\n' "$passed" "$failed"

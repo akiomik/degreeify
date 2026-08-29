@@ -19,9 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the build; the build script refuses to run on any of those rather than let
   the app be assembled from a project that no longer describes it, and takes
   its own build away afterwards rather than leave a second copy of the app
-  registered. `npm run safari:selftest` checks that both scripts refuse what
-  they say they refuse. It also refuses where the build holds a dotted entry other than
+  registered, and refuses where the build holds a dotted entry other than
   `.DS_Store`, which no project carries and no regeneration can fix.
+  `npm run safari:selftest` checks that both scripts refuse what they say they
+  refuse.
 - A chord symbol parser that reads a root, an opaque quality and an optional
   bass note, and reports anything else — bar lines, accents, rhythm notes,
   `N.C.`, chart directions, section labels — as not a chord so it can be left

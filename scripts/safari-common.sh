@@ -20,10 +20,13 @@ readonly BUNDLE_PREFIX=com.github.akiomik
 # embed one binary in another it does not contain. That failure arrives at
 # build time in Xcode, several steps after the mistake.
 #
-# Overridable, so that the check below it can be reached on purpose. A fork
-# changing this to something that does not nest is exactly what that check is
-# for, and a check nothing can reach is a check nobody knows still works.
-readonly BUNDLE_ID="${BUNDLE_ID:-$BUNDLE_PREFIX.$APP_NAME}"
+# Not read from the environment, for all that it would make the check below
+# reachable on purpose. A production script taking an ambient value is the
+# same shape as the defect closed one commit earlier, where a handler signalled
+# whatever pid the environment happened to have named — and here it would mean
+# generating a project under somebody else's identifier and saying it worked.
+# Reaching that check is the test's problem to solve without changing this.
+readonly BUNDLE_ID="$BUNDLE_PREFIX.$APP_NAME"
 
 readonly BUILT=.output/safari-mv3
 readonly PROJECT="safari/$APP_NAME/$APP_NAME.xcodeproj"
