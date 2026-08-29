@@ -136,6 +136,33 @@ describe('what the builder refuses', () => {
     ).toContain('no bundle identifiers at all');
   });
 
+  /**
+   * A configuration that sets no identifier writes `""`. Counted as one, the
+   * project names three, the pair cannot be read, and the reader is shown a
+   * blank line and asked to rewrite a check that is working.
+   */
+  it('does not count a configuration that names no identifier', () => {
+    const withEmpty = ['PRODUCT_BUNDLE_IDENTIFIER = "";', pbxproj()].join('\n');
+
+    expect(refusalFor(treeOf({ files: { [PBXPROJ]: withEmpty } }))).toBeNull();
+  });
+
+  it('reads an entry the project names as an element of a list', () => {
+    const listed_ = [
+      pbxproj(BUNDLE_ID, `${BUNDLE_ID}.Extension`, ['manifest.json']),
+      `files = (../../${BUILT}/one.js, ../../${BUILT}/two.js);`,
+    ].join('\n');
+
+    expect(
+      refusalFor(
+        treeOf({
+          files: { [PBXPROJ]: listed_ },
+          entries: ['manifest.json', 'one.js', 'two.js'],
+        }),
+      ),
+    ).toBeNull();
+  });
+
   it('refuses a dotted entry with no remedy', () => {
     expect(said(treeOf({ entries: ['manifest.json', '.well-known'] }))).toContain('cannot carry');
   });

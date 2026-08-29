@@ -18,13 +18,15 @@
 export function bundleIdentifiers(pbxproj: string): readonly string[] {
   const found = new Set<string>();
 
-  for (const [, identifier] of pbxproj.matchAll(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]*);/g)) {
-    // A group that took part always matched something here, since neither
-    // pattern in this file can succeed with an empty one. The check is the
-    // type system's price for reading a match by position, and paid rather
-    // than asserted away: an assertion here would hold until somebody made the
-    // group optional, and then hold silently.
-    if (identifier !== undefined) found.add(identifier.replaceAll('"', '').trim());
+  for (const [, identifier] of pbxproj.matchAll(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/g)) {
+    // What is left after the quotes come off, and only where something is.
+    // A configuration that sets no identifier writes `""`, which is a value
+    // the pattern matches and a name nothing is called — counted, the project
+    // names three, the pair cannot be read, and the refusal lists a blank
+    // line and asks for the check to be rewritten.
+    const named = identifier?.replaceAll('"', '').trim();
+
+    if (named) found.add(named);
   }
 
   return [...found].sort();
@@ -79,8 +81,15 @@ export function namedEntries(pbxproj: string, built: string): readonly string[] 
   // Widening the set of characters allowed was how this was answered once
   // already, for the apostrophe. The set was the wrong idea: what ends a value
   // is what opened it.
+  //
+  // A bare value ends at whitespace, at the `;` that ends a setting, and at
+  // the `,` or `)` that end it as an element of a list — anything else it
+  // could hold has to be quoted, so those are the whole of it. Written for the
+  // setting alone, a path appearing in a list came back with the bracket on
+  // the end of it: a name no directory listing can equal, reported as an entry
+  // the build no longer has.
   const quoted = new RegExp(`"(?:[^"\\\\]|\\\\.)*/${where}/((?:[^"\\\\]|\\\\.)+)"`, 'g');
-  const bare = new RegExp(`(?:^|[\\s=])[^\\s";]*/${where}/([^\\s";]+)`, 'gm');
+  const bare = new RegExp(`(?:^|[\\s=(,])[^\\s";,)]*/${where}/([^\\s";,)]+)`, 'gm');
 
   for (const wanted of [quoted, bare]) {
     for (const [, name] of pbxproj.matchAll(wanted)) {

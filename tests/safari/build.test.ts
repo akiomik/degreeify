@@ -27,6 +27,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { hostArch } from '../../scripts/safari/machine.ts';
 import { digestOf, iconsOf } from '../../scripts/safari/manifest.ts';
 import {
   APP_NAME,
@@ -256,9 +257,17 @@ describe('the builder as a program', () => {
 
     await run();
 
-    expect(readFileSync(RAN(), 'utf8')).toContain(
-      `ARCHS=${execSync('uname -m').toString().trim()}`,
+    // Asked the way the builder asks, not with `uname -m` — which is the
+    // reading `hostArch` exists to correct. Written that way, this case fails
+    // under a translated Node because the production code is right. What is
+    // checked here is the wiring, that the answer reaches `xcodebuild`; what
+    // the answer should be is `machine.test.ts`.
+    const wanted = hostArch(
+      execSync('sysctl -n sysctl.proc_translated 2>/dev/null || true').toString(),
+      execSync('uname -m').toString(),
     );
+
+    expect(readFileSync(RAN(), 'utf8')).toContain(`ARCHS=${wanted}`);
   });
 
   /**
