@@ -48,26 +48,6 @@ if [ ! -f "$PROJECT/project.pbxproj" ]; then
   exit 1
 fi
 
-# Written as soon as the project exists, before anything that can refuse it.
-# The record says what the project was made from, and by this point it was
-# made — so a check below stopping the script would otherwise leave the record
-# describing the run before this one, and the builder would report that the
-# icons had changed when the project already matches them, sending the reader
-# to regenerate what they have. Which is the misdiagnosis this record was
-# rearranged once already to avoid.
-#
-# Worked out and then written, rather than written as it is worked out. A
-# redirection empties the file before the command behind it runs, so a digest
-# that fails would leave a record of nothing — which reads as a project made
-# from no icons at all.
-if ! record=$(icons_digest); then
-  echo "error: the project was generated, but what its icons were could not" >&2
-  echo "be recorded, so nothing can tell later whether they have changed." >&2
-  exit 1
-fi
-
-printf '%s' "$record" > "$ICONS_RECORD"
-
 # Asked of what was generated rather than assumed from what was asked for. The
 # rule above is the converter's and could change under us; read back, a change
 # to it is this message rather than an Xcode build failing on a validation
@@ -119,6 +99,26 @@ else
   exit 1
 fi
 
+
+# Last, after everything that can refuse this project. The conversion above
+# deletes the whole directory, this record with it, so a run that is refused
+# leaves none rather than one describing the run before — and the builder says
+# it does not know what the project was made from, which is true and sends the
+# reader back here to read why. Written earlier, a refused project would carry
+# a record saying it was checked, and the builder would pass it through to an
+# Xcode failure several steps from the mistake.
+#
+# Worked out and then written, rather than written as it is worked out. A
+# redirection empties the file before the command behind it runs, so a digest
+# that fails would leave a record of nothing — which reads as a project made
+# from no icons at all.
+if ! record=$(icons_digest); then
+  echo "error: the project was generated, but what its icons were could not" >&2
+  echo "be recorded, so nothing can tell later whether they have changed." >&2
+  exit 1
+fi
+
+printf '%s' "$record" > "$ICONS_RECORD"
 
 echo
 echo "Generated $PROJECT"
