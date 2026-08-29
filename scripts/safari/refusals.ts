@@ -197,12 +197,18 @@ export function notWhatWeAskedFor(
 /**
  * A project that is not the one these scripts describe.
  *
- * The builder's half, and the two things that can be wrong are told apart
- * because their remedies are opposite. Identifiers that do not nest are the
- * converter's derivation changed, and no amount of generating the project
- * again will change what it derives. Identifiers that nest around a name
- * nobody here uses are a project made before the name changed, which
- * generating again is exactly the fix for.
+ * The builder's half, where both readings are answered by generating the
+ * project again — and said so, which they were not.
+ *
+ * Identifiers that nest around a name nobody here uses are a project made
+ * before the name changed. Identifiers that do not nest were read as the
+ * converter's derivation having changed, and answered with a message telling
+ * the reader this script needs rewriting: a dead end, and the wrong one for
+ * the likeliest case by far. A project generated before these scripts derived
+ * the two the way they do now looks exactly like that — which is what every
+ * existing checkout of this repository holds. The converter having moved is
+ * the second reading, and it is named as what to conclude if generating the
+ * project again says the same thing.
  *
  * Read off the nesting rather than by assuming the extension's suffix. Written
  * as `expected` and `expected.Extension`, this refuses every project the
@@ -220,9 +226,11 @@ export function foreignProject(identifiers: readonly string[], expected: string)
         'error: the two bundle identifiers do not nest:',
         ...listed(identifiers),
         "Xcode embeds an extension only where the app's identifier is a prefix",
-        'of it. The converter derives both from the app name and the bundle',
-        'identifier it is given; this check needs rewriting against what it',
-        'does now.',
+        'of it, and it will not build this. Run `npm run safari:xcode` to',
+        'generate the project again; a project made before these scripts',
+        'derived the two the way they do now looks exactly like this. If it',
+        'says the same thing afterwards, the converter has changed what it',
+        'derives and this check needs rewriting against what it does.',
       ],
     };
   }

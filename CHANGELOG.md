@@ -21,9 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its own build away afterwards rather than leave a second copy of the app
   registered, and refuses where the build holds a dotted entry other than
   `.DS_Store`, which no project carries and no regeneration can fix.
-  It also refuses a project generated under names these scripts no longer use,
-  which otherwise built and installed under the old identifier and made a
-  rename silently a no-op. Both are Node programs, and what they refuse is
+  It also refuses a project generated under names these scripts no longer use
+  — which otherwise built and installed under the old identifier and made a
+  rename silently a no-op — and sends it to be generated again, including the
+  pair the earlier version of this script produced. Both are Node programs, and what they refuse is
   covered by the test suite: the checks are functions of what was read, so most
   of the cases are about projects that were never on a disk, and the rest run
   each script against a tree made for the case with `xcrun` and `xcodebuild`

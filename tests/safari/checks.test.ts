@@ -123,11 +123,32 @@ describe('what the builder refuses', () => {
     ).toBeNull();
   });
 
-  it('refuses identifiers that do not nest, without calling the project stale', () => {
+  /**
+   * A project made before these scripts derived the two identifiers the way
+   * they do now looks exactly like this — which is what every checkout made
+   * before this change holds. Told only that the check needs rewriting, the
+   * reader is at a dead end with the ordinary remedy in front of them.
+   */
+  it('answers identifiers that do not nest with the remedy that usually works', () => {
     const said_ = said(treeOf({ files: { [PBXPROJ]: pbxproj(BUNDLE_ID, 'com.example.other') } }));
 
     expect(said_).toContain('do not nest');
-    expect(said_).not.toContain('safari:xcode');
+    expect(said_).toContain('safari:xcode');
+  });
+
+  /**
+   * The pair the script this replaces produced: it built the app's identifier
+   * from the app name and the extension's from what it was given, and the two
+   * were not the same case.
+   */
+  it('sends a project left by the script this replaces to be generated again', () => {
+    const before = pbxproj(
+      'com.github.akiomik.Degreeify',
+      'com.github.akiomik.degreeify.Extension',
+    );
+    const said_ = said(treeOf({ files: { [PBXPROJ]: before } }));
+
+    expect(said_).toContain('safari:xcode');
   });
 
   it('says the project names no identifiers rather than that they disagree', () => {
