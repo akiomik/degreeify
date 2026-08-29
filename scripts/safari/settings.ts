@@ -8,7 +8,7 @@
 
 export const APP_NAME = 'Degreeify';
 
-const BUNDLE_PREFIX = process.env.BUNDLE_PREFIX ?? 'com.github.akiomik';
+const BUNDLE_PREFIX = 'com.github.akiomik';
 
 /**
  * The identifier handed to the converter, derived from the app name.
@@ -20,10 +20,15 @@ const BUNDLE_PREFIX = process.env.BUNDLE_PREFIX ?? 'com.github.akiomik';
  * contain. That failure arrives at build time, several steps after the
  * mistake, which is why {@link nesting} reads the result back.
  *
- * Overridable, so that the check on it can be reached on purpose. A check
- * nothing can reach is a check nobody knows still works.
+ * Not read from the environment, for all that it would make {@link nesting}
+ * reachable with a value chosen on purpose. A production script taking an
+ * ambient value is how a run ends up generating a project under whatever
+ * identifier the caller's shell happened to be carrying, and saying it worked.
+ * It is also unnecessary here, which is half of why these decisions moved: the
+ * checks are functions over identifiers, so a test reaches them by passing the
+ * identifiers it wants rather than by leaving a way in through the program.
  */
-export const BUNDLE_ID = process.env.BUNDLE_ID ?? `${BUNDLE_PREFIX}.${APP_NAME}`;
+export const BUNDLE_ID = `${BUNDLE_PREFIX}.${APP_NAME}`;
 
 /** Where WXT leaves the extension this wraps. */
 export const BUILT = '.output/safari-mv3';

@@ -16,7 +16,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { digestOf, iconsOf } from './manifest.ts';
 import { bundleIdentifiers, nesting } from './project.ts';
-import { badIdentifiers, type Refusal } from './refusals.ts';
+import { badIdentifiers, foreignProject, type Refusal } from './refusals.ts';
 import { APP_NAME, BUILT, BUNDLE_ID, ICONS_RECORD, PROJECT } from './settings.ts';
 
 function refuse(refusal: Refusal): never {
@@ -48,6 +48,20 @@ const converted = spawnSync(
   { stdio: 'inherit' },
 );
 
+// Asked about before the status, which is null for a converter that never
+// ran at all — no Xcode, no command line tools, `xcrun` not on the path. Read
+// as a status that is only falsy, that exits 1 having printed nothing, and the
+// reader is left with a script that failed silently rather than one saying
+// what it could not find.
+if (converted.error) {
+  refuse({
+    lines: [
+      `error: could not run xcrun: ${converted.error.message}`,
+      'The converter comes with Xcode; this needs it installed and selected.',
+    ],
+  });
+}
+
 if (converted.status !== 0) process.exit(converted.status ?? 1);
 
 // Read only where there is something to read, so that a converter which puts
@@ -69,19 +83,17 @@ const bad = badIdentifiers(identifiers);
 
 if (bad) refuse(bad);
 
+// The same question the builder asks of a project it did not just make. Asked
+// here too, because this is where the answer is cheap: a converter that has
+// changed what it derives says so now, against the run that changed it,
+// rather than at the next build against a project that looks fine.
+const foreign = foreignProject(identifiers, BUNDLE_ID);
+
+if (foreign) refuse(foreign);
+
 const nested = nesting(identifiers);
 
-if (!nested) {
-  refuse({
-    lines: [
-      'error: the two bundle identifiers do not nest:',
-      ...identifiers.map((identifier) => `  ${identifier}`),
-      "Xcode embeds an extension only where the app's identifier is a prefix",
-      'of it. The converter derives both from the app name and the bundle',
-      'identifier it is given; they have to agree.',
-    ],
-  });
-}
+if (!nested) refuse({ lines: ['error: unreachable: the identifiers nest and they do not.'] });
 
 // Last, after everything that can refuse this project. The conversion above
 // deletes the whole directory, this record with it, so a run that is refused

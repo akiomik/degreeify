@@ -21,8 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its own build away afterwards rather than leave a second copy of the app
   registered, and refuses where the build holds a dotted entry other than
   `.DS_Store`, which no project carries and no regeneration can fix.
-  `npm run safari:selftest` checks that both scripts refuse what they say they
-  refuse. The wrapper's bundle identifier is `com.github.akiomik.Degreeify`,
+  It also refuses a project generated under names these scripts no longer use,
+  which otherwise built and installed under the old identifier and made a
+  rename silently a no-op. Both are Node programs, and what they refuse is
+  covered by the test suite: the checks are functions of what was read, so most
+  of the cases are about projects that were never on a disk, and the rest run
+  the builder against a tree made for the case with `xcodebuild` stubbed. The
+  wrapper's bundle identifier is `com.github.akiomik.Degreeify`,
   where it was `com.github.akiomik.degreeify`: the converter builds the app's
   identifier from the prefix plus the app name, so the lower-case one produced
   an app and an extension that did not nest, and a project Xcode refused to

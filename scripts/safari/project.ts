@@ -19,7 +19,12 @@ export function bundleIdentifiers(pbxproj: string): readonly string[] {
   const found = new Set<string>();
 
   for (const [, identifier] of pbxproj.matchAll(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]*);/g)) {
-    found.add(identifier.replaceAll('"', '').trim());
+    // A group that took part always matched something here, since neither
+    // pattern in this file can succeed with an empty one. The check is the
+    // type system's price for reading a match by position, and paid rather
+    // than asserted away: an assertion here would hold until somebody made the
+    // group optional, and then hold silently.
+    if (identifier !== undefined) found.add(identifier.replaceAll('"', '').trim());
   }
 
   return [...found].sort();
@@ -68,7 +73,7 @@ export function namedEntries(pbxproj: string, built: string): readonly string[] 
   const wanted = new RegExp(`/${escaped(built)}/([^"';]+)["';]`, 'g');
 
   for (const [, name] of pbxproj.matchAll(wanted)) {
-    if (!name.includes('/')) found.add(name);
+    if (name !== undefined && !name.includes('/')) found.add(name);
   }
 
   return [...found].sort();

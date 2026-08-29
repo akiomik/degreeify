@@ -1,3 +1,4 @@
+import { type Nesting, nesting } from './project.ts';
 import { IGNORED_ENTRY } from './settings.ts';
 
 /**
@@ -161,4 +162,50 @@ export function badIdentifiers(identifiers: readonly string[]): Refusal | null {
   }
 
   return null;
+}
+
+/**
+ * A project that is not the one these scripts describe.
+ *
+ * Two things are wrong with a pair of identifiers, and they are told apart
+ * because the remedies are opposite. Identifiers that do not nest are the
+ * converter's derivation gone out from under us, and no amount of generating
+ * the project again will change what it derives. Identifiers that nest around
+ * a name nobody here uses are a project made before the name changed, which
+ * generating again is exactly the fix for.
+ *
+ * Read off the nesting rather than by assuming the extension's suffix. Written
+ * as `expected` and `expected.Extension`, this refuses every project the
+ * converter would make if it ever renamed that target — and refuses it with
+ * the remedy for a stale project, which regenerates the identical project and
+ * refuses it again. A refusal whose fix cannot work is worse than no refusal:
+ * it costs the reader the time to try.
+ */
+export function foreignProject(identifiers: readonly string[], expected: string): Refusal | null {
+  const nested: Nesting | null = nesting(identifiers);
+
+  if (nested === null) {
+    return {
+      lines: [
+        'error: the two bundle identifiers do not nest:',
+        ...listed(identifiers),
+        "Xcode embeds an extension only where the app's identifier is a prefix",
+        'of it. The converter derives both from the app name and the bundle',
+        'identifier it is given; this check needs rewriting against what it',
+        'does now.',
+      ],
+    };
+  }
+
+  if (nested.app === expected) return null;
+
+  return {
+    lines: [
+      'error: the project was generated under different names:',
+      ...listed(identifiers),
+      `These scripts now say ${expected}. Run \`npm run safari:xcode\` to`,
+      'generate the project again, and take the old app away in Finder: what',
+      'is installed under the old identifier stays installed.',
+    ],
+  };
 }
