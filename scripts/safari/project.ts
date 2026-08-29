@@ -1,0 +1,80 @@
+/**
+ * Reading the generated Xcode project, which is the only way to find out what
+ * the converter actually did.
+ *
+ * Everything here asks the project rather than assuming what it will say. The
+ * rules it follows are the converter's, they can change under us, and a change
+ * to one should arrive as a message from these scripts rather than as an Xcode
+ * failure several steps from the mistake.
+ */
+
+/**
+ * The bundle identifiers the project sets, each once.
+ *
+ * Quotes taken off, because the project file puts them round any identifier
+ * that needs them and a hyphen in an org name is enough to need them. Left on,
+ * every comparison is against a value no identifier can equal.
+ */
+export function bundleIdentifiers(pbxproj: string): readonly string[] {
+  const found = new Set<string>();
+
+  for (const [, identifier] of pbxproj.matchAll(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]*);/g)) {
+    found.add(identifier.replaceAll('"', '').trim());
+  }
+
+  return [...found].sort();
+}
+
+export interface Nesting {
+  readonly app: string;
+  readonly extension: string;
+}
+
+/**
+ * Which identifier belongs to the app and which to the extension.
+ *
+ * Read off the nesting rather than off the order they came in, because Xcode
+ * embeds an extension only where the app's identifier is a prefix of it — and
+ * where they do not nest at all, which is what this is here to catch, neither
+ * name is worth claiming. A message that labels them by position labels them
+ * wrongly exactly when somebody is relying on it.
+ */
+export function nesting(identifiers: readonly string[]): Nesting | null {
+  if (identifiers.length !== 2) return null;
+
+  const [first, other] = identifiers as [string, string];
+
+  if (other.startsWith(`${first}.`)) return { app: first, extension: other };
+  if (first.startsWith(`${other}.`)) return { app: other, extension: first };
+
+  return null;
+}
+
+/**
+ * The entries of the build that the project names.
+ *
+ * One reading, asked both ways round by the caller: two readings would be two
+ * ideas of what "named" means, and the checks disagreeing about that is the
+ * drift this file exists to stop.
+ *
+ * No separator in what is taken: these are the names of things at the top of
+ * the build, and a reference to something inside a directory is not one of
+ * them. Recorded whole it would be an entry no name can equal, and the
+ * directory holding it would be reported unnamed — a project called stale for
+ * having said more than expected.
+ */
+export function namedEntries(pbxproj: string, built: string): readonly string[] {
+  const found = new Set<string>();
+  const wanted = new RegExp(`/${escaped(built)}/([^"';]+)["';]`, 'g');
+
+  for (const [, name] of pbxproj.matchAll(wanted)) {
+    if (!name.includes('/')) found.add(name);
+  }
+
+  return [...found].sort();
+}
+
+/** `text` as a pattern matching itself and nothing else. */
+function escaped(text: string): string {
+  return text.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
