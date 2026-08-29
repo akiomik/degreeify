@@ -241,19 +241,16 @@ cleanup() {
 # the pid, a supervisor, a timeout — `xcodebuild` outlives it and may write
 # back what was just removed. The next run of this removes it again; nothing
 # here can do better without killing a process it was not asked to manage.
+#
+# One case is out of reach entirely, and not by this script's doing: a signal
+# ignored when the shell starts cannot be trapped, and a script started in the
+# background has its interrupt ignored — so `kill -INT` on one of those runs
+# none of this and exits successfully. Nothing written here changes that,
+# which is why nothing here tries to.
 interrupted() {
   cleanup
   trap - EXIT "$1"
   kill -s "$1" $$
-
-  # And said outright where that did nothing. A script started in the
-  # background has its interrupt ignored, so re-raising returns and this would
-  # otherwise carry on to the end of the file and exit successfully — the very
-  # thing being fixed, in the one case the obvious fix does not reach.
-  case $1 in
-  INT) exit 130 ;;
-  *) exit 143 ;;
-  esac
 }
 
 trap cleanup EXIT
