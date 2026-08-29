@@ -103,9 +103,9 @@ Xcode project. The extension is never published to the App Store; this is for
 local verification only.
 
 ```sh
-npm run build:safari
-npm run safari:xcode    # generates ./safari (git-ignored)
-npm run safari:build    # optional: check it compiles, without opening Xcode
+npm run build:safari    # build the extension
+npm run safari:xcode    # generate ./safari (git-ignored)
+npm run safari:build    # check the project against the build, and compile it
 ```
 
 That leaves an Xcode project at `safari/Degreeify/Degreeify.xcodeproj`. Then,
@@ -120,15 +120,20 @@ in Safari:
 4. **Settings → Extensions →** enable Degreeify.
 5. Grant Degreeify permission for `ja.chordwiki.org` (choose *Always Allow*).
 
+After a code change, `npm run build:safari && npm run safari:build`, then
+**Run** again. The third command is what notices a project that has gone stale
+against the build; Xcode's Run makes no such check and will assemble an app
+that is quietly missing whatever the project does not name.
+
 The project references the files in `.output/safari-mv3` rather than copying
-them, so a code change needs `npm run build:safari` and another **Run** — but
-never a regenerated project. Changing a permission or a content script needs
-no regeneration either: nothing in the wrapper is derived from the manifest.
+them, so a code change needs no regenerated project. Changing a permission or
+a content script needs none either: nothing in the wrapper is derived from the
+manifest.
 
 Regenerate for two things. The first is the **icon**: the converter copies the
-extension's 128px icon into the wrapper and builds the app's icon set from it,
-so a new icon reaches Safari's extension list on a rebuild and leaves the app
-showing the old one until the project is generated again.
+largest icon the manifest declares into the wrapper and builds the app's icon
+set from it, so a new icon reaches Safari's extension list on a rebuild and
+leaves the app showing the old one until the project is generated again.
 
 The second is a **top-level** file or directory in the build, which a new
 entrypoint would add. The project names those one by one and directories among

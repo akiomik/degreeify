@@ -35,18 +35,54 @@ if [ ! -f "$PROJECT/project.pbxproj" ]; then
 fi
 
 # The wrapper's own icon, which is the one thing the converter copies rather
-# than references: it takes the extension's 128px icon at generation time and
-# builds the app's icon set from it. Changing the icon therefore changes what
-# Safari shows for the extension and leaves the app showing the old one, and
-# the check below cannot see it because `icon/` is still named.
+# than references: it takes the largest icon the manifest declares at
+# generation time and builds the app's icon set from it. Changing the icon
+# therefore changes what Safari shows for the extension and leaves the app
+# showing the old one, and the entry check below cannot see it because `icon/`
+# is still named.
+#
+# Asked of the manifest rather than named here. Written out, this would be the
+# size that happens to be the largest today — and the day somebody adds a
+# bigger one it would compare the wrapper against an icon the converter did
+# not use, fail every time, and send them to regenerate a project that fails
+# the same way. A check nothing can satisfy stops a change that was fine.
 readonly WRAPPER_ICON="safari/$APP_NAME/$APP_NAME/Resources/Icon.png"
-if ! cmp -s "$WRAPPER_ICON" "$BUILT/icon/128.png"; then
-  echo "error: the app's icon is not the one in the build." >&2
-  echo "  $WRAPPER_ICON" >&2
-  echo "  $BUILT/icon/128.png" >&2
-  echo "The converter copies that icon rather than referencing it. Run" >&2
-  echo "'npm run safari:xcode' to generate the project again." >&2
-  exit 1
+
+largest=$(
+  node -e '
+    const { readFileSync } = require("node:fs");
+    const icons = JSON.parse(readFileSync(process.argv[1], "utf8")).icons ?? {};
+    const sizes = Object.keys(icons).map(Number).filter((size) => Number.isFinite(size));
+    process.stdout.write(sizes.length === 0 ? "" : icons[String(Math.max(...sizes))]);
+  ' "$BUILT/manifest.json"
+)
+
+# Nothing to compare where the manifest declares no icon, which is a build the
+# converter takes no icon from either.
+if [ -n "$largest" ]; then
+  # Both read before either is compared, so that a missing one says which, the
+  # way the project file above does. `cmp` answers "these differ" and "I could
+  # not read one of them" with the same silence.
+  if [ ! -f "$WRAPPER_ICON" ]; then
+    echo "error: $WRAPPER_ICON not found." >&2
+    echo "Run 'npm run safari:xcode' to generate the project again." >&2
+    exit 1
+  fi
+
+  if [ ! -f "$BUILT/$largest" ]; then
+    echo "error: the manifest declares $largest and the build does not have it." >&2
+    echo "Run 'npm run build:safari' first." >&2
+    exit 1
+  fi
+
+  if ! cmp -s "$WRAPPER_ICON" "$BUILT/$largest"; then
+    echo "error: the app's icon is not the one in the build." >&2
+    echo "  $WRAPPER_ICON" >&2
+    echo "  $BUILT/$largest" >&2
+    echo "The converter copies that icon rather than referencing it. Run" >&2
+    echo "'npm run safari:xcode' to generate the project again." >&2
+    exit 1
+  fi
 fi
 
 # The project names the top-level entries of the build one by one, and folders
