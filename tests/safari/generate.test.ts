@@ -26,7 +26,13 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { BUILT, BUNDLE_ID, ICONS_RECORD, PROJECT } from '../../scripts/safari/settings.ts';
+import {
+  APP_NAME,
+  BUILT,
+  BUNDLE_ID,
+  ICONS_RECORD,
+  PROJECT,
+} from '../../scripts/safari/settings.ts';
 
 let root: string;
 let stubs: string;
@@ -56,7 +62,7 @@ function converter({ app, extension, elsewhere = false, status = 0 }: Converter 
       '  prev="$arg"',
       'done',
       // `--force` deletes the whole directory, this run's record with it.
-      'rm -rf safari/Degreeify',
+      `rm -rf safari/${APP_NAME}`,
       `mkdir -p "${written}"`,
       `cat > "${written}/project.pbxproj" <<END`,
       `\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = ${app ?? '$given'};`,

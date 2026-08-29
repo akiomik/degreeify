@@ -120,6 +120,13 @@ let stopping: NodeJS.Signals | null = null;
  * to put back what it took away.
  */
 function interrupted(signal: NodeJS.Signals): void {
+  // Asked for twice, and the second time is not a repeat of the first. The
+  // reader pressing Ctrl-C again is telling us the polite signal did not work
+  // — `xcodebuild` mid-link is slow to honour one and may block it outright —
+  // and sending the same thing again takes the same no-op path, forever. The
+  // wait further down is bounded for this reason; this had no bound at all.
+  const insisted = stopping !== null;
+
   stopping = signal;
 
   // Nothing started yet, so nothing to wait for: this arrived while the gates
@@ -136,7 +143,7 @@ function interrupted(signal: NodeJS.Signals): void {
 
   if (build.pid !== undefined && build.exitCode === null) {
     try {
-      process.kill(-build.pid, signal);
+      process.kill(-build.pid, insisted ? 'SIGKILL' : signal);
     } catch {
       // Already gone, or never grouped. Either way there is nothing to stop.
     }

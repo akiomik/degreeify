@@ -33,12 +33,18 @@ import {
   BUNDLE_ID,
   ICONS_RECORD,
   PROJECT,
+  SCRATCH,
 } from '../../scripts/safari/settings.ts';
 
 let root: string;
 let stubs: string;
 
-const APP = () => join(root, '.output/safari-xcodebuild/sym/Debug', `${APP_NAME}.app`);
+// Where the builder puts the app, asked of the same settings it asks. Written
+// out here, a change to `SCRATCH` would have the builder build and delete
+// somewhere else while four cases below went on asking whether something was
+// absent from a path nothing ever writes to — and passing, having tested
+// nothing.
+const APP = () => join(root, SCRATCH, 'sym/Debug', `${APP_NAME}.app`);
 const RAN = () => join(root, 'ran');
 const GRANDCHILD = () => join(root, 'grandchild-outlived-us');
 
@@ -106,6 +112,8 @@ interface Ran {
 
 interface Run {
   signal?: NodeJS.Signals;
+  /** Sent a second time, the way a reader presses Ctrl-C again. */
+  insist?: boolean;
   /**
    * What the builder finds on its path, the stubs ahead of the usual by
    * default.
@@ -143,7 +151,11 @@ function pathOf(needed: readonly string[]): string {
 }
 
 /** Starts the builder, and optionally signals it once it is under way. */
-function run({ signal, path = `${stubs}:${process.env.PATH}` }: Run = {}): Promise<Ran> {
+function run({
+  signal,
+  insist = false,
+  path = `${stubs}:${process.env.PATH}`,
+}: Run = {}): Promise<Ran> {
   const started = process.hrtime.bigint();
 
   // Started by its own interpreter rather than by name, so that emptying the
@@ -167,6 +179,8 @@ function run({ signal, path = `${stubs}:${process.env.PATH}` }: Run = {}): Promi
       if (existsSync(RAN())) {
         clearInterval(waiting);
         builder.kill(signal);
+
+        if (insist) setTimeout(() => builder.kill(signal), 500);
       }
     }, 20);
 
@@ -349,6 +363,23 @@ describe('the builder as a program', () => {
     // asked to stop, and `settled` is allowed five seconds to see it go. A
     // deadline that tight turns a loaded runner into a red build about
     // nothing.
+  }, 30_000);
+
+  /**
+   * A build that does not stop when it is asked. `xcodebuild` mid-link is slow
+   * to honour a signal and can block one outright, and the reader who presses
+   * Ctrl-C again is saying the first one did not work — so a second that takes
+   * the same no-op path leaves them with a script that never ends and an app
+   * still registered.
+   */
+  it('insists when the first signal is ignored', async () => {
+    restore();
+    stub("trap '' TERM\nsleep 30");
+
+    const ran = await run({ signal: 'SIGTERM', insist: true });
+
+    expect(ran.seconds).toBeLessThan(20);
+    expect(existsSync(APP())).toBe(false);
   }, 30_000);
 
   it("stops the build's children too", async () => {
