@@ -136,15 +136,18 @@ generates the project. A change to any of them therefore reaches Safari's
 extension list on a rebuild and leaves the app showing the old ones until the
 project is generated again.
 
-The second is a **top-level** file or directory in the build, which a new
-entrypoint would add. The project names those one by one and directories among
-them by reference: a file added inside `chunks/` or `content-scripts/` arrives
-on its own, while a new top-level one is in the build and missing from the app
-Xcode assembles, with nothing said. `npm run safari:xcodebuild` refuses to build
-when it finds one, since otherwise this is discovered by wondering why a
-feature does nothing in Safari alone. It refuses on icons that have changed
-since the project was generated too, which it knows by comparing them against
-what they were at the time.
+The second is the set of **top-level** files and directories in the build,
+which a new entrypoint adds to and a removed one takes from. The project names
+them one by one, and directories among them by reference — so a file added
+inside `chunks/` or `content-scripts/` arrives on its own, while a change to
+the set itself does not.
+
+`npm run safari:xcodebuild` refuses to build on either half of that. Left to
+Xcode, one is found by wondering why a feature does nothing in Safari alone,
+and the other by a build stopping on a file it cannot copy while saying
+nothing about the project being what is out of date. It refuses on icons that
+have changed since the project was generated too, which it knows by comparing
+them against what they were at the time.
 
 ## Layout
 

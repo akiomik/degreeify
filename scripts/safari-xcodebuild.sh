@@ -50,8 +50,10 @@ fi
 # made from no icons, which is not a thing that happens — so whatever left it
 # that way, the answer is the same and it is not "your icons changed".
 if [ ! -s "$ICONS_RECORD" ]; then
-  echo "error: $ICONS_RECORD not found, so what the project was made from is" >&2
-  echo "unknown. Run 'npm run safari:xcode' to generate the project again." >&2
+  echo "error: $ICONS_RECORD is missing or empty, so what the project was" >&2
+  echo "made from is unknown. Run 'npm run safari:xcode' again and read what" >&2
+  echo "it says: a generation that could not record this says why, and this" >&2
+  echo "is what it leaves behind." >&2
   exit 1
 fi
 
@@ -116,6 +118,24 @@ if [ ${#missing[@]} -gt 0 ]; then
   printf '  %s\n' "${missing[@]}" >&2
   echo "They would be left out of the app it assembles. Run" >&2
   echo "'npm run safari:xcode' to generate the project again." >&2
+  exit 1
+fi
+
+# And the other way round, which needs the project generated again just as
+# much: an entry it names and the build no longer has — an entrypoint removed
+# or renamed. Left to Xcode this is a build that stops on a file it cannot
+# copy, naming a path in `.output` and nothing about the project being the
+# thing out of date.
+gone=()
+while IFS= read -r name; do
+  [ -e "$BUILT/$name" ] || gone+=("$name")
+done < <(sed -n 's|.*/safari-mv3/\([^"]*\)";.*|\1|p' "$PROJECT/project.pbxproj" | sort -u)
+
+if [ ${#gone[@]} -gt 0 ]; then
+  echo "error: the Xcode project names entries the build no longer has:" >&2
+  printf '  %s\n' "${gone[@]}" >&2
+  echo "Xcode will stop on the first of them. Run 'npm run safari:xcode' to" >&2
+  echo "generate the project again." >&2
   exit 1
 fi
 
