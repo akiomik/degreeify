@@ -43,12 +43,24 @@ icons_digest() {
 
     const built = process.argv[1];
     try {
-      const { icons = {} } = JSON.parse(readFileSync(`${built}/manifest.json`, "utf8"));
+      const manifest = JSON.parse(readFileSync(`${built}/manifest.json`, "utf8"));
+
+      // Every icon the manifest names, wherever it names one. `icons` is the
+      // set today, and an action can carry its own — as one path or as sizes
+      // — so a build that grew one would otherwise change without this
+      // noticing. Which of them the converter uses is its business, and not
+      // knowing is the point of asking this way.
+      const named = { ...(manifest.icons ?? {}) };
+      const action = manifest.action?.default_icon;
+
+      if (typeof action === "string") named.action = action;
+      else Object.assign(named, action ?? {});
+
       const digest = createHash("sha256");
 
-      for (const size of Object.keys(icons).sort()) {
-        digest.update(size);
-        digest.update(readFileSync(`${built}/${icons[size]}`));
+      for (const key of Object.keys(named).sort()) {
+        digest.update(key);
+        digest.update(readFileSync(`${built}/${named[key]}`));
       }
 
       process.stdout.write(digest.digest("hex"));

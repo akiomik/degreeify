@@ -147,6 +147,10 @@ stops the build on a file it cannot copy, and a build holding a file the
 project does not name assembles quietly and is found by wondering why a
 feature does nothing in Safari.
 
+The check builds into `.output/safari-xcodebuild`, which is git-ignored and
+keeps its intermediates so a repeat run is quick. Nothing prunes them; delete
+that directory when it has grown further than you want to keep.
+
 One refusal has no remedy. The converter carries no dotted entry into the
 project — `.DS_Store` is ignored, since macOS writes it into any folder opened
 in Finder, but anything else dotted at the top level of the build cannot be

@@ -254,24 +254,24 @@ interrupted() {
   # is counting down to a kill will not wait that long. Run as a child that
   # can be stopped, the trap arrives at once; waiting for it to die is also
   # what keeps the removal below from racing something still writing there.
-  if [ -n "${build:-}" ]; then
-    kill "$build" 2>/dev/null || true
-    wait "$build" 2>/dev/null || true
+  #
+  # Asked of the shell rather than of a variable this sets. Learning the pid
+  # is a statement after the one that starts the build, and a signal landing
+  # between the two would find nothing to stop — leaving the build running to
+  # put the app back after the removal below, with nothing left to take it
+  # away again. The shell knows about the job from the moment it exists.
+  running=$(jobs -p)
+
+  if [ -n "$running" ]; then
+    # shellcheck disable=SC2086  # a list of pids, which is what kill takes
+    kill $running 2>/dev/null || true
+    wait 2>/dev/null || true
   fi
 
   cleanup
   trap - EXIT "$1"
   kill -s "$1" $$
 }
-
-# Empty before the traps are armed, and not left to the assignment after the
-# build starts. A signal can land between launching it and learning its pid,
-# and the handler would then kill nothing, delete the directory, and leave the
-# build it never stopped to put the app back there and register it — the stale
-# second copy this exists to prevent, with nothing left running to remove it.
-# It would also mean `${build:-}` reading whatever the environment happened to
-# call `build`, and killing that.
-build=
 
 trap cleanup EXIT
 trap 'interrupted INT' INT
