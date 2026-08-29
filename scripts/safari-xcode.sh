@@ -11,8 +11,8 @@
 #
 # Two changes still need the project generated again: an icon, which the
 # converter copies rather than references, and a new top-level entry in the
-# build, which it names one by one. `scripts/safari-build.sh` refuses to build
-# past either.
+# build, which it names one by one. `scripts/safari-xcodebuild.sh` refuses to
+# build past either.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

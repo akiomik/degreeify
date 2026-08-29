@@ -103,9 +103,9 @@ Xcode project. The extension is never published to the App Store; this is for
 local verification only.
 
 ```sh
-npm run build:safari    # build the extension
-npm run safari:xcode    # generate ./safari (git-ignored)
-npm run safari:build    # check the project against the build, and compile it
+npm run build:safari       # build the extension
+npm run safari:xcode       # generate ./safari (git-ignored)
+npm run safari:xcodebuild  # check the project against the build, and compile it
 ```
 
 That leaves an Xcode project at `safari/Degreeify/Degreeify.xcodeproj`. Then,
@@ -120,7 +120,7 @@ in Safari:
 4. **Settings → Extensions →** enable Degreeify.
 5. Grant Degreeify permission for `ja.chordwiki.org` (choose *Always Allow*).
 
-After a code change, `npm run build:safari && npm run safari:build`, then
+After a code change, `npm run build:safari && npm run safari:xcodebuild`, then
 **Run** again. The third command is what notices a project that has gone stale
 against the build; Xcode's Run makes no such check and will assemble an app
 that is quietly missing whatever the project does not name.
@@ -140,7 +140,7 @@ The second is a **top-level** file or directory in the build, which a new
 entrypoint would add. The project names those one by one and directories among
 them by reference: a file added inside `chunks/` or `content-scripts/` arrives
 on its own, while a new top-level one is in the build and missing from the app
-Xcode assembles, with nothing said. `npm run safari:build` refuses to build
+Xcode assembles, with nothing said. `npm run safari:xcodebuild` refuses to build
 when it finds one, since otherwise this is discovered by wondering why a
 feature does nothing in Safari alone. It refuses on icons that have changed
 since the project was generated too, which it knows by comparing them against

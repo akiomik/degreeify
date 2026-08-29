@@ -14,7 +14,7 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "safari:xcode": "./scripts/safari-xcode.sh",
-    "safari:build": "./scripts/safari-build.sh",
+    "safari:xcodebuild": "./scripts/safari-xcodebuild.sh",
     "typecheck": "wxt prepare && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
