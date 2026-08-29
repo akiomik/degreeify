@@ -102,15 +102,45 @@ if [ ${#carried[@]} -gt 0 ]; then
   exit 1
 fi
 
+# What the project names, read once and asked both ways. Two readings would
+# be two ideas of what "named" means, and the checks below disagreeing about
+# that is the drift the file they share their paths through exists to stop.
+#
+# Escaped, because the path comes from that shared file. Both the quoted form
+# and the bare one, since the project file quotes only what needs it.
+built_pattern=$(printf '%s' "$BUILT" | sed 's/[][\.*^$/]/\\&/g')
+
+named=()
+while IFS= read -r name; do
+  named+=("$name")
+done < <(
+  sed -n "s|.*/$built_pattern/\([^\";]*\)[\";].*|\1|p" "$PROJECT/project.pbxproj" | sort -u
+)
+
+# Nothing read is not an empty project; it is this no longer knowing how to
+# read one, which is what the sibling says about the identifiers it cannot
+# find. Asked before either check below, because both of them read an
+# unreadable project as every entry being wrong — and then send the reader to
+# regenerate a project that will be just as unreadable next time.
+if [ ${#named[@]} -eq 0 ]; then
+  echo "error: the project names no entry in $BUILT, which it must." >&2
+  echo "The converter has changed how it writes them; this check needs" >&2
+  echo "rewriting against what it does now." >&2
+  exit 1
+fi
+
+# What the build has and the project does not name, which would be left out of
+# the app with nothing said.
 missing=()
 for entry in "$BUILT"/*; do
   name=$(basename "$entry")
-  # Fixed strings, and the punctuation the project file writes after a path,
-  # so that a name is matched whole and no character in one is read as a
-  # pattern. Quoted or not depending on what the name needs, so both.
-  grep -qF "$BUILT/$name\";" "$PROJECT/project.pbxproj" ||
-    grep -qF "$BUILT/$name;" "$PROJECT/project.pbxproj" ||
-    missing+=("$name")
+  found=
+
+  for candidate in "${named[@]}"; do
+    [ "$candidate" = "$name" ] && found=yes && break
+  done
+
+  [ -n "$found" ] || missing+=("$name")
 done
 
 if [ ${#missing[@]} -gt 0 ]; then
@@ -126,30 +156,6 @@ fi
 # or renamed. Left to Xcode this is a build that stops on a file it cannot
 # copy, naming a path in `.output` and nothing about the project being the
 # thing out of date.
-# Read out of the project rather than named here, and escaped, because the
-# path comes from the file both scripts share and a copy of it here is the
-# drift that file exists to stop. Both the quoted form and the bare one, for
-# the same reason the check above accepts both.
-built_pattern=$(printf '%s' "$BUILT" | sed 's/[][\.*^$/]/\\&/g')
-
-named=()
-while IFS= read -r name; do
-  named+=("$name")
-done < <(
-  sed -n "s|.*/$built_pattern/\([^\";]*\)[\";].*|\1|p" "$PROJECT/project.pbxproj" | sort -u
-)
-
-# Nothing read is not an empty project; it is this no longer knowing how to
-# read one, which is what the sibling says about the identifiers it cannot
-# find. Left unsaid, the check passes everything and the failure it is here
-# for comes back with nothing announcing it.
-if [ ${#named[@]} -eq 0 ]; then
-  echo "error: the project names no entry in $BUILT, which it must." >&2
-  echo "The converter has changed how it writes them; this check needs" >&2
-  echo "rewriting against what it does now." >&2
-  exit 1
-fi
-
 gone=()
 for name in "${named[@]}"; do
   [ -e "$BUILT/$name" ] || gone+=("$name")
