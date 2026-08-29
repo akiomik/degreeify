@@ -34,20 +34,22 @@ if [ ! -f "$PROJECT/project.pbxproj" ]; then
 fi
 
 # Whether the icons have changed since the project was made from them. The
-# converter copies the largest into the wrapper and builds the app's icon set
-# per size from the whole set, so a change to any of them leaves the app
-# showing something the build no longer contains — and the entry check below
-# cannot see it, because `icon/` is still named.
+# converter copies them in at generation, so a change to any of them leaves
+# the app showing something the build no longer contains — and the entry check
+# below cannot see it, because `icon/` is still named.
 #
-# Compared as one line recorded at generation rather than icon by icon: the
-# app's icon set is re-encoded per size and never matches a source file byte
-# for byte, and which icon went where is the converter's business.
+# Compared as one line recorded at generation rather than icon by icon: what
+# the converter puts in the app is re-encoded and never matches a source file
+# byte for byte.
 if [ ! -f "$BUILT/manifest.json" ]; then
   echo "error: $BUILT/manifest.json not found. Run 'npm run build:safari' first." >&2
   exit 1
 fi
 
-if [ ! -f "$ICONS_RECORD" ]; then
+# Empty counts as absent. A record with nothing in it says the project was
+# made from no icons, which is not a thing that happens — so whatever left it
+# that way, the answer is the same and it is not "your icons changed".
+if [ ! -s "$ICONS_RECORD" ]; then
   echo "error: $ICONS_RECORD not found, so what the project was made from is" >&2
   echo "unknown. Run 'npm run safari:xcode' to generate the project again." >&2
   exit 1

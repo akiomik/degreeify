@@ -83,9 +83,18 @@ else
   exit 1
 fi
 
-# Written after the project, so that a generation that failed leaves no record
-# claiming these icons were the ones it was made from.
-icons_digest > "$ICONS_RECORD"
+# Worked out and then written, rather than written as it is worked out. A
+# redirection empties the file before the command behind it runs, so a digest
+# that fails would leave a record of nothing — which reads as a project made
+# from no icons at all, and sends whoever meets it to regenerate the project
+# that just succeeded.
+if ! record=$(icons_digest); then
+  echo "error: the project was generated, but what its icons were could not" >&2
+  echo "be recorded, so nothing can tell later whether they have changed." >&2
+  exit 1
+fi
+
+printf '%s' "$record" > "$ICONS_RECORD"
 
 echo
 echo "Generated $PROJECT"

@@ -30,12 +30,11 @@ readonly ICONS_RECORD="safari/$APP_NAME/.icons"
 # One line standing for every icon the manifest declares.
 #
 # Recorded at generation and compared at build, rather than working out which
-# icon the converter used and comparing that one. It copies the largest into
-# the wrapper and builds the app's icon set per size from the whole set, and
-# both of those are its business and have already been got wrong here twice.
-# What is actually being asked is whether the icons have changed since the
-# project was made from them, and that can be asked without knowing what it
-# did with them.
+# icons the converter used and comparing those. Which it takes and what it
+# makes of them is its business, and describing that business has been got
+# wrong here three times running. What is actually being asked is whether the
+# icons have changed since the project was made from them, and that can be
+# asked without knowing what was done with them.
 icons_digest() {
   # shellcheck disable=SC2016  # the script is node's to expand, not the shell's
   node -e '

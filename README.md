@@ -131,10 +131,10 @@ a content script needs none either: neither reaches the wrapper, which takes
 its name from the conversion and its version from nothing.
 
 Regenerate for two things. The first is the **icons**, which are the one thing
-the wrapper does take from the extension: the converter copies the largest as
-the app's own and builds an icon set per size from the rest. A new icon
-therefore reaches Safari's extension list on a rebuild and leaves the app
-showing the old one until the project is generated again.
+the wrapper takes from the extension: the converter copies them in when it
+generates the project. A change to any of them therefore reaches Safari's
+extension list on a rebuild and leaves the app showing the old ones until the
+project is generated again.
 
 The second is a **top-level** file or directory in the build, which a new
 entrypoint would add. The project names those one by one and directories among
