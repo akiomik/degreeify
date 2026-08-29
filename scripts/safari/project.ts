@@ -62,23 +62,35 @@ export function nesting(identifiers: readonly string[]): Nesting | null {
  * ideas of what "named" means, and the checks disagreeing about that is the
  * drift this file exists to stop.
  *
- * No separator in what is taken: these are the names of things at the top of
- * the build, and a reference to something inside a directory is not one of
- * them. Recorded whole it would be an entry no name can equal, and the
- * directory holding it would be reported unnamed — a project called stale for
- * having said more than expected.
+ * Read both ways the project file writes a value: quoted, where only the
+ * closing quote ends it, and bare, where whitespace or a semicolon does.
  */
 export function namedEntries(pbxproj: string, built: string): readonly string[] {
   const found = new Set<string>();
-  // An apostrophe is not one of the project file's delimiters, and an entry is
-  // as free to hold one as any other character. Treated as a terminator, a
-  // build with `don't.js` at the top of it has the project reported as not
-  // naming it — when it does — and the remedy given is to generate a project
-  // that will read exactly the same way.
-  const wanted = new RegExp(`/${escaped(built)}/([^";]+)[";]`, 'g');
+  const where = escaped(built);
 
-  for (const [, name] of pbxproj.matchAll(wanted)) {
-    if (name !== undefined && !name.includes('/')) found.add(name);
+  // Read by how the value is written rather than by a set of characters no
+  // name may hold. The project file quotes any value that needs it, and inside
+  // quotes only the closing quote ends it — so a `;`, a `'` or a space in a
+  // name is part of the name. Taking those for terminators truncates it, the
+  // entry is reported as one the project does not name when it does, and the
+  // remedy offered is to generate a project that will read the same way.
+  //
+  // Widening the set of characters allowed was how this was answered once
+  // already, for the apostrophe. The set was the wrong idea: what ends a value
+  // is what opened it.
+  const quoted = new RegExp(`"(?:[^"\\\\]|\\\\.)*/${where}/((?:[^"\\\\]|\\\\.)+)"`, 'g');
+  const bare = new RegExp(`(?:^|[\\s=])[^\\s";]*/${where}/([^\\s";]+)`, 'gm');
+
+  for (const wanted of [quoted, bare]) {
+    for (const [, name] of pbxproj.matchAll(wanted)) {
+      // No separator in what is taken: these are the names of things at the
+      // top of the build, and a reference to something inside a directory is
+      // not one of them. Recorded whole it would be an entry no name can
+      // equal, and the directory holding it would be reported unnamed — a
+      // project called stale for having said more than expected.
+      if (name !== undefined && !name.includes('/')) found.add(name.replaceAll('\\"', '"'));
+    }
   }
 
   return [...found].sort();

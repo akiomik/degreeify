@@ -14,6 +14,7 @@
  */
 import { execSync, spawn } from 'node:child_process';
 import {
+  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -302,6 +303,29 @@ describe('the builder as a program', () => {
 
     expect(existsSync(APP())).toBe(false);
   });
+
+  /**
+   * The app still being there is the one thing this script exists to prevent,
+   * and `npm run build:safari && npm run safari:xcodebuild` is what the README
+   * tells a reader to run — so a sweep that failed and said so only on stderr
+   * has the whole chain report that it worked.
+   *
+   * Skipped as root, which no permission stops.
+   */
+  it.skipIf(process.getuid?.() === 0)(
+    'does not report success when it could not take the app away',
+    async () => {
+      restore();
+      stub(`mkdir -p "$sym/Debug/${APP_NAME}.app/inner"\nchmod 500 "$sym/Debug/${APP_NAME}.app"`);
+
+      const ran = await run();
+
+      chmodSync(APP(), 0o700);
+
+      expect(ran.status).not.toBe(0);
+      expect(ran.says).toContain('could not be removed');
+    },
+  );
 
   it('says what it could not run rather than failing silently', async () => {
     restore();

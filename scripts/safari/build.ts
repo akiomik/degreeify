@@ -51,7 +51,7 @@ const LSREGISTER =
  *
  * The intermediates stay, so the next run is not a build from nothing.
  */
-function cleanup(): void {
+function cleanup(): boolean {
   // Only where there is something to unregister, and quietly. With nothing
   // there the tool says so at length on stderr, directly under the real error,
   // reading as a second failure that has nothing to do with anything.
@@ -59,42 +59,37 @@ function cleanup(): void {
     spawnSync(LSREGISTER, ['-u', APP], { stdio: 'ignore' });
   }
 
-  // Retried, and not fatal if it still will not go. `settled` is bounded on
-  // purpose, so a straggler can outlive it and still be creating files under
-  // here — and a recursive removal walking a directory somebody is writing
-  // into throws. Thrown from the exit path this is called on, that is an
-  // unhandled rejection in place of the interrupt the reader asked for, and
-  // the app they are being protected from is left where it is either way.
+  // Retried, and reported rather than thrown. `settled` is bounded on purpose,
+  // so a straggler can outlive it and still be creating files under here — and
+  // a recursive removal walking a directory somebody is writing into throws.
+  // Thrown from the exit path this is called on, that is an unhandled
+  // rejection in place of the interrupt the reader asked for.
+  //
+  // Said in the exit status as well as on stderr. The app that is still there
+  // is the one thing this script exists to remove, and `npm run build:safari
+  // && npm run safari:xcodebuild` — which is what the README tells a reader to
+  // run — would otherwise report the whole chain as having worked.
   try {
     rmSync(SYM, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   } catch (reason) {
     process.stderr.write(`warning: ${SYM} could not be removed: ${reason}\n`);
     process.stderr.write('It holds an app that Safari may prefer to the one Xcode installs.\n');
+
+    return false;
   }
+
+  return true;
 }
 
-/** What a command said, or null where it could not be asked. */
-function said(command: string, args: readonly string[]): string | null {
-  const ran = spawnSync(command, args, { encoding: 'utf8' });
-
-  return ran.status === 0 ? ran.stdout : null;
-}
-
-const arch = hostArch(said('sysctl', ['-n', 'sysctl.proc_translated']), said('uname', ['-m']));
-
-const tree: Tree = {
-  isDirectory: (path) => existsSync(path) && statSync(path).isDirectory(),
-  read: (path) => (existsSync(path) ? readFileSync(path, 'utf8') : null),
-  readBytes: (path) => readFileSync(path),
-  entries: (path) => readdirSync(path),
-};
-
-// Asked before anything is built. A run refused below still runs `cleanup` on
-// the way out: a reader whose project is stale is refused at the first gate
-// over and over, and the app they are being protected from would otherwise sit
-// there through all of it — which is the moment it does harm, since they are
-// already wondering why Safari shows them something else.
-process.on('exit', cleanup);
+// Armed before the first thing that can be interrupted, which is neither the
+// build nor the gates but the two commands below that ask what machine this
+// is. A signal arriving before this line finds the default disposition and
+// kills the run outright, and an app left by an earlier build stays where it
+// is — which is the moment it does harm, since the reader is already
+// wondering why Safari shows them something else.
+process.on('exit', () => {
+  if (!cleanup()) process.exitCode = 1;
+});
 
 /** The build, once there is one. */
 let build: ChildProcess | undefined;
@@ -133,8 +128,10 @@ function interrupted(signal: NodeJS.Signals): void {
   // below were being asked, or on the way out of a refusal. Ended here rather
   // than left for a handler that will never run.
   if (build === undefined) {
-    cleanup();
-    process.removeListener('exit', cleanup);
+    const swept = cleanup();
+
+    process.removeAllListeners('exit');
+    if (!swept) process.exitCode = 1;
     process.removeAllListeners('SIGINT');
     process.removeAllListeners('SIGTERM');
     process.kill(process.pid, signal);
@@ -158,6 +155,22 @@ function interrupted(signal: NodeJS.Signals): void {
 // That is the stale second copy this whole script exists to take away.
 process.on('SIGINT', () => interrupted('SIGINT'));
 process.on('SIGTERM', () => interrupted('SIGTERM'));
+
+/** What a command said, or null where it could not be asked. */
+function said(command: string, args: readonly string[]): string | null {
+  const ran = spawnSync(command, args, { encoding: 'utf8' });
+
+  return ran.status === 0 ? ran.stdout : null;
+}
+
+const tree: Tree = {
+  isDirectory: (path) => existsSync(path) && statSync(path).isDirectory(),
+  read: (path) => (existsSync(path) ? readFileSync(path, 'utf8') : null),
+  readBytes: (path) => readFileSync(path),
+  entries: (path) => readdirSync(path),
+};
+
+const arch = hostArch(said('sysctl', ['-n', 'sysctl.proc_translated']), said('uname', ['-m']));
 
 const refusal = refusalFor(tree);
 
@@ -253,8 +266,9 @@ async function settled(pid: number): Promise<void> {
 build.on('exit', async (status, signal) => {
   if (stopping !== null && build?.pid !== undefined) await settled(build.pid);
 
-  cleanup();
-  process.removeListener('exit', cleanup);
+  const swept = cleanup();
+
+  process.removeAllListeners('exit');
 
   // Re-raised rather than swallowed, so that a caller reading the exit status
   // to decide whether the project still compiles is told this was interrupted
@@ -272,5 +286,5 @@ build.on('exit', async (status, signal) => {
   // A build killed by a signal of its own has no status. Reported as one, it
   // would exit 0 — a build that never finished, called a project that still
   // compiles.
-  process.exit(signal ? 1 : (status ?? 1));
+  process.exit(!swept || signal ? 1 : (status ?? 1));
 });

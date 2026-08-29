@@ -205,6 +205,30 @@ describe('what the builder refuses', () => {
     ).toBeNull();
   });
 
+  /**
+   * Inside quotes only the closing quote ends a value, so a semicolon in a
+   * name is part of the name. Answering this by widening the set of allowed
+   * characters is how the apostrophe was handled once, and it left the next
+   * character to be found by somebody hitting it.
+   */
+  it('reads an entry whose name holds a semicolon', () => {
+    const entries = ['manifest.json', 'a;b.js'];
+    const named = pbxproj(BUNDLE_ID, `${BUNDLE_ID}.Extension`, entries);
+
+    expect(refusalFor(treeOf({ files: { [PBXPROJ]: named }, entries }))).toBeNull();
+  });
+
+  it('reads an entry the project names without quotes', () => {
+    const bare = [
+      pbxproj(BUNDLE_ID, `${BUNDLE_ID}.Extension`, ['manifest.json']),
+      `path = ../../${BUILT}/plain.js;`,
+    ].join('\n');
+
+    expect(
+      refusalFor(treeOf({ files: { [PBXPROJ]: bare }, entries: ['manifest.json', 'plain.js'] })),
+    ).toBeNull();
+  });
+
   it('does not read a reference inside a directory as a top-level entry', () => {
     const inside = [
       pbxproj(BUNDLE_ID, `${BUNDLE_ID}.Extension`, ['manifest.json']),
