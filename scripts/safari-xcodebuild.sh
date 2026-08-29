@@ -200,8 +200,16 @@ readonly LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A
 # stale app is what Safari may show them while they do it. Removed only on the
 # next success, it would sit there for as long as the build kept failing.
 cleanup() {
-  if [ -x "$LSREGISTER" ]; then
-    "$LSREGISTER" -u "$SCRATCH/sym/Debug/$APP_NAME.app" || true
+  local app="$SCRATCH/sym/Debug/$APP_NAME.app"
+
+  # Asked for only where there is something to unregister, and quietly. A
+  # build that stopped before assembling the app leaves nothing here, and the
+  # tool says so at length on stderr — directly under the real error, reading
+  # as a second failure that has nothing to do with anything. Which is also
+  # what stops this speaking twice when an interrupt runs it and the exit runs
+  # it again: by then the app is gone and there is nothing to say.
+  if [ -d "$app" ] && [ -x "$LSREGISTER" ]; then
+    "$LSREGISTER" -u "$app" >/dev/null 2>&1 || true
   fi
 
   rm -rf "$SCRATCH/sym"
