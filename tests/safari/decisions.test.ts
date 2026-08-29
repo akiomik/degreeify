@@ -241,6 +241,20 @@ describe('one line standing for the icons', () => {
 
     expect(other).not.toBe(one);
   });
+
+  /**
+   * Where one part ends and the next begins is part of what is hashed. Run
+   * together, `icons:48` followed by one byte is the same sequence as
+   * `icons:4` followed by two — so a rename to another size whose contents
+   * differ by exactly the digit that moved comes out unchanged, which is the
+   * one thing this is here to catch.
+   */
+  it('does not read the join between a name and its bytes as either', () => {
+    const one = digestOf([{ key: 'icons:48', path: 'a.png' }], read({ 'a.png': 'X' }));
+    const other = digestOf([{ key: 'icons:4', path: 'a.png' }], read({ 'a.png': '8X' }));
+
+    expect(other).not.toBe(one);
+  });
 });
 
 describe('icons against what they were', () => {

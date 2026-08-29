@@ -7,9 +7,9 @@
  * few lines and the order the gates are asked in — which decides the one
  * message a reader is shown — can be checked at all.
  */
-import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { refusalFor, type Tree } from '../../scripts/safari/checks.ts';
+import { digestOf, iconsOf } from '../../scripts/safari/manifest.ts';
 import { BUILT, BUNDLE_ID, ICONS_RECORD, PROJECT } from '../../scripts/safari/settings.ts';
 
 const PBXPROJ = `${PROJECT}/project.pbxproj`;
@@ -28,19 +28,14 @@ function pbxproj(
 }
 
 const ICON = Buffer.from('an icon');
+const MANIFEST = { icons: { 48: 'icon/48.png' } };
 
-function digestOf(icons: readonly [string, Buffer][]) {
-  const digest = createHash('sha256');
-
-  for (const [key, bytes] of icons) {
-    digest.update(key);
-    digest.update(bytes);
-  }
-
-  return digest.digest('hex');
-}
-
-const RECORDED = digestOf([['icons:48', ICON]]);
+// Asked of the same function the checks ask, rather than worked out again
+// here. A second implementation is a second idea of what the record means,
+// and the two drifting apart is a suite that passes while saying nothing —
+// which is what happened the moment the real one changed how it joins its
+// parts.
+const RECORDED = digestOf(iconsOf(MANIFEST), () => ICON);
 
 interface Parts {
   files?: Record<string, string>;
@@ -58,7 +53,7 @@ interface Parts {
 function treeOf({ files = {}, absent = [], bytes = {}, entries, built = true }: Parts = {}): Tree {
   const contents: Record<string, string> = {
     [PBXPROJ]: pbxproj(),
-    [`${BUILT}/manifest.json`]: JSON.stringify({ icons: { 48: 'icon/48.png' } }),
+    [`${BUILT}/manifest.json`]: JSON.stringify(MANIFEST),
     [ICONS_RECORD]: RECORDED,
     ...files,
   };
@@ -184,8 +179,22 @@ describe('what the builder refuses', () => {
     ).toBeNull();
   });
 
-  it('refuses a dotted entry with no remedy', () => {
-    expect(said(treeOf({ entries: ['manifest.json', '.well-known'] }))).toContain('cannot carry');
+  /**
+   * No remedy in the project, and one in the build. A tool that starts writing
+   * `.vite` into the output would otherwise leave the reader refused for good
+   * over a directory the extension may well not need.
+   */
+  it('refuses a dotted entry, and says where the answer is', () => {
+    const said_ = said(treeOf({ entries: ['manifest.json', '.well-known'] }));
+
+    expect(said_).toContain('cannot carry');
+    expect(said_).toContain('kept out');
+  });
+
+  it('says what to do about a project that names some other number of identifiers', () => {
+    const three = [pbxproj(), 'PRODUCT_BUNDLE_IDENTIFIER = com.example.a.third.one;'].join('\n');
+
+    expect(said(treeOf({ files: { [PBXPROJ]: three } }))).toContain('safari:xcode');
   });
 
   it('tolerates a .DS_Store', () => {

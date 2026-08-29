@@ -26,9 +26,11 @@ const listed = (names: readonly string[]) => names.map((name) => `  ${name}`);
  * dot.
  *
  * Said apart from the rest because the remedy differs: for everything else it
- * is to generate the project again, and for these there is none. A build that
- * needs one cannot be wrapped this way at all, which is the converter's limit
- * rather than a project gone out of date.
+ * is to generate the project again, and for these it is to look at what the
+ * build is emitting. The converter's limit rather than a project gone out of
+ * date — and a build that grows one of these (a tool writing `.vite`, say)
+ * would otherwise leave the reader with a refusal that names no way out at
+ * all, for a directory the extension may well not need.
  */
 export function unCarried(entries: readonly string[]): Refusal | null {
   const dotted = entries.filter((name) => name.startsWith('.') && name !== IGNORED_ENTRY);
@@ -40,8 +42,11 @@ export function unCarried(entries: readonly string[]): Refusal | null {
       'error: the build has entries the converter cannot carry:',
       ...listed(dotted),
       'It names no dotted entry in the project, so they would be missing',
-      'from the app and generating it again would not change that. This',
-      'build cannot be wrapped for Safari as it stands.',
+      'from the app and generating it again would not change that.',
+      'Whether that matters is a question about the build rather than about',
+      'this project: an entry the extension does not need should be kept out',
+      'of the build, and one it does need means this build cannot be wrapped',
+      'for Safari as it stands.',
     ],
   };
 }
@@ -157,6 +162,10 @@ export function badIdentifiers(identifiers: readonly string[]): Refusal | null {
       lines: [
         'error: expected the project to name two bundle identifiers, and it names:',
         ...listed(identifiers),
+        'An app and its extension, and nothing else. Run `npm run safari:xcode`',
+        'to generate the project again; if it names the same set afterwards,',
+        'the converter has changed what it writes and this check needs',
+        'rewriting against what it does.',
       ],
     };
   }

@@ -58,14 +58,24 @@ export function iconsOf(manifest: unknown): readonly Icon[] {
  * One line standing for the contents of every icon named.
  *
  * The key goes in beside the bytes, so that moving an icon from one size to
- * another is a change even where the bytes are the same ones.
+ * another is a change even where the bytes are the same ones — and each part
+ * is preceded by how long it is, so that where one ends and the next begins is
+ * part of what is hashed rather than something a reader of the hash has to
+ * guess.
  */
 export function digestOf(icons: readonly Icon[], read: (path: string) => Buffer): string {
   const digest = createHash('sha256');
 
   for (const { key, path } of icons) {
-    digest.update(key);
-    digest.update(read(path));
+    const bytes = read(path);
+
+    // How long each part is, before the part. Run together, the pieces do not
+    // say where they end: `icons:48` followed by one byte hashes the same as
+    // `icons:4` followed by the two bytes `8` and that one — so an icon
+    // renamed to another size, with contents that differ by exactly the digit
+    // that moved, comes out unchanged. That is the one thing this is for.
+    digest.update(`${key.length}:${key}:${bytes.length}:`);
+    digest.update(bytes);
   }
 
   return digest.digest('hex');

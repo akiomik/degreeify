@@ -20,20 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the app be assembled from a project that no longer describes it, and takes
   its own build away afterwards rather than leave a second copy of the app
   registered, and refuses where the build holds a dotted entry other than
-  `.DS_Store`, which no project carries and no regeneration can fix.
-  It also refuses a project generated under names these scripts no longer use
-  — which otherwise built and installed under the old identifier and made a
-  rename silently a no-op — and sends it to be generated again, including the
-  pair the earlier version of this script produced. Both are Node programs, and what they refuse is
-  covered by the test suite: the checks are functions of what was read, so most
-  of the cases are about projects that were never on a disk, and the rest run
-  each script against a tree made for the case with `xcrun` and `xcodebuild`
-  stubbed. The
-  wrapper's bundle identifier is `com.github.akiomik.Degreeify`,
-  where it was `com.github.akiomik.degreeify`: the converter builds the app's
-  identifier from the prefix plus the app name, so the lower-case one produced
-  an app and an extension that did not nest, and a project Xcode refused to
-  build.
+  `.DS_Store`, which no project carries and no regeneration can fix. It also
+  refuses a project generated under names these scripts no longer use — which
+  otherwise built and installed under the old identifier and made a rename
+  silently a no-op — and sends it to be generated again, including the pair
+  the earlier version of this script produced. Both are Node programs, and
+  what they refuse is covered by the test suite: the checks are functions of
+  what was read, so most of the cases are about projects that were never on a
+  disk, and the rest run each script against a tree made for the case with
+  `xcrun` and `xcodebuild` stubbed. The wrapper's bundle identifier is
+  `com.github.akiomik.Degreeify`, where it was `com.github.akiomik.degreeify`:
+  the converter builds the app's identifier from the prefix plus the app name,
+  so the lower-case one produced an app and an extension that did not nest,
+  and a project Xcode refused to build.
 - A chord symbol parser that reads a root, an opaque quality and an optional
   bass note, and reports anything else — bar lines, accents, rhythm notes,
   `N.C.`, chart directions, section labels — as not a chord so it can be left
