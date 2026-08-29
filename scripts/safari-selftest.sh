@@ -59,7 +59,7 @@ stub() {
   case $1 in
   ok) body='mkdir -p "$sym/Debug/Degreeify.app/Contents"; echo "** BUILD SUCCEEDED **"' ;;
   fails) body='mkdir -p "$sym/Debug/Degreeify.app/Contents"; echo "** BUILD FAILED **" >&2; exit 65' ;;
-  slow) body='mkdir -p "$sym/Debug/Degreeify.app/Contents"; sleep 20' ;;
+  slow) body='mkdir -p "$sym/Debug/Degreeify.app/Contents"; : > "$sym/../started"; sleep 20' ;;
   *)
     # Named rather than left to fail as an unset variable further down, which
     # is what a mistyped name did: the suite stopped on `body: unbound
@@ -104,9 +104,32 @@ expect() {
   passed=$((passed + 1))
 }
 
+# Put the tree back, and say so if that is what failed.
+#
+# Sent to /dev/null with nothing tolerating a failure, a suite that stopped
+# here stopped after a run of `ok` lines with no message at all — and the
+# reason, which is the generator's own error, had already been thrown away.
+# Generate the project again, and say so if that is what failed. Same reason as
+# `restore`: a suite that stops here has thrown away the only thing that would
+# have said why.
+regenerate() {
+  local out
+
+  if ! out=$(./scripts/safari-xcode.sh 2>&1); then
+    echo 'error: could not generate the project again:' >&2
+    echo "$out" >&2
+    exit 1
+  fi
+}
+
 restore() {
-  npm run build:safari >/dev/null 2>&1
-  ./scripts/safari-xcode.sh >/dev/null 2>&1
+  local out
+
+  if ! out=$(npm run build:safari 2>&1) || ! out=$(./scripts/safari-xcode.sh 2>&1); then
+    echo 'error: could not put the build and the project back:' >&2
+    echo "$out" >&2
+    exit 1
+  fi
 }
 
 
@@ -177,7 +200,7 @@ node -e '
   manifest.action = { ...manifest.action, default_icon: { "16": "icon/action.png" } };
   writeFileSync(path, JSON.stringify(manifest));
 ' "$BUILT/manifest.json"
-./scripts/safari-xcode.sh >/dev/null 2>&1
+regenerate
 cp "$BUILT/icon/16.png" "$STUBS/held16.png"
 cp "$BUILT/icon/48.png" "$BUILT/icon/16.png"
 expect "an action icon does not hide the icon of its size" 1 "the icons have changed"
@@ -187,11 +210,10 @@ cp "$STUBS/held16.png" "$BUILT/icon/16.png"
 cp "$BUILT/icon/16.png" "$BUILT/icon/action.png"
 expect "a changed action icon is noticed" 1 "the icons have changed"
 cp "$STUBS/held16.png" "$BUILT/icon/16.png"
-restore
 
 printf '' > "$ICONS_RECORD"
 expect "a record of nothing is not a project made from no icons" 1 "missing or empty"
-./scripts/safari-xcode.sh >/dev/null 2>&1
+restore
 
 # ------------------------------------------------------- what it is given
 
@@ -229,14 +251,29 @@ fi
 # after it, a supervisor counting down to a kill has already stopped waiting,
 # and the app is left registered.
 stub slow
-started=$(date +%s)
+rm -f "$SCRATCH/started"
 PATH="$STUBS:$PATH" ./scripts/safari-xcodebuild.sh >/dev/null 2>&1 &
 waiting=$!
-sleep 2
+
+# Waited for rather than slept through. Given a fixed moment, a signal sent
+# while the guards are still running finds no build to stop and the case ends
+# the same way — quickly, with no app — so it passes without once exercising
+# the path it is named for, and on a slow machine that is what it does.
+for _ in $(seq 1 200); do
+  [ -f "$SCRATCH/started" ] && break
+  sleep 0.1
+done
+
+if [ ! -f "$SCRATCH/started" ]; then
+  echo "FAIL the build never started, so the interrupt case tested nothing" >&2
+  failed=$((failed + 1))
+fi
+
+began=$(date +%s)
 kill -TERM "$waiting" 2>/dev/null || true
 interrupted_status=0
 { wait "$waiting" || interrupted_status=$?; } 2>/dev/null
-took=$(($(date +%s) - started))
+took=$(($(date +%s) - began))
 
 if [ "$interrupted_status" = 143 ] && [ "$took" -lt 10 ] &&
   [ ! -d "$SCRATCH/sym/Debug/$APP_NAME.app" ]; then
@@ -287,7 +324,11 @@ fi
 # — an icon the manifest names, taken away — and one that works and is then
 # refused by a check, which is the door the record has to be written after.
 mv "$BUILT/icon/48.png" "$STUBS/icon48-held"
+
+# Expected to fail, which is the whole case — so not `regenerate`, which
+# exists to stop the suite on a generation that was supposed to work.
 ./scripts/safari-xcode.sh >/dev/null 2>&1 || true
+
 mv "$STUBS/icon48-held" "$BUILT/icon/48.png"
 
 if [ -f "$ICONS_RECORD" ]; then

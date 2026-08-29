@@ -13,6 +13,11 @@
 set -euo pipefail
 shopt -s nullglob
 
+# Job control, so the build below runs in a process group of its own and can be
+# stopped as one. Without it a build shares this shell's group, and the only
+# thing that can be signalled is the single process this started.
+set -m
+
 cd "$(dirname "$0")/.."
 
 # shellcheck source=scripts/safari-common.sh
@@ -84,11 +89,19 @@ interrupted() {
   # between the two would find nothing to stop — leaving the build running to
   # put the app back after the removal below, with nothing left to take it
   # away again. The shell knows about the job from the moment it exists.
+  #
+  # The group rather than the one process: a build is a tree of them, and
+  # signalling only the one this started leaves its children running with
+  # nothing waiting on them. They then write into the directory being removed
+  # below, or put back what it removed. `set -m` above is what gives the job a
+  # group of its own to name here.
   running=$(jobs -p)
 
+  for job in $running; do
+    kill -- "-$job" 2>/dev/null || kill "$job" 2>/dev/null || true
+  done
+
   if [ -n "$running" ]; then
-    # shellcheck disable=SC2086  # a list of pids, which is what kill takes
-    kill $running 2>/dev/null || true
     wait 2>/dev/null || true
   fi
 
