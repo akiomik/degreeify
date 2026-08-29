@@ -106,15 +106,25 @@ fi
 # be two ideas of what "named" means, and the checks below disagreeing about
 # that is the drift the file they share their paths through exists to stop.
 #
-# Escaped, because the path comes from that shared file. Both the quoted form
-# and the bare one, since the project file quotes only what needs it.
-built_pattern=$(printf '%s' "$BUILT" | sed 's/[][\.*^$/]/\\&/g')
+# Escaped, because the path comes from that shared file and this has to hold
+# for whatever it says — including the delimiter below, which a path is as
+# free to contain as anything else and which would end the expression early
+# rather than fail in a way that says so.
+#
+# Both the quoted form and the bare one, since the project file quotes only
+# what needs it.
+built_pattern=$(printf '%s' "$BUILT" | sed 's/[][\.*^$|]/\\&/g')
 
 named=()
 while IFS= read -r name; do
   named+=("$name")
 done < <(
-  sed -n "s|.*/$built_pattern/\([^\";]*\)[\";].*|\1|p" "$PROJECT/project.pbxproj" | sort -u
+  # No separator in what is captured: these are the names of things at the top
+  # of the build, and one with a `/` in it is a reference to something inside
+  # a directory rather than the directory. Recorded whole it would be an entry
+  # no name can equal, and the directory holding it would be reported unnamed
+  # — a project called stale for having said more than expected.
+  sed -n "s|.*/$built_pattern/\([^\";/]*\)[\";].*|\1|p" "$PROJECT/project.pbxproj" | sort -u
 )
 
 # Nothing read is not an empty project; it is this no longer knowing how to
