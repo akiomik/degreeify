@@ -18,7 +18,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { digestOf, iconsOf } from '../../scripts/safari/manifest.ts';
-import { APP_NAME, BUILT, BUNDLE_ID, ICONS_RECORD, PROJECT } from '../../scripts/safari/settings.ts';
+import {
+  APP_NAME,
+  BUILT,
+  BUNDLE_ID,
+  ICONS_RECORD,
+  PROJECT,
+} from '../../scripts/safari/settings.ts';
 
 let root: string;
 let stubs: string;
@@ -40,6 +46,7 @@ function stub(body: string): void {
     join(stubs, 'xcodebuild'),
     [
       '#!/bin/sh',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: shell, not JavaScript
       'for arg in "$@"; do case "$arg" in SYMROOT=*) sym="${arg#SYMROOT=}";; esac; done',
       `mkdir -p "$sym/Debug/${APP_NAME}.app"`,
       `touch "${RAN()}"`,
@@ -271,7 +278,12 @@ describe('the builder as a program', () => {
     await new Promise((wake) => setTimeout(wake, 2000));
 
     expect(existsSync(APP())).toBe(false);
-  });
+    // Longer than the default, which this and the case below came within two
+    // seconds of on an unloaded machine: they wait out something that was
+    // asked to stop, and `settled` is allowed five seconds to see it go. A
+    // deadline that tight turns a loaded runner into a red build about
+    // nothing.
+  }, 30_000);
 
   it("stops the build's children too", async () => {
     restore();
@@ -281,5 +293,5 @@ describe('the builder as a program', () => {
     await new Promise((wake) => setTimeout(wake, 3000));
 
     expect(existsSync(GRANDCHILD())).toBe(false);
-  });
+  }, 30_000);
 });

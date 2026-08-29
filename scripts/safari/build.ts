@@ -13,7 +13,6 @@
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { arch } from 'node:os';
 import { resolve } from 'node:path';
 import { refusalFor, type Tree } from './checks.ts';
 import { APP_NAME, PROJECT, SCRATCH } from './settings.ts';
@@ -62,6 +61,24 @@ function cleanup(): void {
   rmSync(SYM, { recursive: true, force: true });
 }
 
+/**
+ * What this machine is, asked of the machine.
+ *
+ * Not of this process: an x86_64 Node on an Apple Silicon Mac, or one started
+ * under Rosetta, reports what it is running as rather than what it is running
+ * on — and the whole point of naming an architecture here is that it is the
+ * one Xcode's Run will build for. Told `x86_64`, the check compiles a slice
+ * nobody is going to use and says the project is fine.
+ */
+function machine(): string {
+  const named = spawnSync('uname', ['-m'], { encoding: 'utf8' });
+
+  // Left to itself where that could not be asked. `xcodebuild` then builds
+  // every architecture it could, which is slower and answers more than was
+  // asked, but it is an answer — where a guess here is a wrong one.
+  return named.status === 0 ? named.stdout.trim() : 'ARCHS_STANDARD';
+}
+
 const tree: Tree = {
   isDirectory: (path) => existsSync(path) && statSync(path).isDirectory(),
   read: (path) => (existsSync(path) ? readFileSync(path, 'utf8') : null),
@@ -102,7 +119,7 @@ const build = spawn(
     APP_NAME,
     '-configuration',
     'Debug',
-    `ARCHS=${arch() === 'arm64' ? 'arm64' : 'x86_64'}`,
+    `ARCHS=${machine()}`,
     'CODE_SIGNING_ALLOWED=NO',
     'CODE_SIGNING_REQUIRED=NO',
     'CODE_SIGN_IDENTITY=',

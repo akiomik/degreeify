@@ -15,7 +15,11 @@ import { BUILT, BUNDLE_ID, ICONS_RECORD, PROJECT } from '../../scripts/safari/se
 const PBXPROJ = `${PROJECT}/project.pbxproj`;
 
 /** A project naming the two identifiers the converter makes, and one entry. */
-function pbxproj(app = BUNDLE_ID, extension = `${BUNDLE_ID}.Extension`, entries = ['manifest.json']) {
+function pbxproj(
+  app = BUNDLE_ID,
+  extension = `${BUNDLE_ID}.Extension`,
+  entries = ['manifest.json'],
+) {
   return [
     `PRODUCT_BUNDLE_IDENTIFIER = ${app};`,
     `PRODUCT_BUNDLE_IDENTIFIER = "${extension}";`,
@@ -101,7 +105,9 @@ describe('what the builder refuses', () => {
    * again, which makes the same project, which is refused again.
    */
   it('accepts an extension target the converter has renamed', () => {
-    expect(refusalFor(treeOf({ files: { [PBXPROJ]: pbxproj(BUNDLE_ID, `${BUNDLE_ID}.WebExt`) } }))).toBeNull();
+    expect(
+      refusalFor(treeOf({ files: { [PBXPROJ]: pbxproj(BUNDLE_ID, `${BUNDLE_ID}.WebExt`) } })),
+    ).toBeNull();
   });
 
   it('refuses identifiers that do not nest, without calling the project stale', () => {
@@ -112,9 +118,9 @@ describe('what the builder refuses', () => {
   });
 
   it('says the project names no identifiers rather than that they disagree', () => {
-    expect(said(treeOf({ files: { [PBXPROJ]: 'path = "../../.output/safari-mv3/manifest.json";' } }))).toContain(
-      'no bundle identifiers at all',
-    );
+    expect(
+      said(treeOf({ files: { [PBXPROJ]: 'path = "../../.output/safari-mv3/manifest.json";' } })),
+    ).toContain('no bundle identifiers at all');
   });
 
   it('refuses a dotted entry with no remedy', () => {
@@ -139,23 +145,29 @@ describe('what the builder refuses', () => {
   });
 
   it('says which file is missing when the build has no manifest', () => {
-    expect(said(treeOf({ absent: [`${BUILT}/manifest.json`] }))).toContain('manifest.json not found');
-  });
-
-  it('refuses icons that have changed since the project was made', () => {
-    expect(said(treeOf({ bytes: { [`${BUILT}/icon/48.png`]: Buffer.from('a different icon') } }))).toContain(
-      'icons have changed',
+    expect(said(treeOf({ absent: [`${BUILT}/manifest.json`] }))).toContain(
+      'manifest.json not found',
     );
   });
 
+  it('refuses icons that have changed since the project was made', () => {
+    expect(
+      said(treeOf({ bytes: { [`${BUILT}/icon/48.png`]: Buffer.from('a different icon') } })),
+    ).toContain('icons have changed');
+  });
+
   it('does not call a record of nothing a project made from no icons', () => {
-    expect(said(treeOf({ files: { [ICONS_RECORD]: '' } }))).toContain('what the project was made from is unknown');
+    expect(said(treeOf({ files: { [ICONS_RECORD]: '' } }))).toContain(
+      'what the project was made from is unknown',
+    );
   });
 
   it('says an icon could not be read rather than that the icons changed', () => {
     const gone = JSON.stringify({ icons: { 48: 'icon/absent.png' } });
 
-    expect(said(treeOf({ files: { [`${BUILT}/manifest.json`]: gone } }))).toContain('could not be read');
+    expect(said(treeOf({ files: { [`${BUILT}/manifest.json`]: gone } }))).toContain(
+      'could not be read',
+    );
   });
 
   it('refuses an entry the project does not name', () => {

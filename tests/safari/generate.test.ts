@@ -13,7 +13,15 @@
  * stub is to be able to ask what happens when either changes.
  */
 import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -173,7 +181,10 @@ describe('the generator as a program', () => {
    */
   it('does not answer names it did not ask for by naming itself as the fix', async () => {
     restore();
-    converter({ app: 'com.example.someoneelse.Degreeify', extension: 'com.example.someoneelse.Degreeify.Ext' });
+    converter({
+      app: 'com.example.someoneelse.Degreeify',
+      extension: 'com.example.someoneelse.Degreeify.Ext',
+    });
 
     const ran = await run();
 

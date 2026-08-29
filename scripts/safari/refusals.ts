@@ -174,7 +174,10 @@ export function badIdentifiers(identifiers: readonly string[]): Refusal | null {
  * ran — and the honest answer is that the script needs rewriting against what
  * the converter does now.
  */
-export function notWhatWeAskedFor(identifiers: readonly string[], expected: string): Refusal | null {
+export function notWhatWeAskedFor(
+  identifiers: readonly string[],
+  expected: string,
+): Refusal | null {
   const nested = nesting(identifiers);
 
   if (nested !== null && nested.app === expected) return null;
