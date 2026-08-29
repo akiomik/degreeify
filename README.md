@@ -111,8 +111,9 @@ npm run safari:xcodebuild  # check the project against the build, and compile it
 What those two refuse — every case below, plus what they do when a build fails
 or is interrupted — is covered by `npm test` along with everything else. The
 checks are functions of what was read, so most of it is asked about projects
-that were never on a disk; the rest runs the builder against a tree made for
-the case, with `xcodebuild` stubbed. None of it needs Xcode, or a Mac.
+that were never on a disk; the rest runs each script as a program against a
+tree made for the case, with `xcrun` and `xcodebuild` stubbed. None of it needs
+Xcode, or a Mac, and none of it touches the project you have open.
 
 That leaves an Xcode project at `safari/Degreeify/Degreeify.xcodeproj`. Then,
 in Safari:

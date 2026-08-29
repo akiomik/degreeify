@@ -14,10 +14,18 @@
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { digestOf, iconsOf } from './manifest.ts';
 import { bundleIdentifiers, nesting } from './project.ts';
-import { badIdentifiers, foreignProject, type Refusal } from './refusals.ts';
+import { badIdentifiers, notWhatWeAskedFor, type Refusal } from './refusals.ts';
 import { APP_NAME, BUILT, BUNDLE_ID, ICONS_RECORD, PROJECT } from './settings.ts';
+
+// Everything below names a path relative to the repository, so where it is run
+// from decides which build gets converted and where the project lands. Run
+// from a subdirectory without this, the two scripts disagree about which
+// project they mean — which is the failure the shared names exist to stop, and
+// it is only out of reach while everybody goes through `npm run`.
+process.chdir(resolve(import.meta.dirname, '../..'));
 
 function refuse(refusal: Refusal): never {
   process.stderr.write(`${refusal.lines.join('\n')}\n`);
@@ -83,13 +91,13 @@ const bad = badIdentifiers(identifiers);
 
 if (bad) refuse(bad);
 
-// The same question the builder asks of a project it did not just make. Asked
-// here too, because this is where the answer is cheap: a converter that has
-// changed what it derives says so now, against the run that changed it,
-// rather than at the next build against a project that looks fine.
-const foreign = foreignProject(identifiers, BUNDLE_ID);
+// The builder asks the same of a project it did not just make, and is told
+// something else — that the project is old and should be generated again.
+// Said here, that names this command as the fix for what this command just
+// did, and the reader runs it to be told the same thing.
+const wrong = notWhatWeAskedFor(identifiers, BUNDLE_ID);
 
-if (foreign) refuse(foreign);
+if (wrong) refuse(wrong);
 
 const nested = nesting(identifiers);
 

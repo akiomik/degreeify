@@ -165,13 +165,40 @@ export function badIdentifiers(identifiers: readonly string[]): Refusal | null {
 }
 
 /**
+ * Identifiers the converter derived that are not the ones it was asked for.
+ *
+ * The generator's half of the question below, and worded for it: this runs
+ * having just handed the converter a name, so identifiers that do not nest or
+ * that nest around some other name are the converter's derivation gone out
+ * from under us. There is nothing for the reader to run — this is what they
+ * ran — and the honest answer is that the script needs rewriting against what
+ * the converter does now.
+ */
+export function notWhatWeAskedFor(identifiers: readonly string[], expected: string): Refusal | null {
+  const nested = nesting(identifiers);
+
+  if (nested !== null && nested.app === expected) return null;
+
+  return {
+    lines: [
+      `error: the converter made a project under names ${expected} is not one of:`,
+      ...listed(identifiers),
+      "Xcode embeds an extension only where the app's identifier is a prefix",
+      'of it, and this script builds both from the app name and the bundle',
+      'identifier. It derives them differently now; this needs rewriting',
+      'against what it does.',
+    ],
+  };
+}
+
+/**
  * A project that is not the one these scripts describe.
  *
- * Two things are wrong with a pair of identifiers, and they are told apart
- * because the remedies are opposite. Identifiers that do not nest are the
- * converter's derivation gone out from under us, and no amount of generating
- * the project again will change what it derives. Identifiers that nest around
- * a name nobody here uses are a project made before the name changed, which
+ * The builder's half, and the two things that can be wrong are told apart
+ * because their remedies are opposite. Identifiers that do not nest are the
+ * converter's derivation changed, and no amount of generating the project
+ * again will change what it derives. Identifiers that nest around a name
+ * nobody here uses are a project made before the name changed, which
  * generating again is exactly the fix for.
  *
  * Read off the nesting rather than by assuming the extension's suffix. Written

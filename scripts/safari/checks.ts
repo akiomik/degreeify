@@ -91,6 +91,8 @@ export function refusalFor(tree: Tree): Refusal | null {
       lines: [
         `error: what the build's icons are could not be read, so whether they`,
         `have changed since the project was generated cannot be told: ${reason}`,
+        'The build is what is wrong here rather than the project: run',
+        '`npm run build:safari` again.',
       ],
     };
   }

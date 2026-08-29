@@ -161,9 +161,46 @@ build.on('error', (reason) => {
   process.exit(1);
 });
 
-// The one place this ends, once the build is gone and not before: the removal
-// in `cleanup` would otherwise race a compiler still writing there.
-build.on('exit', (status, signal) => {
+/**
+ * Waits for what is left of the build's process group to be gone.
+ *
+ * `xcodebuild` exiting is not the build being over. It forks compilers and a
+ * linker, they were signalled asynchronously along with it, and it commonly
+ * goes first while they are still unwinding — into the directory `cleanup` is
+ * about to remove. What that leaves is either the app still there, which is
+ * the one thing this script exists to take away, or a removal that throws part
+ * way through on a directory somebody is still writing into.
+ *
+ * Escalated rather than waited out. Anything still in the group after its
+ * leader has gone has had its chance to stop politely, and a build that is
+ * being interrupted is not one whose output is worth finishing.
+ */
+async function settled(pid: number): Promise<void> {
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch {
+    return; // The group is already empty.
+  }
+
+  // Bounded, because a wait that cannot end turns an interrupt into a hang —
+  // and the reader who pressed Ctrl-C would press it again, arriving here a
+  // second time with nothing different to do. A group that outlives this is
+  // left to the removal below, which is what happened every time before.
+  for (let waited = 0; waited < 5_000; waited += 25) {
+    try {
+      process.kill(-pid, 0);
+    } catch {
+      return;
+    }
+
+    await new Promise((wake) => setTimeout(wake, 25));
+  }
+}
+
+// The one place this ends, once the build is gone and not before.
+build.on('exit', async (status, signal) => {
+  if (stopping !== null && build.pid !== undefined) await settled(build.pid);
+
   cleanup();
   process.removeListener('exit', cleanup);
 

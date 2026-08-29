@@ -256,6 +256,23 @@ describe('the builder as a program', () => {
    * leaves the rest running — to write into the directory being removed, or to
    * put back what was just taken away.
    */
+  /**
+   * `xcodebuild` exiting is not the build being over, and this one leaves
+   * behind something that ignores the signal for a moment and then writes into
+   * the directory being removed — a linker unwinding, in the version of this
+   * that happens to people. Cleaned up on the direct child's exit alone, the
+   * removal runs first and the app is put back after it.
+   */
+  it('does not remove the build out from under what is still writing to it', async () => {
+    restore();
+    stub(`(trap '' TERM; sleep 1; mkdir -p "$sym/Debug/${APP_NAME}.app") &\nsleep 30`);
+
+    await run({ signal: 'SIGTERM' });
+    await new Promise((wake) => setTimeout(wake, 2000));
+
+    expect(existsSync(APP())).toBe(false);
+  });
+
   it("stops the build's children too", async () => {
     restore();
     stub(`(sleep 2; touch "${GRANDCHILD()}") & sleep 30`);

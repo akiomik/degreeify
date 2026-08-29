@@ -26,7 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rename silently a no-op. Both are Node programs, and what they refuse is
   covered by the test suite: the checks are functions of what was read, so most
   of the cases are about projects that were never on a disk, and the rest run
-  the builder against a tree made for the case with `xcodebuild` stubbed. The
+  each script against a tree made for the case with `xcrun` and `xcodebuild`
+  stubbed. The
   wrapper's bundle identifier is `com.github.akiomik.Degreeify`,
   where it was `com.github.akiomik.degreeify`: the converter builds the app's
   identifier from the prefix plus the app name, so the lower-case one produced
