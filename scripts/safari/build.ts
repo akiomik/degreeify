@@ -11,7 +11,7 @@
  * Unsigned, because nothing is being distributed. Signing is Xcode's business
  * when a person runs it there.
  */
-import { spawn, spawnSync } from 'node:child_process';
+import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { refusalFor, type Tree } from './checks.ts';
@@ -89,13 +89,68 @@ const tree: Tree = {
   entries: (path) => readdirSync(path),
 };
 
-// Asked before anything is built, and before the traps below have a build to
-// stop. A run refused here still runs `cleanup` on the way out: a reader whose
-// project is stale is refused at the first gate over and over, and the app
-// they are being protected from would otherwise sit there through all of it —
-// which is the moment it does harm, since they are already wondering why
-// Safari shows them something else.
+// Asked before anything is built. A run refused below still runs `cleanup` on
+// the way out: a reader whose project is stale is refused at the first gate
+// over and over, and the app they are being protected from would otherwise sit
+// there through all of it — which is the moment it does harm, since they are
+// already wondering why Safari shows them something else.
 process.on('exit', cleanup);
+
+/** The build, once there is one. */
+let build: ChildProcess | undefined;
+
+/**
+ * Which signal asked this to stop, if one has.
+ *
+ * Noted rather than acted on. Ending is one decision, made in one place below,
+ * because the two ways this can end were two handlers racing for the exit
+ * status: whichever ran first won, and the one registered at signal time
+ * always lost to the one registered before the signal arrived. The build then
+ * reported a plain failure for a run somebody interrupted.
+ */
+let stopping: NodeJS.Signals | null = null;
+
+/**
+ * Stops the build, and lets the handler further down end things once it is
+ * gone.
+ *
+ * The group rather than the one process: a build is a tree of them, and
+ * signalling only the one started here leaves its children running with
+ * nothing waiting on them — to write into the directory `cleanup` removes, or
+ * to put back what it took away.
+ */
+function interrupted(signal: NodeJS.Signals): void {
+  stopping = signal;
+
+  // Nothing started yet, so nothing to wait for: this arrived while the gates
+  // below were being asked, or on the way out of a refusal. Ended here rather
+  // than left for a handler that will never run.
+  if (build === undefined) {
+    cleanup();
+    process.removeListener('exit', cleanup);
+    process.removeAllListeners('SIGINT');
+    process.removeAllListeners('SIGTERM');
+    process.kill(process.pid, signal);
+    return;
+  }
+
+  if (build.pid !== undefined && build.exitCode === null) {
+    try {
+      process.kill(-build.pid, signal);
+    } catch {
+      // Already gone, or never grouped. Either way there is nothing to stop.
+    }
+  }
+}
+
+// Armed before the build exists rather than after it is running. Registered
+// afterwards, a signal arriving in between finds this process on its default
+// disposition and kills it outright — no `exit` listener, no cleanup — while
+// the build, which `detached` has put in a session of its own where Ctrl-C
+// never reaches it, carries on and finishes writing the app into `SYMROOT`.
+// That is the stale second copy this whole script exists to take away.
+process.on('SIGINT', () => interrupted('SIGINT'));
+process.on('SIGTERM', () => interrupted('SIGTERM'));
 
 const refusal = refusalFor(tree);
 
@@ -113,7 +168,7 @@ if (refusal) {
 // active one, says so once per target, and builds every architecture it could.
 // What is wanted is whether the project compiles on this machine, and this
 // machine is what Xcode's Run will build for.
-const build = spawn(
+build = spawn(
   'xcodebuild',
   [
     '-project',
@@ -136,44 +191,11 @@ const build = spawn(
   { stdio: 'inherit', detached: true },
 );
 
-/**
- * Which signal asked this to stop, if one has.
- *
- * Noted rather than acted on. Ending is one decision, made in one place below,
- * because the two ways this can end were two handlers racing for the exit
- * status: whichever ran first won, and the one registered here at signal time
- * always lost to the one registered before the signal arrived. The build then
- * reported a plain failure for a run somebody interrupted.
- */
-let stopping: NodeJS.Signals | null = null;
-
-/**
- * Stops the build, and lets the handler below end things once it is gone.
- *
- * The group rather than the one process: a build is a tree of them, and
- * signalling only the one started here leaves its children running with
- * nothing waiting on them — to write into the directory `cleanup` removes, or
- * to put back what it took away.
- *
- * `build.pid` is known here because `spawn` returns having assigned it. The
- * shell version had to ask the shell for its job list instead, because
- * learning the pid was a statement after the one that started the build, and a
- * signal arriving between the two found nothing to stop.
- */
-function interrupted(signal: NodeJS.Signals): void {
-  stopping = signal;
-
-  if (build.pid !== undefined && build.exitCode === null) {
-    try {
-      process.kill(-build.pid, signal);
-    } catch {
-      // Already gone, or never grouped. Either way there is nothing to stop.
-    }
-  }
-}
-
-process.on('SIGINT', () => interrupted('SIGINT'));
-process.on('SIGTERM', () => interrupted('SIGTERM'));
+// A signal that arrived while the gates were being asked, answered now that
+// there is something to answer it with. `spawn` has assigned the pid, so
+// unlike the shell — which learned it a statement later — there is no window
+// here where a stop has nothing to stop.
+if (stopping !== null) interrupted(stopping);
 
 // Failing to start is not a build that failed. `xcodebuild` comes with Xcode,
 // and a machine without it gets an error object and no status at all — which,
@@ -222,7 +244,7 @@ async function settled(pid: number): Promise<void> {
 
 // The one place this ends, once the build is gone and not before.
 build.on('exit', async (status, signal) => {
-  if (stopping !== null && build.pid !== undefined) await settled(build.pid);
+  if (stopping !== null && build?.pid !== undefined) await settled(build.pid);
 
   cleanup();
   process.removeListener('exit', cleanup);

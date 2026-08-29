@@ -12,7 +12,7 @@
  * given. Both were established against the real converter; the point of the
  * stub is to be able to ask what happens when either changes.
  */
-import { spawn } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import {
   cpSync,
   existsSync,
@@ -20,6 +20,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -78,6 +79,29 @@ function restore(): void {
   writeFileSync(join(root, BUILT, 'icon/48.png'), 'an icon');
 
   converter();
+}
+
+/**
+ * A path holding only these commands, wherever they live on this system.
+ *
+ * Written out as a directory name, this depended on where the system keeps
+ * things: `/bin` holds neither `uname` nor `sysctl` on macOS and both on a
+ * Linux that has merged `/usr`, so the case that took a command away took
+ * nothing away on the machine CI runs on, and went red there for a reason
+ * that had nothing to do with the builder.
+ */
+function pathOf(needed: readonly string[]): string {
+  const bare = join(root, `bare-${needed.join('-')}`);
+
+  if (existsSync(bare)) return bare;
+
+  mkdirSync(bare, { recursive: true });
+
+  for (const name of needed) {
+    symlinkSync(execSync(`command -v ${name}`).toString().trim(), join(bare, name));
+  }
+
+  return bare;
 }
 
 interface Ran {
@@ -155,9 +179,8 @@ describe('the generator as a program', () => {
   it('says what it could not run rather than failing silently', async () => {
     restore();
 
-    // Everything a stub is written in, and no `xcrun`: it ships in `/usr/bin`,
-    // and this is the other one.
-    const ran = await run(root, '/bin');
+    // Everything a stub is written in, and no `xcrun`.
+    const ran = await run(root, pathOf(['rm', 'mkdir', 'cat']));
 
     expect(ran.status).toBe(1);
     expect(ran.says).toContain('could not run xcrun');

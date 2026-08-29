@@ -70,7 +70,12 @@ export function nesting(identifiers: readonly string[]): Nesting | null {
  */
 export function namedEntries(pbxproj: string, built: string): readonly string[] {
   const found = new Set<string>();
-  const wanted = new RegExp(`/${escaped(built)}/([^"';]+)["';]`, 'g');
+  // An apostrophe is not one of the project file's delimiters, and an entry is
+  // as free to hold one as any other character. Treated as a terminator, a
+  // build with `don't.js` at the top of it has the project reported as not
+  // naming it — when it does — and the remedy given is to generate a project
+  // that will read exactly the same way.
+  const wanted = new RegExp(`/${escaped(built)}/([^";]+)[";]`, 'g');
 
   for (const [, name] of pbxproj.matchAll(wanted)) {
     if (name !== undefined && !name.includes('/')) found.add(name);

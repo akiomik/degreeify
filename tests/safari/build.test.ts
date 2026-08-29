@@ -20,6 +20,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -116,6 +117,29 @@ interface Run {
    * need the commands in them as much as the builder needs `xcodebuild`.
    */
   path?: string;
+}
+
+/**
+ * A path holding only these commands, wherever they live on this system.
+ *
+ * Written out as a directory name, this depended on where the system keeps
+ * things: `/bin` holds neither `uname` nor `sysctl` on macOS and both on a
+ * Linux that has merged `/usr`, so the case that took a command away took
+ * nothing away on the machine CI runs on, and went red there for a reason
+ * that had nothing to do with the builder.
+ */
+function pathOf(needed: readonly string[]): string {
+  const bare = join(root, `bare-${needed.join('-')}`);
+
+  if (existsSync(bare)) return bare;
+
+  mkdirSync(bare, { recursive: true });
+
+  for (const name of needed) {
+    symlinkSync(execSync(`command -v ${name}`).toString().trim(), join(bare, name));
+  }
+
+  return bare;
 }
 
 /** Starts the builder, and optionally signals it once it is under way. */
@@ -231,9 +255,8 @@ describe('the builder as a program', () => {
   it('names no architecture rather than a wrong one when it cannot ask', async () => {
     restore();
 
-    // The stub is written in what `/bin` holds, and `uname` and `sysctl` are
-    // both in `/usr/bin`, so this is a machine that cannot be asked what it is.
-    const ran = await run({ path: `${stubs}:/bin` });
+    // Everything the stub is written in, and nothing to ask the machine with.
+    const ran = await run({ path: `${stubs}:${pathOf(['mkdir'])}` });
 
     expect(ran.status).toBe(0);
     expect(readFileSync(RAN(), 'utf8')).not.toContain('ARCHS');
@@ -269,9 +292,8 @@ describe('the builder as a program', () => {
   it('says what it could not run rather than failing silently', async () => {
     restore();
 
-    // Everything a stub is written in, and no `xcodebuild`: it ships in
-    // `/usr/bin`, and this is the other one.
-    const ran = await run({ path: '/bin' });
+    // Everything a stub is written in, and no `xcodebuild`.
+    const ran = await run({ path: pathOf(['mkdir']) });
 
     expect(ran.status).toBe(1);
     expect(ran.says).toContain('could not run xcodebuild');

@@ -191,6 +191,20 @@ describe('what the builder refuses', () => {
     expect(said(treeOf({ files: { [PBXPROJ]: unreadable } }))).toContain('names no entry');
   });
 
+  /**
+   * An apostrophe is not one of the project file's delimiters. Read as one,
+   * the name is truncated, the project is reported as not naming an entry it
+   * does name, and the remedy given is to generate a project that reads
+   * exactly the same way next time.
+   */
+  it('reads an entry whose name holds an apostrophe', () => {
+    const named = pbxproj(BUNDLE_ID, `${BUNDLE_ID}.Extension`, ['manifest.json', "don't.js"]);
+
+    expect(
+      refusalFor(treeOf({ files: { [PBXPROJ]: named }, entries: ['manifest.json', "don't.js"] })),
+    ).toBeNull();
+  });
+
   it('does not read a reference inside a directory as a top-level entry', () => {
     const inside = [
       pbxproj(BUNDLE_ID, `${BUNDLE_ID}.Extension`, ['manifest.json']),

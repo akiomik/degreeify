@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/.wxt", "!**/.output", "!/safari", "!tests/fixtures/**/*.html"]
+    "includes": ["**", "!**/.wxt", "!**/.output", "!safari", "!tests/fixtures/**/*.html"]
   },
   "formatter": {
     "enabled": true,
