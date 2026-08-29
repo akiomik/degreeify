@@ -13,20 +13,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-readonly APP_NAME=Degreeify
-readonly BUNDLE_PREFIX=com.github.akiomik
+# shellcheck source=scripts/safari-common.sh
+. scripts/safari-common.sh
 
-# Derived from the app name rather than written out, because the converter will
-# not let the two disagree. It reads `--bundle-identifier` as the extension's
-# base and builds the app's own from this prefix plus the app name — so unless
-# the last component is exactly the app name, the app ends up with an
-# identifier that is not a prefix of its extension's, and Xcode refuses to
-# embed one binary in another it does not contain. That failure arrives at
-# build time in Xcode, several steps after the mistake.
-readonly BUNDLE_ID="$BUNDLE_PREFIX.$APP_NAME"
-
-readonly BUILT=.output/safari-mv3
-readonly PROJECT="safari/$APP_NAME/$APP_NAME.xcodeproj"
 
 if [ ! -d "$BUILT" ]; then
   echo "error: $BUILT not found. Run 'npm run build:safari' first." >&2
@@ -93,6 +82,10 @@ else
   echo "--bundle-identifier; they have to agree." >&2
   exit 1
 fi
+
+# Written after the project, so that a generation that failed leaves no record
+# claiming these icons were the ones it was made from.
+icons_digest > "$ICONS_RECORD"
 
 echo
 echo "Generated $PROJECT"

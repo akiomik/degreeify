@@ -127,13 +127,14 @@ that is quietly missing whatever the project does not name.
 
 The project references the files in `.output/safari-mv3` rather than copying
 them, so a code change needs no regenerated project. Changing a permission or
-a content script needs none either: nothing in the wrapper is derived from the
-manifest.
+a content script needs none either: neither reaches the wrapper, which takes
+its name from the conversion and its version from nothing.
 
-Regenerate for two things. The first is the **icon**: the converter copies the
-largest icon the manifest declares into the wrapper and builds the app's icon
-set from it, so a new icon reaches Safari's extension list on a rebuild and
-leaves the app showing the old one until the project is generated again.
+Regenerate for two things. The first is the **icons**, which are the one thing
+the wrapper does take from the extension: the converter copies the largest as
+the app's own and builds an icon set per size from the rest. A new icon
+therefore reaches Safari's extension list on a rebuild and leaves the app
+showing the old one until the project is generated again.
 
 The second is a **top-level** file or directory in the build, which a new
 entrypoint would add. The project names those one by one and directories among
@@ -141,7 +142,9 @@ them by reference: a file added inside `chunks/` or `content-scripts/` arrives
 on its own, while a new top-level one is in the build and missing from the app
 Xcode assembles, with nothing said. `npm run safari:build` refuses to build
 when it finds one, since otherwise this is discovered by wondering why a
-feature does nothing in Safari alone. It refuses on a stale icon too.
+feature does nothing in Safari alone. It refuses on icons that have changed
+since the project was generated too, which it knows by comparing them against
+what they were at the time.
 
 ## Layout
 
