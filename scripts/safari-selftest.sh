@@ -29,9 +29,18 @@ readonly STUBS
 # itself.
 finish() {
   rm -rf "$STUBS"
-  npm run build:safari >/dev/null 2>&1 || true
-  ./scripts/safari-xcode.sh >/dev/null 2>&1 || true
+
+  # Only where something was disturbed. Armed before the check below, this
+  # rebuilt and regenerated for a reader who had been told to do exactly that
+  # and had not — so the message they were reading was stale as they read it,
+  # and their next run worked for no reason they could see.
+  if [ -n "$started" ]; then
+    npm run build:safari >/dev/null 2>&1 || true
+    ./scripts/safari-xcode.sh >/dev/null 2>&1 || true
+  fi
 }
+
+started=
 
 trap finish EXIT
 
@@ -44,16 +53,20 @@ failed=0
 # `fails` assembles it and then fails, which is where cleanup has to run
 # anyway. `slow` assembles it and waits, for the cases about interrupting.
 stub() {
+  local body
+
   # shellcheck disable=SC2016  # the stub's own script, expanded when it runs
   case $1 in
-  ok) local body='mkdir -p "$sym/Debug/Degreeify.app/Contents"; echo "** BUILD SUCCEEDED **"' ;;
-  fails) local body='mkdir -p "$sym/Debug/Degreeify.app/Contents"; echo "** BUILD FAILED **" >&2; exit 65' ;;
-  slow) local body='mkdir -p "$sym/Debug/Degreeify.app/Contents"; sleep 20' ;;
-  # Writes the app *after* waiting, which is what an orphan does: a build the
-  # script failed to stop puts it back once cleanup has been and gone. A stub
-  # that writes first cannot show that, and the case below would pass on code
-  # that leaves the orphan running.
-  orphan) local body='sleep 4; mkdir -p "$sym/Debug/Degreeify.app/Contents"' ;;
+  ok) body='mkdir -p "$sym/Debug/Degreeify.app/Contents"; echo "** BUILD SUCCEEDED **"' ;;
+  fails) body='mkdir -p "$sym/Debug/Degreeify.app/Contents"; echo "** BUILD FAILED **" >&2; exit 65' ;;
+  slow) body='mkdir -p "$sym/Debug/Degreeify.app/Contents"; sleep 20' ;;
+  *)
+    # Named rather than left to fail as an unset variable further down, which
+    # is what a mistyped name did: the suite stopped on `body: unbound
+    # variable` and said nothing about which stub nobody has.
+    echo "error: no stub called '$1'" >&2
+    exit 1
+    ;;
   esac
 
   cat > "$STUBS/xcodebuild" <<SH
@@ -103,6 +116,7 @@ if [ ! -d "$BUILT" ] || [ ! -f "$PROJECT/project.pbxproj" ]; then
   exit 1
 fi
 
+started=yes
 stub ok
 
 # ---------------------------------------------------------------- the guards

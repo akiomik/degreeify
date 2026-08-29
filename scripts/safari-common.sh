@@ -26,6 +26,9 @@ readonly BUNDLE_PREFIX=com.github.akiomik
 # whatever pid the environment happened to have named — and here it would mean
 # generating a project under somebody else's identifier and saying it worked.
 # Reaching that check is the test's problem to solve without changing this.
+#
+# The app name and this move together, then: renaming the app renames the
+# identifier, and anything the old one was granted is granted to the old one.
 readonly BUNDLE_ID="$BUNDLE_PREFIX.$APP_NAME"
 
 readonly BUILT=.output/safari-mv3

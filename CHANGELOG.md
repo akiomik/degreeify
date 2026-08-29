@@ -22,7 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   registered, and refuses where the build holds a dotted entry other than
   `.DS_Store`, which no project carries and no regeneration can fix.
   `npm run safari:selftest` checks that both scripts refuse what they say they
-  refuse.
+  refuse. The wrapper's bundle identifier is `com.github.akiomik.Degreeify`,
+  where it was `com.github.akiomik.degreeify`: the converter builds the app's
+  identifier from the prefix plus the app name, so the lower-case one produced
+  an app and an extension that did not nest, and a project Xcode refused to
+  build.
 - A chord symbol parser that reads a root, an opaque quality and an optional
   bass note, and reports anything else — bar lines, accents, rhythm notes,
   `N.C.`, chart directions, section labels — as not a chord so it can be left
