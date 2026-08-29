@@ -11,7 +11,7 @@
 # Unsigned, because nothing is being distributed. Signing is Xcode's business
 # when a person runs it there.
 set -euo pipefail
-shopt -s nullglob dotglob
+shopt -s nullglob
 
 cd "$(dirname "$0")/.."
 
@@ -66,12 +66,18 @@ if [ "$recorded" != "$current" ]; then
   exit 1
 fi
 
-# Dotted names among them, which the shell would otherwise pass over. Nothing
-# in the build starts with a dot today; one that did would be in the build,
-# absent from the project, and missed by the check written to notice exactly
-# that.
+# Dotted names passed over, as the shell does by default and as the converter
+# does: asked to wrap a build containing `.DS_Store` or `.well-known`, it
+# names neither in the project. So their absence from it is not staleness and
+# regenerating is not a remedy — reported, they would stop the build with
+# advice that cannot help, and `.DS_Store` arrives on macOS from opening the
+# folder in Finder.
 #
-# The project names the top-level entries of the build one by one, and folders
+# A build that needs a dotted entry cannot be wrapped this way at all, which
+# is the converter's limit rather than a project gone out of date, and not
+# something this can answer.
+#
+# The project names the other top-level entries of the build one by one, and folders
 # among them by reference — so a file added inside `chunks/` or
 # `content-scripts/` arrives on its own, and a new top-level file does not. It
 # is in the build and missing from the app Xcode assembles, with nothing said,

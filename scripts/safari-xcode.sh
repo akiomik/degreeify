@@ -41,6 +41,18 @@ xcrun safari-web-extension-converter "$BUILT" \
 # that needs them and a hyphen in an org name is enough to need them. Left on,
 # every comparison below is against a value no identifier can equal, and the
 # check fails on projects that are perfectly good.
+# Read only where there is something to read. Without this the message below
+# about the converter having moved the identifiers is unreachable in the case
+# it describes — a converter that writes the project somewhere else gets a
+# bare error from `sed` instead, and the record of what the icons were is
+# never written, so the next build reports that missing rather than this.
+if [ ! -f "$PROJECT/project.pbxproj" ]; then
+  echo "error: $PROJECT/project.pbxproj not found after conversion." >&2
+  echo "The converter has put the project somewhere else; this script needs" >&2
+  echo "rewriting against what it does now." >&2
+  exit 1
+fi
+
 identifiers=$(
   sed -n 's/.*PRODUCT_BUNDLE_IDENTIFIER = \([^;]*\);.*/\1/p' "$PROJECT/project.pbxproj" |
     tr -d '"' | sort -u
