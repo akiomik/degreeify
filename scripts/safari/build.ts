@@ -15,6 +15,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { refusalFor, type Tree } from './checks.ts';
+import { hostArch } from './machine.ts';
 import { APP_NAME, PROJECT, SCRATCH } from './settings.ts';
 
 process.chdir(resolve(import.meta.dirname, '../..'));
@@ -58,26 +59,28 @@ function cleanup(): void {
     spawnSync(LSREGISTER, ['-u', APP], { stdio: 'ignore' });
   }
 
-  rmSync(SYM, { recursive: true, force: true });
+  // Retried, and not fatal if it still will not go. `settled` is bounded on
+  // purpose, so a straggler can outlive it and still be creating files under
+  // here — and a recursive removal walking a directory somebody is writing
+  // into throws. Thrown from the exit path this is called on, that is an
+  // unhandled rejection in place of the interrupt the reader asked for, and
+  // the app they are being protected from is left where it is either way.
+  try {
+    rmSync(SYM, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  } catch (reason) {
+    process.stderr.write(`warning: ${SYM} could not be removed: ${reason}\n`);
+    process.stderr.write('It holds an app that Safari may prefer to the one Xcode installs.\n');
+  }
 }
 
-/**
- * What this machine is, asked of the machine.
- *
- * Not of this process: an x86_64 Node on an Apple Silicon Mac, or one started
- * under Rosetta, reports what it is running as rather than what it is running
- * on — and the whole point of naming an architecture here is that it is the
- * one Xcode's Run will build for. Told `x86_64`, the check compiles a slice
- * nobody is going to use and says the project is fine.
- */
-function machine(): string {
-  const named = spawnSync('uname', ['-m'], { encoding: 'utf8' });
+/** What a command said, or null where it could not be asked. */
+function said(command: string, args: readonly string[]): string | null {
+  const ran = spawnSync(command, args, { encoding: 'utf8' });
 
-  // Left to itself where that could not be asked. `xcodebuild` then builds
-  // every architecture it could, which is slower and answers more than was
-  // asked, but it is an answer — where a guess here is a wrong one.
-  return named.status === 0 ? named.stdout.trim() : 'ARCHS_STANDARD';
+  return ran.status === 0 ? ran.stdout : null;
 }
+
+const arch = hostArch(said('sysctl', ['-n', 'sysctl.proc_translated']), said('uname', ['-m']));
 
 const tree: Tree = {
   isDirectory: (path) => existsSync(path) && statSync(path).isDirectory(),
@@ -119,7 +122,10 @@ const build = spawn(
     APP_NAME,
     '-configuration',
     'Debug',
-    `ARCHS=${machine()}`,
+    // Omitted rather than guessed at where the machine could not be asked:
+    // `ARCHS` is literal on a command line, so a value that is not an
+    // architecture fails every target rather than widening anything.
+    ...(arch === null ? [] : [`ARCHS=${arch}`]),
     'CODE_SIGNING_ALLOWED=NO',
     'CODE_SIGNING_REQUIRED=NO',
     'CODE_SIGN_IDENTITY=',

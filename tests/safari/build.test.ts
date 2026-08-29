@@ -12,8 +12,16 @@
  * `xcodebuild` is a script on the path. Nothing here needs Xcode, or a Mac, so
  * these run wherever the tests run.
  */
-import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { execSync, spawn } from 'node:child_process';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -49,7 +57,11 @@ function stub(body: string): void {
       // biome-ignore lint/suspicious/noTemplateCurlyInString: shell, not JavaScript
       'for arg in "$@"; do case "$arg" in SYMROOT=*) sym="${arg#SYMROOT=}";; esac; done',
       `mkdir -p "$sym/Debug/${APP_NAME}.app"`,
-      `touch "${RAN()}"`,
+      // What it was given, so a case can ask what the builder decided to pass
+      // it. Written with a redirection rather than `touch`, which lives in
+      // `/usr/bin` — and one case takes that away to see what happens when
+      // the machine cannot be asked what it is.
+      `printf '%s\\n' "$@" > "${RAN()}"`,
       body,
     ].join('\n'),
     { mode: 0o755 },
@@ -193,6 +205,38 @@ describe('the builder as a program', () => {
     await run();
 
     expect(existsSync(APP())).toBe(false);
+  });
+
+  /**
+   * Named at all, because left to itself `xcodebuild` finds no active
+   * architecture and builds every slice it could — two warnings that are the
+   * only thing a good run prints.
+   */
+  it('builds for the architecture this machine is', async () => {
+    restore();
+
+    await run();
+
+    expect(readFileSync(RAN(), 'utf8')).toContain(
+      `ARCHS=${execSync('uname -m').toString().trim()}`,
+    );
+  });
+
+  /**
+   * `ARCHS` is taken literally on a command line. A value that is not an
+   * architecture is not a wider build: `xcodebuild` fails every target with
+   * "none of the architectures in ARCHS are valid", so the check reports a
+   * project that does not compile when it compiles fine.
+   */
+  it('names no architecture rather than a wrong one when it cannot ask', async () => {
+    restore();
+
+    // The stub is written in what `/bin` holds, and `uname` and `sysctl` are
+    // both in `/usr/bin`, so this is a machine that cannot be asked what it is.
+    const ran = await run({ path: `${stubs}:/bin` });
+
+    expect(ran.status).toBe(0);
+    expect(readFileSync(RAN(), 'utf8')).not.toContain('ARCHS');
   });
 
   it('does not start a build it is going to refuse', async () => {
