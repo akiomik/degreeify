@@ -103,22 +103,66 @@ Xcode project. The extension is never published to the App Store; this is for
 local verification only.
 
 ```sh
-npm run build:safari
-npm run safari:xcode   # generates ./safari (git-ignored)
+npm run build:safari       # build the extension
+npm run safari:xcode       # generate ./safari (git-ignored)
+npm run safari:xcodebuild  # check the project against the build, and compile it
 ```
 
-Then, in Safari:
+What those two refuse — every case below, plus what they do when a build fails
+or is interrupted — is covered by `npm test` along with everything else. The
+checks are functions of what was read, so most of it is asked about projects
+that were never on a disk; the rest runs each script as a program against a
+tree made for the case, with `xcrun` and `xcodebuild` stubbed. None of it needs
+Xcode, or a Mac, and none of it touches the project you have open.
+
+That leaves an Xcode project at `safari/Degreeify/Degreeify.xcodeproj`. Then,
+in Safari:
 
 1. **Settings → Advanced →** enable *Show features for web developers*.
 2. **Develop → Developer Settings →** enable *Allow unsigned extensions*.
    This resets every time Safari restarts.
-3. Open the generated Xcode project and **Run**.
+3. Open the project and **Run**. The app it builds is a wrapper whose only job
+   is to tell Safari the extension exists; it has no interface worth looking
+   at.
 4. **Settings → Extensions →** enable Degreeify.
 5. Grant Degreeify permission for `ja.chordwiki.org` (choose *Always Allow*).
 
-The Xcode project references the files in `.output/safari-mv3` rather than
-copying them, so `npm run build:safari` alone is enough to pick up code
-changes — no need to regenerate the project.
+After a code change, `npm run build:safari && npm run safari:xcodebuild`, then
+**Run** again. The third command is what notices a project that has gone stale
+against the build; Xcode's Run makes no such check and will assemble an app
+that is quietly missing whatever the project does not name.
+
+The project references the files in `.output/safari-mv3` rather than copying
+them, so a code change needs no regenerated project. Changing a permission or
+a content script needs none either: neither reaches the wrapper, which takes
+its name from the conversion and its version from nothing.
+
+Two things need the project generated again. The **icons** are one: they are
+all the wrapper takes from the extension, copied in when the project is made,
+so the app it builds goes on showing the icons of the build it was generated
+from however many times you rebuild. The **set of top-level files and
+directories** in the build is the other, which a new entrypoint adds to and a
+removed or renamed one takes from — the project names them one by one, though
+directories among them by reference, so a file added inside `chunks/` or
+`content-scripts/` arrives on its own.
+
+`npm run safari:xcodebuild` refuses to build on any of that, and takes its own
+build away again afterwards: what was wanted was the answer, and an app left
+beside the one Xcode installs is a second copy the system may show Safari
+instead. Left to Xcode alone, a project naming a file the build no longer has
+stops the build on a file it cannot copy, and a build holding a file the
+project does not name assembles quietly and is found by wondering why a
+feature does nothing in Safari.
+
+The check builds into `.output/safari-xcodebuild`, which is git-ignored and
+keeps its intermediates so a repeat run is quick. Nothing prunes them; delete
+that directory when it has grown further than you want to keep.
+
+One refusal has no remedy. The converter carries no dotted entry into the
+project — `.DS_Store` is ignored, since macOS writes it into any folder opened
+in Finder, but anything else dotted at the top level of the build cannot be
+wrapped for Safari at all, and generating the project again will not change
+that.
 
 ## Layout
 
@@ -129,6 +173,7 @@ src/content/      applying and restoring degree names in the page
 src/settings/     settings schema and storage wrapper
 src/entrypoints/  WXT entrypoints (the only place that depends on WXT)
 tests/            unit tests and hand-written DOM fixtures
+scripts/          generating and building the Safari wrapper
 ```
 
 Dependencies point one way: `entrypoints → content → sites → core`, with

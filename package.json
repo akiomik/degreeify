@@ -5,6 +5,9 @@
   "version": "0.0.0",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "dev": "wxt",
     "dev:firefox": "wxt -b firefox",
@@ -13,7 +16,8 @@
     "build:safari": "wxt build -b safari --mv3",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
-    "safari:xcode": "./scripts/safari-xcode.sh",
+    "safari:xcode": "node scripts/safari/generate.ts",
+    "safari:xcodebuild": "node scripts/safari/build.ts",
     "typecheck": "wxt prepare && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
