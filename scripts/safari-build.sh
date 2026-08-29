@@ -66,23 +66,40 @@ if [ "$recorded" != "$current" ]; then
   exit 1
 fi
 
-# Dotted names passed over, as the shell does by default and as the converter
-# does: asked to wrap a build containing `.DS_Store` or `.well-known`, it
-# names neither in the project. So their absence from it is not staleness and
-# regenerating is not a remedy — reported, they would stop the build with
-# advice that cannot help, and `.DS_Store` arrives on macOS from opening the
-# folder in Finder.
-#
-# A build that needs a dotted entry cannot be wrapped this way at all, which
-# is the converter's limit rather than a project gone out of date, and not
-# something this can answer.
-#
-# The project names the other top-level entries of the build one by one, and folders
+# The project names the top-level entries of the build one by one, and folders
 # among them by reference — so a file added inside `chunks/` or
 # `content-scripts/` arrives on its own, and a new top-level file does not. It
 # is in the build and missing from the app Xcode assembles, with nothing said,
 # which is the kind of missing that is found by wondering why a feature does
 # nothing in Safari alone.
+# Dotted entries are the converter's limit rather than a project gone out of
+# date: asked to wrap a build containing `.DS_Store` or `.well-known` it names
+# neither, so regenerating never carries one in. They are said separately for
+# that reason — the remedy for the rest is to generate the project again, and
+# for these there is none.
+#
+# Except `.DS_Store`, which macOS writes into any folder somebody opens in
+# Finder and which no extension has ever needed. Reported, it would stop the
+# build on every machine where that had happened, which is the shape of the
+# noise that gets a check deleted.
+carried=()
+for entry in "$BUILT"/.*; do
+  name=$(basename "$entry")
+  case "$name" in
+  . | .. | .DS_Store) continue ;;
+  *) carried+=("$name") ;;
+  esac
+done
+
+if [ ${#carried[@]} -gt 0 ]; then
+  echo "error: the build has entries the converter cannot carry:" >&2
+  printf '  %s\n' "${carried[@]}" >&2
+  echo "It names no dotted entry in the project, so they would be missing" >&2
+  echo "from the app and generating it again would not change that. This" >&2
+  echo "build cannot be wrapped for Safari as it stands." >&2
+  exit 1
+fi
+
 missing=()
 for entry in "$BUILT"/*; do
   name=$(basename "$entry")

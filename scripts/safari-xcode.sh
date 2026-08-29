@@ -7,8 +7,12 @@
 #
 # `--copy-resources` is intentionally omitted so the Xcode project keeps
 # referencing `.output/safari-mv3`. Rebuilding with `npm run build:safari` is
-# then enough to change what the next Xcode build picks up; the project itself
-# never needs regenerating.
+# then enough to change what the next Xcode build picks up.
+#
+# Two changes still need the project generated again: an icon, which the
+# converter copies rather than references, and a new top-level entry in the
+# build, which it names one by one. `scripts/safari-build.sh` refuses to build
+# past either.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -32,15 +36,6 @@ xcrun safari-web-extension-converter "$BUILT" \
   --no-prompt \
   --force
 
-# Asked of what was generated rather than assumed from what was asked for. The
-# rule above is the converter's and could change under us; read back, a change
-# to it is this message rather than an Xcode build failing on a validation
-# nobody was looking for.
-#
-# Quotes taken off, because the project file puts them round any identifier
-# that needs them and a hyphen in an org name is enough to need them. Left on,
-# every comparison below is against a value no identifier can equal, and the
-# check fails on projects that are perfectly good.
 # Read only where there is something to read. Without this the message below
 # about the converter having moved the identifiers is unreachable in the case
 # it describes — a converter that writes the project somewhere else gets a
@@ -53,6 +48,15 @@ if [ ! -f "$PROJECT/project.pbxproj" ]; then
   exit 1
 fi
 
+# Asked of what was generated rather than assumed from what was asked for. The
+# rule above is the converter's and could change under us; read back, a change
+# to it is this message rather than an Xcode build failing on a validation
+# nobody was looking for.
+#
+# Quotes taken off, because the project file puts them round any identifier
+# that needs them and a hyphen in an org name is enough to need them. Left on,
+# every comparison below is against a value no identifier can equal, and the
+# check fails on projects that are perfectly good.
 identifiers=$(
   sed -n 's/.*PRODUCT_BUNDLE_IDENTIFIER = \([^;]*\);.*/\1/p' "$PROJECT/project.pbxproj" |
     tr -d '"' | sort -u
