@@ -136,6 +136,38 @@ if [ ! -f "$PROJECT/project.pbxproj" ]; then
   exit 1
 fi
 
+# Whose project it is. Everything below asks whether this project matches this
+# build; none of it asks whether the project is the one these scripts describe.
+# Change the prefix in the shared file without generating again and every gate
+# here passes: the entries match, the icons match, and what gets built is the
+# old identifier — installed, registered and granted permissions under a name
+# nobody is looking at any more. The rename is silently a no-op, which is worse
+# than it failing.
+#
+# Read the same way the generator reads it, and asked for the pair it writes:
+# the app under this identifier and its extension nested inside. Anything else
+# is a project from a different set of names.
+project_identifiers=$(
+  sed -n 's/.*PRODUCT_BUNDLE_IDENTIFIER = \([^;]*\);.*/\1/p' "$PROJECT/project.pbxproj" |
+    tr -d '"' | sort -u
+)
+
+if [ -z "$project_identifiers" ]; then
+  echo "error: the project names no bundle identifiers at all." >&2
+  echo "The converter has changed where it writes them; this check needs" >&2
+  echo "rewriting against what it does now." >&2
+  exit 1
+fi
+
+if [ "$project_identifiers" != "$(printf '%s\n%s' "$BUNDLE_ID" "$BUNDLE_ID.Extension" | sort -u)" ]; then
+  echo "error: the project was generated under different names:" >&2
+  echo "$project_identifiers" | while IFS= read -r one; do echo "  $one" >&2; done
+  echo "These scripts now say $BUNDLE_ID. Run 'npm run safari:xcode' to" >&2
+  echo "generate the project again, and take the old app away in Finder:" >&2
+  echo "what is installed under the old identifier stays installed." >&2
+  exit 1
+fi
+
 # Dotted entries are the converter's limit rather than a project gone out of
 # date: asked to wrap a build containing `.DS_Store` or `.well-known` it names
 # neither, so regenerating never carries one in. They are said separately for

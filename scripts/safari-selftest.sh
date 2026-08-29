@@ -77,6 +77,18 @@ SH
   chmod +x "$STUBS/xcodebuild"
 }
 
+# Runs the builder and hands back what happened, for every case that waits for
+# it. Written out at a call site, `set -e` makes a non-zero exit stop the suite
+# where it stands — no message, no summary, and every case after it silently
+# not run. That happened here to a call the same reasoning had already been
+# written for elsewhere in this file.
+builder() {
+  local status=0
+
+  PATH="$STUBS:$PATH" ./scripts/safari-xcodebuild.sh >/dev/null 2>&1 || status=$?
+  return "$status"
+}
+
 # Runs the builder and says whether it ended as expected, and said so.
 #
 # The message matters as much as the status: several of these refusals differ
@@ -104,14 +116,11 @@ expect() {
   passed=$((passed + 1))
 }
 
-# Put the tree back, and say so if that is what failed.
+# Generate the project again, and say what went wrong if it would not.
 #
 # Sent to /dev/null with nothing tolerating a failure, a suite that stopped
 # here stopped after a run of `ok` lines with no message at all — and the
-# reason, which is the generator's own error, had already been thrown away.
-# Generate the project again, and say so if that is what failed. Same reason as
-# `restore`: a suite that stops here has thrown away the only thing that would
-# have said why.
+# reason, which was the generator's own error, had already been thrown away.
 regenerate() {
   local out
 
@@ -122,6 +131,9 @@ regenerate() {
   fi
 }
 
+# Put the build and the project back as they were, and stop if that is what
+# failed: every case here works by breaking one of them, so a restore that did
+# not happen leaves the next case testing a tree nobody set up.
 restore() {
   local out
 
@@ -225,6 +237,16 @@ mv "$PROJECT/project.pbxproj" "$STUBS/pbx-held"
 expect "a project with no project file says which file" 1 "project.pbxproj not found"
 mv "$STUBS/pbx-held" "$PROJECT/project.pbxproj"
 
+# Rewritten rather than generated under other names: the identifier is not
+# something the generator will take from here, on purpose, so the state this
+# describes — a prefix changed in the shared file and the project not made
+# again — is reached by putting the project into it directly.
+cp "$PROJECT/project.pbxproj" "$STUBS/pbx-held"
+sed -i '' "s/$BUNDLE_PREFIX/com.example.someoneelse/g" "$PROJECT/project.pbxproj"
+expect "a project generated under other names is refused" 1 "generated under different names"
+cp "$STUBS/pbx-held" "$PROJECT/project.pbxproj"
+rm "$STUBS/pbx-held"
+
 # ------------------------------------------------------- the build's own end
 
 stub fails
@@ -238,7 +260,7 @@ else
 fi
 
 stub ok
-PATH="$STUBS:$PATH" ./scripts/safari-xcodebuild.sh >/dev/null 2>&1
+builder || true
 if [ -d "$SCRATCH/sym" ]; then
   echo "FAIL a build that worked leaves no app behind either" >&2
   failed=$((failed + 1))
@@ -252,6 +274,10 @@ fi
 # and the app is left registered.
 stub slow
 rm -f "$SCRATCH/started"
+# Not through `builder`, which would make the pid below a subshell's: the
+# signal has to reach the script itself, and one sent to a shell wrapping it
+# does not. The outcome is not thrown away here either — it is collected by
+# the `wait` further down.
 PATH="$STUBS:$PATH" ./scripts/safari-xcodebuild.sh >/dev/null 2>&1 &
 waiting=$!
 
@@ -303,7 +329,7 @@ fi
 stub ok
 mkdir -p "$SCRATCH/sym/Debug/$APP_NAME.app/Contents"
 touch "$BUILT/selftest-stale.js"
-PATH="$STUBS:$PATH" ./scripts/safari-xcodebuild.sh >/dev/null 2>&1 || true
+builder || true
 rm -f "$BUILT/selftest-stale.js"
 
 if [ -d "$SCRATCH/sym/Debug/$APP_NAME.app" ]; then
