@@ -128,10 +128,10 @@ changing a permission or a content script needs no regeneration either.
 Regenerate when the build gains a **top-level** file or directory, which a new
 entrypoint would do. The project names those one by one and directories among
 them by reference: a file added inside `chunks/` or `content-scripts/` arrives
-on its own, while a new top-level one is left out of the built extension with
-nothing said. `npm run safari:build` refuses to build when it finds one, since
-otherwise this is discovered by wondering why a feature does nothing in Safari
-alone.
+on its own, while a new top-level one is in the build and missing from the app
+Xcode assembles, with nothing said. `npm run safari:build` refuses to build
+when it finds one, since otherwise this is discovered by wondering why a
+feature does nothing in Safari alone.
 
 ## Layout
 

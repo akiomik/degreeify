@@ -47,24 +47,45 @@ xcrun safari-web-extension-converter "$BUILT" \
 # rule above is the converter's and could change under us; read back, a change
 # to it is this message rather than an Xcode build failing on a validation
 # nobody was looking for.
+#
+# Quotes taken off, because the project file puts them round any identifier
+# that needs them and a hyphen in an org name is enough to need them. Left on,
+# every comparison below is against a value no identifier can equal, and the
+# check fails on projects that are perfectly good.
 identifiers=$(
   sed -n 's/.*PRODUCT_BUNDLE_IDENTIFIER = \([^;]*\);.*/\1/p' "$PROJECT/project.pbxproj" |
-    sort -u
+    tr -d '"' | sort -u
 )
-app=$(echo "$identifiers" | head -1)
-extension=$(echo "$identifiers" | tail -1)
 
-case "$extension" in
-"$app".*) ;;
-*)
-  echo "error: the extension's identifier is not inside the app's." >&2
-  echo "  app:       $app" >&2
-  echo "  extension: $extension" >&2
-  echo "Xcode will refuse to embed the extension. The converter derives these" >&2
-  echo "from --app-name and --bundle-identifier; they have to agree." >&2
+if [ "$(echo "$identifiers" | wc -l)" -ne 2 ]; then
+  echo "error: expected the project to name two bundle identifiers, and it names:" >&2
+  echo "${identifiers//$'\n'/$'\n  '}" >&2
   exit 1
-  ;;
-esac
+fi
+
+first=$(echo "$identifiers" | head -1)
+second=$(echo "$identifiers" | tail -1)
+
+# Which of the two is the app is read off the nesting rather than off the order
+# they came back in. Sorted, either can come first — and where they do not nest
+# at all, which is what this is here for, neither name is worth claiming: a
+# message that labels them by position labels them wrongly exactly when
+# somebody is relying on it.
+if [ "${second#"$first".}" != "$second" ]; then
+  app=$first
+  extension=$second
+elif [ "${first#"$second".}" != "$first" ]; then
+  app=$second
+  extension=$first
+else
+  echo "error: the two bundle identifiers do not nest:" >&2
+  echo "  $first" >&2
+  echo "  $second" >&2
+  echo "Xcode embeds an extension only where the app's identifier is a prefix" >&2
+  echo "of it. The converter derives both from --app-name and" >&2
+  echo "--bundle-identifier; they have to agree." >&2
+  exit 1
+fi
 
 echo
 echo "Generated $PROJECT"
