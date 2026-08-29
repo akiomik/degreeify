@@ -13,7 +13,25 @@ names, so a chart reads as `I - VIm - IV - V` instead of `C - Am - F - G`.
 - Reads the key from the chart itself, including charts that change key
   part-way through, and follows ChordWiki's own transposition.
 - Turns off from the popup, restoring the original chord names exactly.
-- Lets you set the key by hand when the page does not declare one.
+- Lets you set the key by hand, whether or not the page declares one — for a
+  chart that changes key, or one whose page does not say how far it has been
+  transposed, the chart is followed instead.
+
+## Using it
+
+Open a ChordWiki chart. The chords are replaced with degree names; click the
+extension icon for the rest.
+
+The popup shows what key the chart was read in and where that came from — the
+page's own declaration, a guess from the chords, or a key you set — along with
+how many chords were named and how many key declarations could not be read. It
+also carries the controls: whether to show the names at all, the key and mode
+for this chart, which numerals to use, and whether to follow the chart's
+spelling of a chord or normalise it.
+
+The key you set is kept for that chart rather than for the address it was at,
+so transposing the chart with ChordWiki's own control keeps it. A chart that
+declares more than one key is followed rather than overridden.
 
 ## Known limitations
 
@@ -28,10 +46,21 @@ names, so a chart reads as `I - VIm - IV - V` instead of `C - Am - F - G`.
   wrong is worse than not naming, so the guess is declined where the chords do
   not settle it; set the key by hand from the popup. The same applies to a
   chart whose one key line is written in a form this cannot read.
-- **A chart that changes key cannot be overridden section by section.** A key
-  set by hand covers a chart that says nothing this can use. Where a chart
-  states several keys and one of them cannot be read, that section is left as
-  the chart wrote it rather than named in the key given for the page.
+- **A chart that changes key cannot be given a key by hand.** A key you set
+  covers a chart that states at most one of its own — read or unread, it is
+  yours that is used. A chart that states several is followed instead, and a
+  section whose declaration cannot be read is left as the chart wrote it.
+- **A key cannot be set on a page that does not say how far it has been
+  transposed.** What is kept is the key of the untransposed chart, so setting
+  one needs to know how far the chart has moved. ChordWiki says so on every
+  chart today; if it stops, the popup says why instead of offering a control
+  that would keep nothing.
+- **Settings written by a newer version are not changed, and no chart is
+  rewritten while they are in place.** Going back to an older build leaves
+  them readable only by the newer one; the popup says so rather than offering
+  controls that would write over them, and pages are left as the site served
+  them rather than named against defaults you did not choose. The same applies
+  where the settings cannot be read at all.
 
 ## Requirements
 

@@ -10,6 +10,25 @@ import {
   SHARP_CHARS,
 } from './pitch';
 
+/**
+ * How many keys a chart may state and still be one a single key can answer
+ * for.
+ *
+ * Past that it changes key, and one key given for a whole page cannot be
+ * right for every section of it.
+ *
+ * Here because both sides of setting a key need it and neither owns it: the
+ * page decides whether to take one, the popup decides whether to offer one,
+ * and they have to draw the line in the same place. Kept in two places that
+ * agreed, the day one moved would be the day a reader set a key, was told it
+ * was kept, and watched the page ignore it.
+ *
+ * In `core` rather than beside either of them, and rather than beside the
+ * keys a reader has set. Both of those reach storage, and the page reads this
+ * from a module whose whole point is that it reads nothing.
+ */
+export const MOST_STATED_KEYS_TO_OVERRIDE = 1;
+
 export type Mode = 'major' | 'minor';
 
 /**
@@ -417,6 +436,11 @@ const MODAL: Record<Mode, readonly Chord[]> = {
 /**
  * What to call each pitch when the chart offers no spelling of its own.
  *
+ * Exported because anything offering a person a key to choose from has to
+ * offer these and no others: a key spelled some other way is one
+ * {@link transposeKey} would respell the moment the chart moved, and the
+ * reader would find they had chosen something else.
+ *
  * One list per mode, because the two do not name the same pitches the same
  * way. A flat-preferring name works throughout the major keys, but D flat and
  * G flat name no minor key at all — those are C sharp minor and F sharp minor,
@@ -424,10 +448,46 @@ const MODAL: Record<Mode, readonly Chord[]> = {
  * here is the one its key is called by, which is to say the one with the
  * fewest accidentals in it.
  */
-const CANONICAL_TONIC: Record<Mode, readonly string[]> = {
+export const CANONICAL_TONIC: Record<Mode, readonly string[]> = {
   major: ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'],
   minor: ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'G#', 'A', 'Bb', 'B'],
 };
+
+/** Pitches in an octave, which is where a transposition comes back around. */
+const SEMITONES_IN_AN_OCTAVE = 12;
+
+/**
+ * The key a chart transposed by `semitones` is in.
+ *
+ * The result is spelled from one fixed table rather than from the key it came
+ * from, which makes this a function of the pitch and the mode and nothing
+ * else. A reader who transposes a chart up and back down again has to arrive
+ * at the key they started in — and, less obviously, a key kept against a page
+ * has to shift to the same spelling every time it is shifted there, because
+ * the `source` spelling policy chooses a degree name by how the chart spells
+ * a chord against how the key is spelled. Deriving the spelling from the
+ * input would make `F#` and `Gb` two answers to one question.
+ *
+ * The table is the one each key is called by, which is not the same list for
+ * the two modes: D flat and G flat name no minor key anybody writes.
+ */
+export function transposeKey(key: Key, semitones: number): Key {
+  const pitch =
+    (((pitchClass(key.tonic) + Math.trunc(semitones)) % SEMITONES_IN_AN_OCTAVE) +
+      SEMITONES_IN_AN_OCTAVE) %
+    SEMITONES_IN_AN_OCTAVE;
+
+  // The table asked for before it is indexed. A mode that is neither of the
+  // two has no table, and indexing nothing throws where the line below is
+  // written to say what went wrong — this function is exported, and a caller
+  // reading the guard would take it to cover the case it is standing in front
+  // of.
+  const name = CANONICAL_TONIC[key.mode]?.[pitch];
+  const tonic = name ? parseNote(name) : null;
+  if (!tonic) throw new Error(`no ${key.mode} key is named at pitch class ${pitch}`);
+
+  return { tonic, mode: key.mode };
+}
 
 export interface KeyGuess {
   readonly key: Key;

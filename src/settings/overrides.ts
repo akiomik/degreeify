@@ -1,0 +1,139 @@
+import { type Key, type Mode, transposeKey } from '@/core/key';
+import { formatNote, parseNote } from '@/core/pitch';
+import {
+  type KeyOverride,
+  type KeyStamps,
+  MOST_OVERRIDES,
+  prunedOverrides,
+  type Settings,
+} from './storage';
+
+/**
+ * Reading and writing the key a person set for a chart.
+ *
+ * A key is kept as the key of the chart untransposed, and a reader sets and
+ * sees the key of the chart in front of them. So every crossing between the
+ * two shifts by however far the chart has been transposed, and both
+ * directions are here rather than one in the popup and one in the content
+ * script — the day they disagree, a reader sets a key and the page shows
+ * another.
+ */
+
+/**
+ * Whether a page has said how far its chart has been transposed, in a way a
+ * key can be moved by.
+ *
+ * Asked here rather than at each place that needs to know, because the two
+ * places that need to know are the one that uses a key and the one that
+ * offers to set one — and a control that takes a key the reader's page will
+ * then refuse is a reader looking at a key they chose and a page that has
+ * never heard of it.
+ */
+export function usableOffset(offset: number | null | undefined): offset is number {
+  return Number.isInteger(offset);
+}
+
+/**
+ * The key set for this chart, as the chart now stands.
+ *
+ * Nothing where the page does not say how far it has been transposed, and
+ * nothing where what it says is not a count of semitones. A key meant for one
+ * transposition, applied at an unknown other, names every chord on the page
+ * against the wrong tonic — and it would do so most confidently on the pages
+ * where a reader had gone to the trouble of setting one. A transposition that
+ * is not a number reaches a table by way of arithmetic on it, finds no row,
+ * and throws where the guards below are written to return.
+ */
+export function overrideFor(settings: Settings, pageId: string, offset: number | null): Key | null {
+  // Asked of the object itself. `in` would find a `constructor` or a
+  // `toString` on any object, and what is looked up here is a chart's name —
+  // which the adapter prefixes today and need not tomorrow.
+  const stored = Object.hasOwn(settings.keyOverrides, pageId)
+    ? settings.keyOverrides[pageId]
+    : undefined;
+
+  if (!stored || !usableOffset(offset)) return null;
+
+  // Read rather than trusted, and asked about before it is read. What is in
+  // storage was written by some version of this extension, or by somebody
+  // with the developer tools open: a mode that is neither of the two names a
+  // table with no row for it, and a tonic that is not text has no first
+  // character. Either one throws — out of the popup's first read, where it
+  // takes the whole popup with it, including the button that would let the
+  // reader be rid of what caused it. A key that cannot be read is no key,
+  // which is what a chart with no key set gets.
+  if (typeof stored.tonic !== 'string' || !MODES.includes(stored.mode)) return null;
+
+  const tonic = parseNote(stored.tonic);
+  return tonic ? transposeKey({ tonic, mode: stored.mode }, offset) : null;
+}
+
+const MODES: readonly Mode[] = ['major', 'minor'];
+
+/** The settings and the stamps, which are written together or not at all. */
+export interface Kept {
+  readonly settings: Settings;
+  readonly stamps: KeyStamps;
+}
+
+/**
+ * `key` set for this chart, `key` being the key of the chart as it is shown.
+ *
+ * Kept shifted back to no transposition, so that the same setting is found
+ * again whatever transposition the chart is next reached at. Kept as shown, a
+ * reader who transposed a chart after setting a key would find their own
+ * setting naming the page wrongly.
+ *
+ * Stamped as used now, and that is not bookkeeping: the stamps are what
+ * decides which key is dropped when there are too many, and a key set a
+ * moment ago has never been used. Left unstamped it sorts last, so a reader
+ * with a full list would set a key, be told it was kept, and find it gone.
+ */
+export function withOverride(
+  { settings, stamps }: Kept,
+  pageId: string,
+  key: Key,
+  offset: number,
+  now: number,
+): Kept {
+  const untransposed = transposeKey(key, -offset);
+
+  return kept(
+    settings,
+    {
+      ...settings.keyOverrides,
+      [pageId]: { tonic: formatNote(untransposed.tonic), mode: untransposed.mode },
+    },
+    { ...stamps, [pageId]: now },
+  );
+}
+
+export function withoutOverride({ settings, stamps }: Kept, pageId: string): Kept {
+  const { [pageId]: _dropped, ...rest } = settings.keyOverrides;
+  return kept(settings, rest, stamps);
+}
+
+/**
+ * The two put back together, with nothing kept for a chart that has no key.
+ *
+ * A stamp outliving the key it was about is a record that grows and is never
+ * read: overrides are capped and stamps were not, so a reader who set and
+ * cleared keys across enough charts would carry every chart they had ever
+ * touched, read in full on every write.
+ *
+ * A key with no stamp is left without one rather than given a nought. The
+ * write that follows this sends every stamp that differs from what was read,
+ * and a nought differs from nothing at all — so a page that stamped a chart
+ * for the first time while a reader was changing something else would have
+ * that stamp written back to nought, which is the clobber one key to a chart
+ * is here to rule out.
+ */
+function kept(settings: Settings, overrides: Record<string, KeyOverride>, stamps: KeyStamps): Kept {
+  const surviving = prunedOverrides(overrides, stamps, MOST_OVERRIDES);
+  const theirs = Object.entries(stamps).filter(([pageId]) => Object.hasOwn(surviving, pageId));
+
+  return {
+    settings: { ...settings, keyOverrides: surviving },
+    stamps: Object.fromEntries(theirs),
+  };
+}

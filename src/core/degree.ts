@@ -39,7 +39,9 @@ export interface DegreeChord {
  * deferring to the source there means deferring to an arbitrary choice. The
  * price is losing the occasional deliberate spelling on an untransposed page.
  */
-export type SpellingPolicy = 'canonical' | 'source';
+export const SPELLING_POLICIES = ['canonical', 'source'] as const;
+
+export type SpellingPolicy = (typeof SPELLING_POLICIES)[number];
 
 type Semitones = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
 type ScaleStep = 0 | 1 | 2 | 3 | 4 | 5 | 6;

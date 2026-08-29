@@ -6,6 +6,7 @@
   --degreeify-fg: #1a1a1a;
   --degreeify-bg: #ffffff;
   --degreeify-muted: #5a5a5a;
+  --degreeify-warning: #8a4b00;
 
   font-family: system-ui, sans-serif;
   font-size: 14px;
@@ -19,6 +20,7 @@
     --degreeify-fg: #e8e8e8;
     --degreeify-bg: #1f1f1f;
     --degreeify-muted: #a8a8a8;
+    --degreeify-warning: #e0a44a;
   }
 }
 
