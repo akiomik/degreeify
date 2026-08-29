@@ -33,6 +33,34 @@ if [ ! -f "$PROJECT/project.pbxproj" ]; then
   exit 1
 fi
 
+# Dotted entries are the converter's limit rather than a project gone out of
+# date: asked to wrap a build containing `.DS_Store` or `.well-known` it names
+# neither, so regenerating never carries one in. They are said separately for
+# that reason — the remedy for the rest is to generate the project again, and
+# for these there is none.
+#
+# Except `.DS_Store`, which macOS writes into any folder somebody opens in
+# Finder and which no extension has ever needed. Reported, it would stop the
+# build on every machine where that had happened, which is the shape of the
+# noise that gets a check deleted.
+carried=()
+for entry in "$BUILT"/.*; do
+  name=$(basename "$entry")
+  case "$name" in
+  . | .. | .DS_Store) continue ;;
+  *) carried+=("$name") ;;
+  esac
+done
+
+if [ ${#carried[@]} -gt 0 ]; then
+  echo "error: the build has entries the converter cannot carry:" >&2
+  printf '  %s\n' "${carried[@]}" >&2
+  echo "It names no dotted entry in the project, so they would be missing" >&2
+  echo "from the app and generating it again would not change that. This" >&2
+  echo "build cannot be wrapped for Safari as it stands." >&2
+  exit 1
+fi
+
 # Whether the icons have changed since the project was made from them. The
 # converter copies them in at generation, so a change to any of them leaves
 # the app showing something the build no longer contains — and the entry check
@@ -74,34 +102,6 @@ fi
 # is in the build and missing from the app Xcode assembles, with nothing said,
 # which is the kind of missing that is found by wondering why a feature does
 # nothing in Safari alone.
-# Dotted entries are the converter's limit rather than a project gone out of
-# date: asked to wrap a build containing `.DS_Store` or `.well-known` it names
-# neither, so regenerating never carries one in. They are said separately for
-# that reason — the remedy for the rest is to generate the project again, and
-# for these there is none.
-#
-# Except `.DS_Store`, which macOS writes into any folder somebody opens in
-# Finder and which no extension has ever needed. Reported, it would stop the
-# build on every machine where that had happened, which is the shape of the
-# noise that gets a check deleted.
-carried=()
-for entry in "$BUILT"/.*; do
-  name=$(basename "$entry")
-  case "$name" in
-  . | .. | .DS_Store) continue ;;
-  *) carried+=("$name") ;;
-  esac
-done
-
-if [ ${#carried[@]} -gt 0 ]; then
-  echo "error: the build has entries the converter cannot carry:" >&2
-  printf '  %s\n' "${carried[@]}" >&2
-  echo "It names no dotted entry in the project, so they would be missing" >&2
-  echo "from the app and generating it again would not change that. This" >&2
-  echo "build cannot be wrapped for Safari as it stands." >&2
-  exit 1
-fi
-
 # What the project names, read once and asked both ways. Two readings would
 # be two ideas of what "named" means, and the checks below disagreeing about
 # that is the drift the file they share their paths through exists to stop.
@@ -248,6 +248,17 @@ cleanup() {
 # none of this and exits successfully. Nothing written here changes that,
 # which is why nothing here tries to.
 interrupted() {
+  # The build stopped first, and waited for. A trap does not run while a
+  # command is in the foreground, so this only arrives once that command is
+  # done — which for a build is minutes, and a supervisor that sent this and
+  # is counting down to a kill will not wait that long. Run as a child that
+  # can be stopped, the trap arrives at once; waiting for it to die is also
+  # what keeps the removal below from racing something still writing there.
+  if [ -n "${build:-}" ]; then
+    kill "$build" 2>/dev/null || true
+    wait "$build" 2>/dev/null || true
+  fi
+
   cleanup
   trap - EXIT "$1"
   kill -s "$1" $$
@@ -276,6 +287,12 @@ xcodebuild \
   CODE_SIGN_IDENTITY="" \
   SYMROOT="$SCRATCH/sym" \
   OBJROOT="$SCRATCH/obj" \
-  build
+  build &
+
+# Waited for rather than run in front, so the traps above can arrive while it
+# is still going. Its status becomes this script's, the way it did when it ran
+# in the foreground.
+build=$!
+wait "$build"
 
 
