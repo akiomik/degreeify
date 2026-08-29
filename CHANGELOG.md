@@ -13,12 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a GitHub Actions workflow.
 - A Safari build target, a script that generates the wrapping Xcode project,
   and a second that builds it without opening Xcode. The generated project
-  references the built extension rather than copying it, so a code change
-  needs a rebuild and another Run in Xcode but never a regenerated project —
-  and the build script refuses to run where the project has gone stale against
-  the build — a top-level file it does not name, or icons that have changed
-  since it copied them — either of which would otherwise go missing with
-  nothing said.
+  references the built extension rather than copying it, so most code changes
+  need a rebuild and another Run in Xcode and no regenerated project. Two do
+  need one — a new top-level file in the build, and a changed icon — and the
+  build script refuses to run on either rather than let it go missing from the
+  app with nothing said.
 - A chord symbol parser that reads a root, an opaque quality and an optional
   bass note, and reports anything else — bar lines, accents, rhythm notes,
   `N.C.`, chart directions, section labels — as not a chord so it can be left

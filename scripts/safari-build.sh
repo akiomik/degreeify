@@ -11,7 +11,7 @@
 # Unsigned, because nothing is being distributed. Signing is Xcode's business
 # when a person runs it there.
 set -euo pipefail
-shopt -s nullglob
+shopt -s nullglob dotglob
 
 cd "$(dirname "$0")/.."
 
@@ -66,6 +66,11 @@ if [ "$recorded" != "$current" ]; then
   exit 1
 fi
 
+# Dotted names among them, which the shell would otherwise pass over. Nothing
+# in the build starts with a dot today; one that did would be in the build,
+# absent from the project, and missed by the check written to notice exactly
+# that.
+#
 # The project names the top-level entries of the build one by one, and folders
 # among them by reference — so a file added inside `chunks/` or
 # `content-scripts/` arrives on its own, and a new top-level file does not. It
@@ -91,6 +96,13 @@ if [ ${#missing[@]} -gt 0 ]; then
   exit 1
 fi
 
+# Built somewhere the generator does not wipe. Left in the default place,
+# inside `safari/`, building registers an app with the system at a path the
+# next `--force` regeneration deletes — and the reader is left with a
+# registration pointing at nothing, in the one flow whose whole purpose is
+# looking the extension up by hand afterwards.
+readonly SCRATCH="${TMPDIR:-/tmp}/degreeify-safari-build"
+
 xcodebuild \
   -project "$PROJECT" \
   -target "$APP_NAME" \
@@ -98,4 +110,6 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
+  SYMROOT="$SCRATCH/sym" \
+  OBJROOT="$SCRATCH/obj" \
   build
