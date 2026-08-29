@@ -18,6 +18,111 @@ cd "$(dirname "$0")/.."
 # shellcheck source=scripts/safari-common.sh
 . scripts/safari-common.sh
 
+# Built somewhere neither the generator nor the system clears out. Building
+# registers an app with LaunchServices wherever it lands, and that cannot be
+# helped from here — what can is where it points. Inside `safari/` the next
+# `--force` regeneration deletes it; under `TMPDIR` macOS empties it after a
+# few days; either way the registration is left aimed at nothing, competing
+# with the copy Xcode's own Run registers, in the one flow whose whole purpose
+# is finding the extension by hand afterwards.
+#
+# Beside the build it wraps, then: ignored by git, untouched by `wxt build`,
+# and gone only when somebody clears `.output` themselves.
+#
+# Absolute, because `xcodebuild` reads a relative one against the project's
+# own directory rather than this shell's — which would put it back inside the
+# tree the generator wipes, and quietly, since it builds either way.
+readonly SCRATCH="$PWD/.output/safari-xcodebuild"
+
+# What was wanted from this is the answer, not the app: left where it is
+# built, it is a second Degreeify registered under the same identifier as the
+# one Xcode's Run installs, holding whatever it copied the last time this ran.
+# A reader who rebuilds and hits Run can then be shown the older of the two by
+# a system with no reason to prefer either, and finds their change does
+# nothing in Safari — which is the failure this whole script is here to keep
+# them out of.
+#
+# Unregistered before it is deleted, where the tool for it is where it has
+# been; a path left in the database pointing at nothing is untidy rather than
+# harmful, so not finding it is not worth failing over. The intermediates stay
+# on, so the next run of this is not a build from nothing.
+readonly LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
+
+# Taken away however this ends, and not only where it ends well. A build that
+# stops after the app wrapper is assembled — a Swift error in the app target,
+# an interrupt during the several minutes it takes — leaves the copy behind
+# exactly when it does the most harm: the reader is now debugging, and the
+# stale app is what Safari may show them while they do it. Removed only on the
+# next success, it would sit there for as long as the build kept failing.
+cleanup() {
+  local app="$SCRATCH/sym/Debug/$APP_NAME.app"
+
+  # Asked for only where there is something to unregister, and quietly. A
+  # build that stopped before assembling the app leaves nothing here, and the
+  # tool says so at length on stderr — directly under the real error, reading
+  # as a second failure that has nothing to do with anything. Which is also
+  # what stops this speaking twice when an interrupt runs it and the exit runs
+  # it again: by then the app is gone and there is nothing to say.
+  if [ -d "$app" ] && [ -x "$LSREGISTER" ]; then
+    "$LSREGISTER" -u "$app" >/dev/null 2>&1 || true
+  fi
+
+  rm -rf "$SCRATCH/sym"
+}
+
+# Re-raised rather than swallowed. A handler that returns without exiting
+# leaves the script to run on past the command the signal interrupted — and
+# `xcodebuild` is the last thing here, so it would fall off the end and report
+# success for a build that never finished, to a caller reading the exit status
+# to decide whether the project still compiles.
+#
+# Where the signal reached this script alone rather than the group — `kill` on
+# the pid, a supervisor, a timeout — `xcodebuild` outlives it and may write
+# back what was just removed. The next run of this removes it again; nothing
+# here can do better without killing a process it was not asked to manage.
+#
+# One case is out of reach entirely, and not by this script's doing: a signal
+# ignored when the shell starts cannot be trapped, and a script started in the
+# background has its interrupt ignored — so `kill -INT` on one of those runs
+# none of this and exits successfully. Nothing written here changes that,
+# which is why nothing here tries to.
+interrupted() {
+  # The build stopped first, and waited for. A trap does not run while a
+  # command is in the foreground, so this only arrives once that command is
+  # done — which for a build is minutes, and a supervisor that sent this and
+  # is counting down to a kill will not wait that long. Run as a child that
+  # can be stopped, the trap arrives at once; waiting for it to die is also
+  # what keeps the removal below from racing something still writing there.
+  #
+  # Asked of the shell rather than of a variable this sets. Learning the pid
+  # is a statement after the one that starts the build, and a signal landing
+  # between the two would find nothing to stop — leaving the build running to
+  # put the app back after the removal below, with nothing left to take it
+  # away again. The shell knows about the job from the moment it exists.
+  running=$(jobs -p)
+
+  if [ -n "$running" ]; then
+    # shellcheck disable=SC2086  # a list of pids, which is what kill takes
+    kill $running 2>/dev/null || true
+    wait 2>/dev/null || true
+  fi
+
+  cleanup
+  trap - EXIT "$1"
+  kill -s "$1" $$
+}
+
+# Armed before the first thing that can refuse, and not just before the build.
+# A run stopped where cleanup could not reach it leaves the app registered,
+# and the note above says the next run takes it away — which was only true of
+# a run that got as far as building. A reader whose project is stale is
+# refused at the first gate, over and over, while the copy they are being
+# protected from stays where it is; and that is the moment it does harm, since
+# they are already wondering why Safari shows them something else.
+trap cleanup EXIT
+trap 'interrupted INT' INT
+trap 'interrupted TERM' TERM
+
 if [ ! -d "$BUILT" ]; then
   echo "error: $BUILT not found. Run 'npm run build:safari' first." >&2
   exit 1
@@ -179,103 +284,7 @@ if [ ${#gone[@]} -gt 0 ]; then
   exit 1
 fi
 
-# Built somewhere neither the generator nor the system clears out. Building
-# registers an app with LaunchServices wherever it lands, and that cannot be
-# helped from here — what can is where it points. Inside `safari/` the next
-# `--force` regeneration deletes it; under `TMPDIR` macOS empties it after a
-# few days; either way the registration is left aimed at nothing, competing
-# with the copy Xcode's own Run registers, in the one flow whose whole purpose
-# is finding the extension by hand afterwards.
-#
-# Beside the build it wraps, then: ignored by git, untouched by `wxt build`,
-# and gone only when somebody clears `.output` themselves.
-#
-# Absolute, because `xcodebuild` reads a relative one against the project's
-# own directory rather than this shell's — which would put it back inside the
-# tree the generator wipes, and quietly, since it builds either way.
-readonly SCRATCH="$PWD/.output/safari-xcodebuild"
 
-# What was wanted from this is the answer, not the app: left where it is
-# built, it is a second Degreeify registered under the same identifier as the
-# one Xcode's Run installs, holding whatever it copied the last time this ran.
-# A reader who rebuilds and hits Run can then be shown the older of the two by
-# a system with no reason to prefer either, and finds their change does
-# nothing in Safari — which is the failure this whole script is here to keep
-# them out of.
-#
-# Unregistered before it is deleted, where the tool for it is where it has
-# been; a path left in the database pointing at nothing is untidy rather than
-# harmful, so not finding it is not worth failing over. The intermediates stay
-# on, so the next run of this is not a build from nothing.
-readonly LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
-
-# Taken away however this ends, and not only where it ends well. A build that
-# stops after the app wrapper is assembled — a Swift error in the app target,
-# an interrupt during the several minutes it takes — leaves the copy behind
-# exactly when it does the most harm: the reader is now debugging, and the
-# stale app is what Safari may show them while they do it. Removed only on the
-# next success, it would sit there for as long as the build kept failing.
-cleanup() {
-  local app="$SCRATCH/sym/Debug/$APP_NAME.app"
-
-  # Asked for only where there is something to unregister, and quietly. A
-  # build that stopped before assembling the app leaves nothing here, and the
-  # tool says so at length on stderr — directly under the real error, reading
-  # as a second failure that has nothing to do with anything. Which is also
-  # what stops this speaking twice when an interrupt runs it and the exit runs
-  # it again: by then the app is gone and there is nothing to say.
-  if [ -d "$app" ] && [ -x "$LSREGISTER" ]; then
-    "$LSREGISTER" -u "$app" >/dev/null 2>&1 || true
-  fi
-
-  rm -rf "$SCRATCH/sym"
-}
-
-# Re-raised rather than swallowed. A handler that returns without exiting
-# leaves the script to run on past the command the signal interrupted — and
-# `xcodebuild` is the last thing here, so it would fall off the end and report
-# success for a build that never finished, to a caller reading the exit status
-# to decide whether the project still compiles.
-#
-# Where the signal reached this script alone rather than the group — `kill` on
-# the pid, a supervisor, a timeout — `xcodebuild` outlives it and may write
-# back what was just removed. The next run of this removes it again; nothing
-# here can do better without killing a process it was not asked to manage.
-#
-# One case is out of reach entirely, and not by this script's doing: a signal
-# ignored when the shell starts cannot be trapped, and a script started in the
-# background has its interrupt ignored — so `kill -INT` on one of those runs
-# none of this and exits successfully. Nothing written here changes that,
-# which is why nothing here tries to.
-interrupted() {
-  # The build stopped first, and waited for. A trap does not run while a
-  # command is in the foreground, so this only arrives once that command is
-  # done — which for a build is minutes, and a supervisor that sent this and
-  # is counting down to a kill will not wait that long. Run as a child that
-  # can be stopped, the trap arrives at once; waiting for it to die is also
-  # what keeps the removal below from racing something still writing there.
-  #
-  # Asked of the shell rather than of a variable this sets. Learning the pid
-  # is a statement after the one that starts the build, and a signal landing
-  # between the two would find nothing to stop — leaving the build running to
-  # put the app back after the removal below, with nothing left to take it
-  # away again. The shell knows about the job from the moment it exists.
-  running=$(jobs -p)
-
-  if [ -n "$running" ]; then
-    # shellcheck disable=SC2086  # a list of pids, which is what kill takes
-    kill $running 2>/dev/null || true
-    wait 2>/dev/null || true
-  fi
-
-  cleanup
-  trap - EXIT "$1"
-  kill -s "$1" $$
-}
-
-trap cleanup EXIT
-trap 'interrupted INT' INT
-trap 'interrupted TERM' TERM
 
 # The architecture this is running on, named. Left to itself `xcodebuild`
 # finds no active one to build for, says so once per target, and builds every

@@ -50,17 +50,25 @@ icons_digest() {
       // — so a build that grew one would otherwise change without this
       // noticing. Which of them the converter uses is its business, and not
       // knowing is the point of asking this way.
-      const named = { ...(manifest.icons ?? {}) };
+      //
+      // Kept apart by where they came from. Both are keyed by size, so merged
+      // into one map an action icon would stand in place of the icon of the
+      // same size rather than beside it — and that one would never be read,
+      // which is a change this cannot see in the one file it was told to
+      // watch.
       const action = manifest.action?.default_icon;
-
-      if (typeof action === "string") named.action = action;
-      else Object.assign(named, action ?? {});
+      const named = [
+        ...Object.entries(manifest.icons ?? {}).map(([size, path]) => [`icons:${size}`, path]),
+        ...(typeof action === "string"
+          ? [["action", action]]
+          : Object.entries(action ?? {}).map(([size, path]) => [`action:${size}`, path])),
+      ].sort(([one], [other]) => (one < other ? -1 : 1));
 
       const digest = createHash("sha256");
 
-      for (const key of Object.keys(named).sort()) {
+      for (const [key, path] of named) {
         digest.update(key);
-        digest.update(readFileSync(`${built}/${named[key]}`));
+        digest.update(readFileSync(`${built}/${path}`));
       }
 
       process.stdout.write(digest.digest("hex"));
