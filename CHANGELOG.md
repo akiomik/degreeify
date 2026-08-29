@@ -11,7 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Project scaffolding: WXT with the Solid template, TypeScript, Biome, Vitest,
   and a GitHub Actions workflow.
-- A Safari build target and a script that generates the wrapping Xcode project.
+- A Safari build target, a script that generates the wrapping Xcode project,
+  and a second that builds it without opening Xcode. The generated project
+  references the built extension rather than copying it, so a code change
+  needs a rebuild and another Run in Xcode but never a regenerated project —
+  and the build script refuses to run where the build has gained a top-level
+  file the project does not name, which would otherwise be dropped silently.
 - A chord symbol parser that reads a root, an opaque quality and an optional
   bass note, and reports anything else — bar lines, accents, rhythm notes,
   `N.C.`, chart directions, section labels — as not a chord so it can be left

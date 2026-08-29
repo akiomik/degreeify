@@ -104,21 +104,34 @@ local verification only.
 
 ```sh
 npm run build:safari
-npm run safari:xcode   # generates ./safari (git-ignored)
+npm run safari:xcode    # generates ./safari (git-ignored)
+npm run safari:build    # optional: check it compiles, without opening Xcode
 ```
 
-Then, in Safari:
+That leaves an Xcode project at `safari/Degreeify/Degreeify.xcodeproj`. Then,
+in Safari:
 
 1. **Settings → Advanced →** enable *Show features for web developers*.
 2. **Develop → Developer Settings →** enable *Allow unsigned extensions*.
    This resets every time Safari restarts.
-3. Open the generated Xcode project and **Run**.
+3. Open the project and **Run**. The app it builds is a wrapper whose only job
+   is to tell Safari the extension exists; it has no interface worth looking
+   at.
 4. **Settings → Extensions →** enable Degreeify.
 5. Grant Degreeify permission for `ja.chordwiki.org` (choose *Always Allow*).
 
-The Xcode project references the files in `.output/safari-mv3` rather than
-copying them, so `npm run build:safari` alone is enough to pick up code
-changes — no need to regenerate the project.
+The project references the files in `.output/safari-mv3` rather than copying
+them, so a code change needs `npm run build:safari` and another **Run** — but
+never a regenerated project. The wrapper takes nothing from the manifest, so
+changing a permission or a content script needs no regeneration either.
+
+Regenerate when the build gains a **top-level** file or directory, which a new
+entrypoint would do. The project names those one by one and directories among
+them by reference: a file added inside `chunks/` or `content-scripts/` arrives
+on its own, while a new top-level one is left out of the built extension with
+nothing said. `npm run safari:build` refuses to build when it finds one, since
+otherwise this is discovered by wondering why a feature does nothing in Safari
+alone.
 
 ## Layout
 
@@ -129,6 +142,7 @@ src/content/      applying and restoring degree names in the page
 src/settings/     settings schema and storage wrapper
 src/entrypoints/  WXT entrypoints (the only place that depends on WXT)
 tests/            unit tests and hand-written DOM fixtures
+scripts/          generating and building the Safari wrapper
 ```
 
 Dependencies point one way: `entrypoints → content → sites → core`, with
