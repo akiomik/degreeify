@@ -130,27 +130,28 @@ them, so a code change needs no regenerated project. Changing a permission or
 a content script needs none either: neither reaches the wrapper, which takes
 its name from the conversion and its version from nothing.
 
-Regenerate for two things. The first is the **icons**, which are the one thing
-the wrapper takes from the extension: the converter copies them in when it
-generates the project. A change to any of them therefore reaches Safari's
-extension list on a rebuild and leaves the app showing the old ones until the
-project is generated again.
+Two things need the project generated again. The **icons** are one: they are
+all the wrapper takes from the extension, copied in when the project is made,
+so a change to any of them reaches Safari's extension list on a rebuild and
+leaves the app showing the old ones. The **set of top-level files and
+directories** in the build is the other, which a new entrypoint adds to and a
+removed or renamed one takes from — the project names them one by one, though
+directories among them by reference, so a file added inside `chunks/` or
+`content-scripts/` arrives on its own.
 
-The second is the set of **top-level** files and directories in the build,
-which a new entrypoint adds to and a removed one takes from. The project names
-them one by one, and directories among them by reference — so a file added
-inside `chunks/` or `content-scripts/` arrives on its own, while a change to
-the set itself does not.
+`npm run safari:xcodebuild` refuses to build on any of that, and takes its own
+build away again afterwards: what was wanted was the answer, and an app left
+beside the one Xcode installs is a second copy the system may show Safari
+instead. Left to Xcode alone, a project naming a file the build no longer has
+stops the build on a file it cannot copy, and a build holding a file the
+project does not name assembles quietly and is found by wondering why a
+feature does nothing in Safari.
 
-`npm run safari:xcodebuild` refuses to build on either half of that, and
-takes its own build away again afterwards — what was wanted was the answer,
-and an app left beside the one Xcode installs is a second copy the system may
-show Safari instead. Left to
-Xcode, one is found by wondering why a feature does nothing in Safari alone,
-and the other by a build stopping on a file it cannot copy while saying
-nothing about the project being what is out of date. It refuses on icons that
-have changed since the project was generated too, which it knows by comparing
-them against what they were at the time.
+One refusal has no remedy. The converter carries no dotted entry into the
+project — `.DS_Store` is ignored, since macOS writes it into any folder opened
+in Finder, but anything else dotted at the top level of the build cannot be
+wrapped for Safari at all, and generating the project again will not change
+that.
 
 ## Layout
 

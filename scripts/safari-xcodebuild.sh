@@ -179,6 +179,36 @@ fi
 # tree the generator wipes, and quietly, since it builds either way.
 readonly SCRATCH="$PWD/.output/safari-xcodebuild"
 
+# What was wanted from this is the answer, not the app: left where it is
+# built, it is a second Degreeify registered under the same identifier as the
+# one Xcode's Run installs, holding whatever it copied the last time this ran.
+# A reader who rebuilds and hits Run can then be shown the older of the two by
+# a system with no reason to prefer either, and finds their change does
+# nothing in Safari — which is the failure this whole script is here to keep
+# them out of.
+#
+# Unregistered before it is deleted, where the tool for it is where it has
+# been; a path left in the database pointing at nothing is untidy rather than
+# harmful, so not finding it is not worth failing over. The intermediates stay
+# on, so the next run of this is not a build from nothing.
+readonly LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
+
+# Taken away however this ends, and not only where it ends well. A build that
+# stops after the app wrapper is assembled — a Swift error in the app target,
+# an interrupt during the several minutes it takes — leaves the copy behind
+# exactly when it does the most harm: the reader is now debugging, and the
+# stale app is what Safari may show them while they do it. Removed only on the
+# next success, it would sit there for as long as the build kept failing.
+cleanup() {
+  if [ -x "$LSREGISTER" ]; then
+    "$LSREGISTER" -u "$SCRATCH/sym/Debug/$APP_NAME.app" || true
+  fi
+
+  rm -rf "$SCRATCH/sym"
+}
+
+trap cleanup EXIT INT TERM
+
 xcodebuild \
   -project "$PROJECT" \
   -target "$APP_NAME" \
@@ -190,22 +220,4 @@ xcodebuild \
   OBJROOT="$SCRATCH/obj" \
   build
 
-# And then taken away again, because what was wanted was the answer and not
-# the app. Left there it is a second Degreeify registered under the same
-# identifier as the one Xcode's Run installs, holding whatever it copied the
-# last time this ran — so a reader who rebuilds and hits Run can be shown the
-# older of the two by a system that has no reason to prefer either, and finds
-# their change does nothing in Safari. Which is the failure this whole script
-# is here to keep them out of.
-#
-# Unregistered before it is deleted, where the tool for it is where it has
-# been; a path left in the database pointing at nothing is untidy rather than
-# harmful, so not finding it is not worth failing over. The intermediates stay
-# on, so the next run of this is not a build from nothing.
-readonly LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
 
-if [ -x "$LSREGISTER" ]; then
-  "$LSREGISTER" -u "$SCRATCH/sym/Debug/$APP_NAME.app" || true
-fi
-
-rm -rf "$SCRATCH/sym"
