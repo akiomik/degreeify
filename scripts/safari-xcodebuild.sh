@@ -126,10 +126,34 @@ fi
 # or renamed. Left to Xcode this is a build that stops on a file it cannot
 # copy, naming a path in `.output` and nothing about the project being the
 # thing out of date.
-gone=()
+# Read out of the project rather than named here, and escaped, because the
+# path comes from the file both scripts share and a copy of it here is the
+# drift that file exists to stop. Both the quoted form and the bare one, for
+# the same reason the check above accepts both.
+built_pattern=$(printf '%s' "$BUILT" | sed 's/[][\.*^$/]/\\&/g')
+
+named=()
 while IFS= read -r name; do
+  named+=("$name")
+done < <(
+  sed -n "s|.*/$built_pattern/\([^\";]*\)[\";].*|\1|p" "$PROJECT/project.pbxproj" | sort -u
+)
+
+# Nothing read is not an empty project; it is this no longer knowing how to
+# read one, which is what the sibling says about the identifiers it cannot
+# find. Left unsaid, the check passes everything and the failure it is here
+# for comes back with nothing announcing it.
+if [ ${#named[@]} -eq 0 ]; then
+  echo "error: the project names no entry in $BUILT, which it must." >&2
+  echo "The converter has changed how it writes them; this check needs" >&2
+  echo "rewriting against what it does now." >&2
+  exit 1
+fi
+
+gone=()
+for name in "${named[@]}"; do
   [ -e "$BUILT/$name" ] || gone+=("$name")
-done < <(sed -n 's|.*/safari-mv3/\([^"]*\)";.*|\1|p' "$PROJECT/project.pbxproj" | sort -u)
+done
 
 if [ ${#gone[@]} -gt 0 ]; then
   echo "error: the Xcode project names entries the build no longer has:" >&2
@@ -139,12 +163,21 @@ if [ ${#gone[@]} -gt 0 ]; then
   exit 1
 fi
 
-# Built somewhere the generator does not wipe. Left in the default place,
-# inside `safari/`, building registers an app with the system at a path the
-# next `--force` regeneration deletes — and the reader is left with a
-# registration pointing at nothing, in the one flow whose whole purpose is
-# looking the extension up by hand afterwards.
-readonly SCRATCH="${TMPDIR:-/tmp}/degreeify-safari-build"
+# Built somewhere neither the generator nor the system clears out. Building
+# registers an app with LaunchServices wherever it lands, and that cannot be
+# helped from here — what can is where it points. Inside `safari/` the next
+# `--force` regeneration deletes it; under `TMPDIR` macOS empties it after a
+# few days; either way the registration is left aimed at nothing, competing
+# with the copy Xcode's own Run registers, in the one flow whose whole purpose
+# is finding the extension by hand afterwards.
+#
+# Beside the build it wraps, then: ignored by git, untouched by `wxt build`,
+# and gone only when somebody clears `.output` themselves.
+#
+# Absolute, because `xcodebuild` reads a relative one against the project's
+# own directory rather than this shell's — which would put it back inside the
+# tree the generator wipes, and quietly, since it builds either way.
+readonly SCRATCH="$PWD/.output/safari-xcodebuild"
 
 xcodebuild \
   -project "$PROJECT" \
