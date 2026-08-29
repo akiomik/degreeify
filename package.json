@@ -15,6 +15,7 @@
     "zip:firefox": "wxt zip -b firefox",
     "safari:xcode": "./scripts/safari-xcode.sh",
     "safari:xcodebuild": "./scripts/safari-xcodebuild.sh",
+    "safari:selftest": "./scripts/safari-selftest.sh",
     "typecheck": "wxt prepare && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

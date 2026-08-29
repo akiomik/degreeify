@@ -18,21 +18,6 @@ cd "$(dirname "$0")/.."
 # shellcheck source=scripts/safari-common.sh
 . scripts/safari-common.sh
 
-# Built somewhere neither the generator nor the system clears out. Building
-# registers an app with LaunchServices wherever it lands, and that cannot be
-# helped from here — what can is where it points. Inside `safari/` the next
-# `--force` regeneration deletes it; under `TMPDIR` macOS empties it after a
-# few days; either way the registration is left aimed at nothing, competing
-# with the copy Xcode's own Run registers, in the one flow whose whole purpose
-# is finding the extension by hand afterwards.
-#
-# Beside the build it wraps, then: ignored by git, untouched by `wxt build`,
-# and gone only when somebody clears `.output` themselves.
-#
-# Absolute, because `xcodebuild` reads a relative one against the project's
-# own directory rather than this shell's — which would put it back inside the
-# tree the generator wipes, and quietly, since it builds either way.
-readonly SCRATCH="$PWD/.output/safari-xcodebuild"
 
 # What was wanted from this is the answer, not the app: left where it is
 # built, it is a second Degreeify registered under the same identifier as the

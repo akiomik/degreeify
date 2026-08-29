@@ -108,6 +108,11 @@ npm run safari:xcode       # generate ./safari (git-ignored)
 npm run safari:xcodebuild  # check the project against the build, and compile it
 ```
 
+`npm run safari:selftest` checks that those two scripts refuse what they say
+they refuse — every case below, plus what they do when a build fails or is
+interrupted. It is what to run after changing either of them; it stubs
+`xcodebuild`, so it takes seconds.
+
 That leaves an Xcode project at `safari/Degreeify/Degreeify.xcodeproj`. Then,
 in Safari:
 

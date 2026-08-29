@@ -19,10 +19,20 @@ readonly BUNDLE_PREFIX=com.github.akiomik
 # identifier that is not a prefix of its extension's, and Xcode refuses to
 # embed one binary in another it does not contain. That failure arrives at
 # build time in Xcode, several steps after the mistake.
-readonly BUNDLE_ID="$BUNDLE_PREFIX.$APP_NAME"
+#
+# Overridable, so that the check below it can be reached on purpose. A fork
+# changing this to something that does not nest is exactly what that check is
+# for, and a check nothing can reach is a check nobody knows still works.
+readonly BUNDLE_ID="${BUNDLE_ID:-$BUNDLE_PREFIX.$APP_NAME}"
 
 readonly BUILT=.output/safari-mv3
 readonly PROJECT="safari/$APP_NAME/$APP_NAME.xcodeproj"
+
+# Where the check builds, which is neither where the generator wipes nor where
+# the system clears out. Shared because a test of these scripts has to look in
+# the same place they build, and a second copy of the path is the drift this
+# file exists to stop.
+readonly SCRATCH="$PWD/.output/safari-xcodebuild"
 
 # What the icons were when the project was generated, kept beside it.
 readonly ICONS_RECORD="safari/$APP_NAME/.icons"
