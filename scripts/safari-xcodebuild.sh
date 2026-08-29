@@ -260,10 +260,20 @@ trap cleanup EXIT
 trap 'interrupted INT' INT
 trap 'interrupted TERM' TERM
 
+# The architecture this is running on, named. Left to itself `xcodebuild`
+# finds no active one to build for, says so once per target, and builds every
+# architecture it could — which answers a question nobody asked, since what is
+# wanted is whether the project compiles on this machine, and this machine is
+# what Xcode's Run will build for.
+#
+# Measured rather than assumed: a second off a ten-second build here, and two
+# warnings that were the only thing this ever printed on a good run. Naming a
+# `-destination` instead does neither.
 xcodebuild \
   -project "$PROJECT" \
   -target "$APP_NAME" \
   -configuration Debug \
+  ARCHS="$(uname -m)" \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
