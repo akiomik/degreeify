@@ -189,3 +189,23 @@ xcodebuild \
   SYMROOT="$SCRATCH/sym" \
   OBJROOT="$SCRATCH/obj" \
   build
+
+# And then taken away again, because what was wanted was the answer and not
+# the app. Left there it is a second Degreeify registered under the same
+# identifier as the one Xcode's Run installs, holding whatever it copied the
+# last time this ran — so a reader who rebuilds and hits Run can be shown the
+# older of the two by a system that has no reason to prefer either, and finds
+# their change does nothing in Safari. Which is the failure this whole script
+# is here to keep them out of.
+#
+# Unregistered before it is deleted, where the tool for it is where it has
+# been; a path left in the database pointing at nothing is untidy rather than
+# harmful, so not finding it is not worth failing over. The intermediates stay
+# on, so the next run of this is not a build from nothing.
+readonly LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
+
+if [ -x "$LSREGISTER" ]; then
+  "$LSREGISTER" -u "$SCRATCH/sym/Debug/$APP_NAME.app" || true
+fi
+
+rm -rf "$SCRATCH/sym"

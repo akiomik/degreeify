@@ -142,7 +142,10 @@ them one by one, and directories among them by reference — so a file added
 inside `chunks/` or `content-scripts/` arrives on its own, while a change to
 the set itself does not.
 
-`npm run safari:xcodebuild` refuses to build on either half of that. Left to
+`npm run safari:xcodebuild` refuses to build on either half of that, and
+takes its own build away again afterwards — what was wanted was the answer,
+and an app left beside the one Xcode installs is a second copy the system may
+show Safari instead. Left to
 Xcode, one is found by wondering why a feature does nothing in Safari alone,
 and the other by a build stopping on a file it cannot copy while saying
 nothing about the project being what is out of date. It refuses on icons that
