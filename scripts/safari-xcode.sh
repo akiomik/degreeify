@@ -57,9 +57,16 @@ identifiers=$(
     tr -d '"' | sort -u
 )
 
+if [ -z "$identifiers" ]; then
+  echo "error: the project names no bundle identifiers at all." >&2
+  echo "The converter has changed where it writes them; this check needs" >&2
+  echo "rewriting against what it does now." >&2
+  exit 1
+fi
+
 if [ "$(echo "$identifiers" | wc -l)" -ne 2 ]; then
   echo "error: expected the project to name two bundle identifiers, and it names:" >&2
-  echo "${identifiers//$'\n'/$'\n  '}" >&2
+  echo "$identifiers" | while IFS= read -r one; do echo "  $one" >&2; done
   exit 1
 fi
 

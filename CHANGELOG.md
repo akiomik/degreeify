@@ -15,8 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a second that builds it without opening Xcode. The generated project
   references the built extension rather than copying it, so a code change
   needs a rebuild and another Run in Xcode but never a regenerated project —
-  and the build script refuses to run where the build has gained a top-level
-  file the project does not name, which would otherwise be dropped silently.
+  and the build script refuses to run where the project has gone stale against
+  the build — a top-level file it does not name, or an icon it copied before
+  the icon changed — either of which would otherwise go missing with nothing
+  said.
 - A chord symbol parser that reads a root, an opaque quality and an optional
   bass note, and reports anything else — bar lines, accents, rhythm notes,
   `N.C.`, chart directions, section labels — as not a chord so it can be left

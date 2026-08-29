@@ -24,8 +24,28 @@ if [ ! -d "$BUILT" ]; then
   exit 1
 fi
 
-if [ ! -d "$PROJECT" ]; then
-  echo "error: $PROJECT not found. Run 'npm run safari:xcode' first." >&2
+# The file rather than the directory around it. A conversion that was
+# interrupted leaves the one without the other, and every check below then
+# fails on a file that is not there — six entries reported missing, with the
+# reason for each printed by grep.
+if [ ! -f "$PROJECT/project.pbxproj" ]; then
+  echo "error: $PROJECT/project.pbxproj not found." >&2
+  echo "Run 'npm run safari:xcode' to generate the project." >&2
+  exit 1
+fi
+
+# The wrapper's own icon, which is the one thing the converter copies rather
+# than references: it takes the extension's 128px icon at generation time and
+# builds the app's icon set from it. Changing the icon therefore changes what
+# Safari shows for the extension and leaves the app showing the old one, and
+# the check below cannot see it because `icon/` is still named.
+readonly WRAPPER_ICON="safari/$APP_NAME/$APP_NAME/Resources/Icon.png"
+if ! cmp -s "$WRAPPER_ICON" "$BUILT/icon/128.png"; then
+  echo "error: the app's icon is not the one in the build." >&2
+  echo "  $WRAPPER_ICON" >&2
+  echo "  $BUILT/icon/128.png" >&2
+  echo "The converter copies that icon rather than referencing it. Run" >&2
+  echo "'npm run safari:xcode' to generate the project again." >&2
   exit 1
 fi
 

@@ -122,16 +122,21 @@ in Safari:
 
 The project references the files in `.output/safari-mv3` rather than copying
 them, so a code change needs `npm run build:safari` and another **Run** — but
-never a regenerated project. The wrapper takes nothing from the manifest, so
-changing a permission or a content script needs no regeneration either.
+never a regenerated project. Changing a permission or a content script needs
+no regeneration either: nothing in the wrapper is derived from the manifest.
 
-Regenerate when the build gains a **top-level** file or directory, which a new
-entrypoint would do. The project names those one by one and directories among
+Regenerate for two things. The first is the **icon**: the converter copies the
+extension's 128px icon into the wrapper and builds the app's icon set from it,
+so a new icon reaches Safari's extension list on a rebuild and leaves the app
+showing the old one until the project is generated again.
+
+The second is a **top-level** file or directory in the build, which a new
+entrypoint would add. The project names those one by one and directories among
 them by reference: a file added inside `chunks/` or `content-scripts/` arrives
 on its own, while a new top-level one is in the build and missing from the app
 Xcode assembles, with nothing said. `npm run safari:build` refuses to build
 when it finds one, since otherwise this is discovered by wondering why a
-feature does nothing in Safari alone.
+feature does nothing in Safari alone. It refuses on a stale icon too.
 
 ## Layout
 
